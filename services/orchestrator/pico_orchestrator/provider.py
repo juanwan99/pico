@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, replace
 
@@ -428,6 +428,40 @@ def _llm_client(provider: ProviderConfig) -> AsyncOpenAI:
     return client
 
 
+async def _drop(_result: object) -> None:
+    return None
+
+
+async def call_once[T](
+    provider: ProviderConfig,
+    purpose: str,
+    send: Callable[[], Awaitable[T]],
+    *,
+    run_id: str | None = None,
+) -> T:
+    """One non-streamed logical call through the door (pico#1271).
+
+    ``send()`` makes one request. It is sent with a key slot held, at most
+    ``CALL_BUDGET`` times, retried only on 429 / 5xx / no answer with the
+    door's pause. Callers keep no retry loop of their own.
+    """
+
+    async def one(_k: int) -> T:
+        release = await upstream.acquire(provider.api_key, purpose)
+        try:
+            return await send()
+        finally:
+            release()
+
+    result, _ = await upstream.race(
+        one,
+        upstream.Call(purpose, run_id=run_id),
+        relaunch=upstream.worth_retry,
+        discard=_drop,
+    )
+    return result
+
+
 def _responses_input_from_messages(
     messages: list[dict],
 ) -> tuple[str | None, list[dict]]:
@@ -556,20 +590,25 @@ async def _iter_openai_responses(
     # One try: resending belongs to the race in stream_chat (pico#1271).
     yielded = False
     stream = await client.responses.create(**kwargs)
-    async for event in stream:
-        usage = _responses_completed_usage(event)
-        if usage:
-            _apply_usage_out(usage_out, usage)
-        piece = _responses_text_delta(event)
-        if piece:
-            yielded = True
-            yield piece
-            continue
-        if not yielded:
-            full = _responses_completed_text(event)
-            if full:
+    try:
+        async for event in stream:
+            usage = _responses_completed_usage(event)
+            if usage:
+                _apply_usage_out(usage_out, usage)
+            piece = _responses_text_delta(event)
+            if piece:
                 yielded = True
-                yield full
+                yield piece
+                continue
+            if not yielded:
+                full = _responses_completed_text(event)
+                if full:
+                    yielded = True
+                    yield full
+    finally:
+        # A dropped hedge copy must hang up now, not when GC finds it (pico#1283).
+        with suppress(Exception):
+            await stream.close()
 
 
 async def stream_chat(
@@ -632,22 +671,27 @@ async def stream_chat(
         stream = await client.chat.completions.create(**kwargs)
         spent = 0
         answered = False
-        async for chunk in stream:
-            usage = getattr(chunk, "usage", None)
-            if usage is not None:
-                from pico_orchestrator.usage_parse import parse_usage_blob
+        try:
+            async for chunk in stream:
+                usage = getattr(chunk, "usage", None)
+                if usage is not None:
+                    from pico_orchestrator.usage_parse import parse_usage_blob
 
-                parsed = parse_usage_blob(usage)
-                _apply_usage_out(usage_out, parsed)
-                spent = int((parsed or {}).get("completion_tokens") or 0)
-            choices = getattr(chunk, "choices", None) or []
-            finish = getattr(choices[0], "finish_reason", None) if choices else None
-            if finish and finish_out is not None:
-                finish_out["finish_reason"] = str(finish)
-            delta = choices[0].delta.content if choices else None
-            if delta:
-                answered = True
-                yield delta
+                    parsed = parse_usage_blob(usage)
+                    _apply_usage_out(usage_out, parsed)
+                    spent = int((parsed or {}).get("completion_tokens") or 0)
+                choices = getattr(chunk, "choices", None) or []
+                finish = getattr(choices[0], "finish_reason", None) if choices else None
+                if finish and finish_out is not None:
+                    finish_out["finish_reason"] = str(finish)
+                delta = choices[0].delta.content if choices else None
+                if delta:
+                    answered = True
+                    yield delta
+        finally:
+            # A dropped hedge copy must hang up now, not when GC finds it (pico#1283).
+            with suppress(Exception):
+                await stream.close()
         # Gemini can spend the whole budget thinking and still say stop (#1116).
         if (
             finish_out is not None
@@ -740,8 +784,13 @@ async def stream_chat(
                 raise RuntimeError(
                     f"模型不可用：{mid}。请检查 DEEPSEEK_MODEL / KIMI_MODEL。"
                 ) from e
-            if "429" in msg or "rate" in low:
-                raise RuntimeError("模型调用过于频繁，请稍后再试。") from e
+            if (
+                upstream.status_of(e) in upstream.BUSY_STATUS
+                or "429" in msg
+                or "rate" in low
+                or "overloaded" in low
+            ):
+                raise RuntimeError(upstream.BUSY_TEXT) from e
             raise RuntimeError(f"模型调用失败：{msg}") from e
 
     # Same New API, next model when the primary's channel is down (#1248).
@@ -760,6 +809,7 @@ async def stream_chat(
     # the first backup; a channel that is down is skipped.
     plan = [models[0], models[1], models[0], *models[2:]] if len(models) > 1 else [models[0]] * 3
     dead: set[str] = set()
+    switched: set[int] = set()
     picked: dict[int, str] = {}
     retry: dict[int, bool] = {}
 
@@ -794,6 +844,7 @@ async def stream_chat(
             if is_model_dead(text) or verdict == "switch":
                 dead.add(mid)
                 mark_down(mid)
+                switched.add(id(exc))
             elif str(exc).startswith("模型不可用"):
                 dead.add(mid)
             # The head model failing before output gets the next model whatever the
@@ -820,6 +871,8 @@ async def stream_chat(
         hedge=upstream.hedge_after("medium" if lane_thinking else None),
         relaunch=_relaunch,
         discard=_discard,
+        # the next model goes at once; the same busy relay gets a pause
+        pause=lambda exc, n: 0.0 if id(exc) in switched else upstream.backoff(exc, n),
     )
     mid = picked[won]
     try:

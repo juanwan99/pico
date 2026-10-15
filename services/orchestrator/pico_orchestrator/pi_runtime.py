@@ -15,10 +15,8 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
-from openai import AsyncOpenAI
-
 from pico_orchestrator.gateway import ArtifactStore, Principal, ToolError
-from pico_orchestrator.provider import resolve_provider
+from pico_orchestrator.provider import _llm_client, call_once, resolve_provider
 from pico_orchestrator.run_types import EventEmitter, RunCaps, RunResult
 from pico_orchestrator.sandbox_session_event import (
     SANDBOX_BROWSER_TOOLS,
@@ -109,7 +107,9 @@ async def run_pi_agent(
     visible = resolve_visible_tools(caps.allowed_tools)
     gateway = build_default_gateway(artifact_store).restricted_to(visible)
     tool_schemas = openai_tool_schemas(gateway, allowed_tools=visible)
-    client = AsyncOpenAI(api_key=provider.api_key, base_url=provider.base_url)
+    # Rollback lane (PICO_HOSTED_LOOP=1) shares the one door (pico#1271): pooled
+    # client without SDK retries, key slot, three requests per step at most.
+    client = _llm_client(provider)
 
     skill_block = caps.skill_instruction.strip() if caps.skill_instruction else "(none)"
     override = str(getattr(caps, "system_prompt", "") or "").strip()
@@ -241,10 +241,9 @@ async def run_pi_agent(
 
             await emit("agent.step", {"step": step, "phase": "model"})
 
-            # Fallback / transient-retry: the model contract is pinned to
-            # deepseek-v4-flash for both lanes; a temporary upstream blip must
-            # not abort a real delivery turn. Retry (same model) up to
-            # caps.max_retries on non-timeout errors before failing honestly.
+            # A temporary upstream blip must not abort a real delivery turn: the
+            # door (provider.call_once) resends on 429 / 5xx / no answer, with a
+            # pause, three requests at most. No retry loop of its own here.
             create_kwargs: dict[str, Any] = {
                 "model": str(getattr(caps, "backend_model", "") or "") or provider.model,
                 "messages": messages,
@@ -259,52 +258,42 @@ async def run_pi_agent(
                 if deadline is None
                 else max(1.0, deadline - loop.time())
             )
-            max_retries = max(0, int(getattr(caps, "max_retries", 0) or 0))
             response = None
             last_exc: Exception | None = None
-            for attempt in range(max_retries + 1):
-                if stop.is_set() or await is_cancelled():
-                    await emit(
-                        "run.status",
-                        {"status": "cancelled", "runtime": RUNTIME_LABEL},
-                    )
-                    return _result(
-                        "cancelled",
-                        final_parts,
-                        token_usage=token_usage,
-                        tool_results=tool_context_results,
-                        principal=principal,
-                    )
-                try:
-                    response = await asyncio.wait_for(
-                        client.chat.completions.create(**create_kwargs),
-                        timeout=remaining,
-                    )
-                    break
-                except TimeoutError:
-                    timed_out.set()
-                    return await _failed_result(
-                        emit,
-                        code="timeout",
-                        reason=f"Pi agent timeout after {caps.max_seconds}s",
-                        final_parts=final_parts,
-                        token_usage=token_usage,
-                        tool_results=tool_context_results,
-                        principal=principal,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    last_exc = exc
-                    if attempt < max_retries:
-                        await emit(
-                            "model.retry",
-                            {
-                                "attempt": attempt + 1,
-                                "max_retries": max_retries,
-                                "error_type": type(exc).__name__,
-                                "runtime": RUNTIME_LABEL,
-                            },
-                        )
-                        continue
+            if stop.is_set() or await is_cancelled():
+                await emit(
+                    "run.status",
+                    {"status": "cancelled", "runtime": RUNTIME_LABEL},
+                )
+                return _result(
+                    "cancelled",
+                    final_parts,
+                    token_usage=token_usage,
+                    tool_results=tool_context_results,
+                    principal=principal,
+                )
+            try:
+                response = await asyncio.wait_for(
+                    call_once(
+                        provider,
+                        "hosted",
+                        lambda kw=create_kwargs: client.chat.completions.create(**kw),
+                    ),
+                    timeout=remaining,
+                )
+            except TimeoutError:
+                timed_out.set()
+                return await _failed_result(
+                    emit,
+                    code="timeout",
+                    reason=f"Pi agent timeout after {caps.max_seconds}s",
+                    final_parts=final_parts,
+                    token_usage=token_usage,
+                    tool_results=tool_context_results,
+                    principal=principal,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
             if response is None:
                 return await _failed_result(
                     emit,

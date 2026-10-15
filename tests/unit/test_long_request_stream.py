@@ -398,8 +398,9 @@ async def test_stream_chat_overload_gives_up_and_never_replays(
 
         monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _client)
         provider._CLIENTS.clear()  # one shared client per key: drop the last case's
-        with pytest.raises(RuntimeError, match="overloaded"):
+        with pytest.raises(RuntimeError, match="这会儿忙") as caught:  # teacher words (#1283)
             _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
+        assert "overloaded" in str(caught.value.__cause__)
         assert calls["n"] == want_calls and slept == []
 
 

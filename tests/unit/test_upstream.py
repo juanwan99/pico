@@ -9,7 +9,9 @@ requests one message may cost.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from types import SimpleNamespace
+from typing import Self
 
 import httpx
 import pytest
@@ -327,3 +329,272 @@ def test_proxy_skips_hedge_when_the_run_switches_model_on_stall() -> None:
     upstream.run_state("run-x").no_hedge = True
     assert model_hedge(step, "run-x") == []
     assert model_hedge(b'{"model":"m"}') == []  # JSON reply: no first token to wait on
+
+
+# --- review #1283: pauses, hang-ups, every road through the door -------------------
+
+
+@pytest.mark.asyncio
+async def test_retry_pauses_two_then_six_seconds_and_honours_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(upstream, "RETRY_BACKOFF_S", (2.0, 6.0))
+    slept: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def fake_sleep(s: float, *a):
+        slept.append(s)
+        await real_sleep(0)
+
+    monkeypatch.setattr(upstream.asyncio, "sleep", fake_sleep)
+
+    async def busy(k: int) -> str:
+        raise _Status(503, "busy")
+
+    with pytest.raises(_Status):
+        await upstream.race(busy, upstream.Call("t"), relaunch=lambda _e: True, discard=_never_discard)
+    assert slept == [2.0, 6.0]  # three requests, two pauses; none after the last
+
+    slept.clear()
+    told = httpx.Response(429, headers={"Retry-After": "3"})
+
+    async def limited(k: int) -> str:
+        if k == 0:
+            err = _Status(429, "slow down")
+            err.response = told
+            raise err
+        return "ok"
+
+    assert await upstream.race(
+        limited, upstream.Call("t"), relaunch=upstream.worth_retry, discard=_never_discard
+    ) == ("ok", 1)
+    assert slept == [3.0]
+    assert upstream.retry_after(_Status(503, "x")) is None
+    assert not upstream.worth_retry(_Status(400, "bad request"))
+    assert upstream.worth_retry(httpx.ConnectError("refused"))
+
+
+class _FakeRelay:
+    """Real HTTP on 127.0.0.1 serving SSE chat replies, as a slow relay does.
+
+    The first request gets no token until the hedge arrives; then both get their
+    first token at the same moment and keep generating for ``rest`` s. A client
+    that hangs up ends its request at once: ``hangups`` holds how long after the
+    first token each hang-up came, ``open`` the requests still being served.
+    """
+
+    def __init__(self, rest: float = 3.0) -> None:
+        self.rest = rest
+        self.hangups: list[float] = []
+        self.open = 0
+        self.requests = 0
+        self.both = asyncio.Event()
+        self.server: asyncio.base_events.Server | None = None
+
+    async def __aenter__(self) -> Self:
+        self.server = await asyncio.start_server(self._serve, "127.0.0.1", 0)
+        return self
+
+    async def __aexit__(self, *_a) -> None:
+        assert self.server is not None
+        self.server.close()
+
+    @property
+    def url(self) -> str:
+        assert self.server is not None
+        return f"http://127.0.0.1:{self.server.sockets[0].getsockname()[1]}/v1"
+
+    @staticmethod
+    def _chunk(data: bytes) -> bytes:
+        return b"%x\r\n%s\r\n" % (len(data), data)
+
+    @staticmethod
+    def _sse(text: str, finish: str | None = None) -> bytes:
+        fin = f'"{finish}"' if finish else "null"
+        return (
+            'data: {"id":"c","object":"chat.completion.chunk","created":1,"model":"m",'
+            f'"choices":[{{"index":0,"delta":{{"content":"{text}"}},"finish_reason":{fin}}}]}}\n\n'
+        ).encode()
+
+    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            while True:
+                head = await reader.readuntil(b"\r\n\r\n")
+                size = 0
+                for line in head.split(b"\r\n"):
+                    if line.lower().startswith(b"content-length:"):
+                        size = int(line.split(b":", 1)[1])
+                await reader.readexactly(size)
+                self.requests += 1
+                if self.requests == 2:
+                    self.both.set()
+                self.open += 1
+                try:
+                    writer.write(
+                        b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n"
+                        b"transfer-encoding: chunked\r\n\r\n"
+                    )
+                    await writer.drain()
+                    await asyncio.wait_for(self.both.wait(), 30)
+                    writer.write(self._chunk(self._sse("o")))
+                    await writer.drain()
+                    t0 = asyncio.get_running_loop().time()
+                    with contextlib.suppress(TimeoutError):
+                        if await asyncio.wait_for(reader.read(1), self.rest) == b"":
+                            self.hangups.append(asyncio.get_running_loop().time() - t0)
+                            return
+                    writer.write(self._chunk(self._sse("k", "stop") + b"data: [DONE]\n\n"))
+                    writer.write(b"0\r\n\r\n")
+                    await writer.drain()
+                finally:
+                    self.open -= 1
+        except (asyncio.IncompleteReadError, ConnectionError, TimeoutError):
+            return
+        finally:
+            writer.close()
+
+
+@pytest.mark.asyncio
+async def test_hedge_loser_hangs_up_on_the_relay_within_a_second(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review #1283 ②: the dropped copy closes its HTTP stream, not when GC gets to it."""
+    _env(monkeypatch)
+    monkeypatch.setenv("PICO_HEDGE_FAST_S", "0.2")
+    async with _FakeRelay() as relay:
+        monkeypatch.setenv("DEEPSEEK_BASE_URL", relay.url)
+        assert "".join(await _ask()) == "ok"
+        assert relay.requests == 2  # first stalls, the hedge goes out, both answer
+        assert len(relay.hangups) == 1 and relay.hangups[0] < 1.0  # the loser, at once
+        assert relay.open == 0
+        assert upstream.stats()["inflight"] == {}
+
+
+@pytest.mark.asyncio
+async def test_direct_busy_relay_tells_the_teacher_in_plain_words(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pico_orchestrator.upstream import BUSY_TEXT
+    from pico_orchestrator.user_errors import user_message_for_error
+
+    _env(monkeypatch)
+
+    def overloaded(_m, _n):
+        raise _Status(503, "system cpu overloaded")
+
+    _relay(monkeypatch, overloaded)
+    with pytest.raises(RuntimeError) as caught:
+        await _ask()
+    assert str(caught.value) == BUSY_TEXT == "Pico 这会儿忙，请稍后再试。"
+    assert user_message_for_error("OpenAI API error (503): overloaded").startswith(BUSY_TEXT)
+
+
+def _exam_relay(monkeypatch: pytest.MonkeyPatch, answer) -> list[str]:
+    """Fake New API for non-streamed calls (exam pages, hosted Pi)."""
+    from pico_orchestrator import provider
+
+    provider._CLIENTS.clear()
+    calls: list[str] = []
+
+    class _Completions:
+        async def create(self, **kwargs):
+            calls.append(kwargs["model"])
+            await asyncio.sleep(0.02)
+            return answer(len(calls))
+
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        lambda **_kw: SimpleNamespace(chat=SimpleNamespace(completions=_Completions())),
+    )
+    return calls
+
+
+def _reply(text: str):
+    return SimpleNamespace(
+        usage=None, choices=[SimpleNamespace(message=SimpleNamespace(content=text))]
+    )
+
+
+@pytest.mark.asyncio
+async def test_exam_page_reads_go_through_the_door(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review #1283 ①: was 5 own tries × the door's 3 per page, 4 pages at once on top."""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages" / "exam-answer-extract"))
+    import extract as ex
+
+    _env(monkeypatch)
+    monkeypatch.setenv("PICO_UPSTREAM_KEY_MAX", "2")
+    monkeypatch.delenv("PICO_EXAM_EXTRACT_ATTEMPTS", raising=False)
+    calls = _exam_relay(monkeypatch, lambda _n: (_ for _ in ()).throw(_Status(503, "busy")))
+    with pytest.raises(_Status):
+        await ex.model_complete([{"role": "user", "content": "读题"}])
+    assert len(calls) == upstream.CALL_BUDGET  # was 5 × 3 = 15
+
+    one = '[{"number": 1, "type": "single_choice", "answer": "A", "score": 2}]'
+    calls = _exam_relay(monkeypatch, lambda _n: _reply(one))
+    pages = [{"page": i, "mime": "image/png", "data_b64": "iVBORw0KGgo="} for i in range(1, 7)]
+    await ex.extract_pages(pages, concurrency=4, complete=ex.model_complete)
+    assert len(calls) == 6
+    assert upstream.stats()["peak"] == {upstream.key_id("sk-test"): 2}  # key cap, not 4
+
+
+@pytest.mark.asyncio
+async def test_hosted_rollback_steps_go_through_the_door(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review #1283 ⑤: PICO_HOSTED_LOOP=1 no longer builds its own retrying client."""
+    from pico_orchestrator.provider import call_once, resolve_provider
+
+    _env(monkeypatch)
+    calls = _exam_relay(monkeypatch, lambda _n: (_ for _ in ()).throw(_Status(503, "busy")))
+    cfg = resolve_provider()
+    with pytest.raises(_Status):
+        await call_once(cfg, "hosted", lambda: _client(cfg).chat.completions.create(model="m"))
+    assert len(calls) == upstream.CALL_BUDGET
+    assert upstream.stats()["calls"]["hosted"]["sent"] == 3
+
+
+def _client(cfg):
+    from pico_orchestrator.provider import _llm_client
+
+    return _llm_client(cfg)
+
+
+@pytest.mark.asyncio
+async def test_llm_pass_races_unless_the_run_proxy_already_did(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review #1283 ④: Pi without a box comes here directly and gets the door's retry;
+    the box's steps arrive already raced (``x-pico-door``) and are sent once."""
+    from app import llm_pass_router as lp
+    from starlette.requests import Request
+
+    async def handler(_req, _n):
+        return httpx.Response(503, content=b'{"error":{"message":"overloaded"}}')
+
+    hits = _upstream(monkeypatch, handler)
+    monkeypatch.setattr(lp, "_loopback", lambda _r: True)
+
+    def request(extra: list[tuple[bytes, bytes]]) -> Request:
+        body = b'{"model":"m","stream":true}'
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        return Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/internal/llm-pass/r/v1/chat/completions",
+                "headers": [(b"authorization", b"Bearer sk-box"), *extra],
+                "query_string": b"",
+            },
+            receive,
+        )
+
+    assert (await lp.llm_pass("run-np", "chat/completions", request([]))).status_code == 503
+    assert len(hits) == 3
+    assert upstream.upstream_error("run-np").startswith("upstream 503")
+    raced = request([(b"x-pico-door", b"raced")])
+    assert (await lp.llm_pass("run-box", "chat/completions", raced)).status_code == 503
+    assert len(hits) == 4  # once: the run proxy in front holds the retry

@@ -61,7 +61,8 @@ class _Status(Exception):
 
     def __init__(self, status: int, body: bytes, headers: dict[str, str]) -> None:
         super().__init__(f"upstream {status}")
-        self.status = status
+        self.status = status  # upstream.status_of / retry_after read these
+
         self.body = body
         self.headers = headers
 
@@ -323,6 +324,8 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
     # Slot is held until the streamed body is done, not just the headers.
     # Hedged copies ride the same slot: they race for one answer (pico#1257).
     hedge = model_hedge(body, run_id) if request.method == "POST" else []
+    if is_llm_pass(target):
+        headers[DOOR_HEADER] = "raced"
     return await _stream(
         request.method,
         target,
@@ -334,6 +337,11 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
         key="" if is_llm_pass(target) else entry.llm_key,
         run_id=run_id,
     )
+
+
+# Set on a step the run proxy already raced when it goes on to our llm-pass hop:
+# that hop then sends once (one retry layer, pico#1283).
+DOOR_HEADER = "x-pico-door"
 
 
 def is_llm_pass(target: str) -> bool:

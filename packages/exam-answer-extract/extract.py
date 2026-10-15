@@ -859,18 +859,24 @@ async def model_complete(
     if model_out is not None:
         model_out["model"] = mid
 
+    # Every request goes through Pico's one door to the relay (pico#1271): key
+    # slot, three requests at most, pause before a retry. No retry loop here.
     if P.uses_openai_responses_brain(cfg):
-        pieces: list[str] = []
-        async for piece in P._iter_openai_responses(
-            cfg,
-            mid,
-            _to_responses_messages(messages),
-            max_tokens=max_tokens,
-            thinking=thinking,
-            usage_out=usage_out,
-        ):
-            pieces.append(piece)
-        return "".join(pieces)
+
+        async def read_stream() -> str:
+            pieces: list[str] = []
+            async for piece in P._iter_openai_responses(
+                cfg,
+                mid,
+                _to_responses_messages(messages),
+                max_tokens=max_tokens,
+                thinking=thinking,
+                usage_out=usage_out,
+            ):
+                pieces.append(piece)
+            return "".join(pieces)
+
+        return await P.call_once(cfg, "exam", read_stream)
 
     client = P._llm_client(cfg)
     kwargs: dict[str, Any] = {
@@ -883,7 +889,7 @@ async def model_complete(
     extra = P.thinking_extra_body(mid, thinking=thinking)
     if extra:
         kwargs["extra_body"] = extra
-    resp = await client.chat.completions.create(**kwargs)
+    resp = await P.call_once(cfg, "exam", lambda: client.chat.completions.create(**kwargs))
     usage = getattr(resp, "usage", None)
     if usage is not None and usage_out is not None:
         from pico_orchestrator.usage_parse import add_usage, parse_usage_blob
@@ -960,12 +966,12 @@ def split_page_image(mime: str, data_b64: str) -> list[dict[str, str]] | None:
     return halves
 
 
-# Relay/proxy hops in front of the brain reset connections in bursts (seen live as
-# "upstream error: do request failed" within ~1 s, three in a row inside a 10 s window,
-# then the very next request passes). Resets are cheap, so spread attempts across
-# a longer window instead of hammering; ExtractError (configuration) is never retried.
-_RETRY_BACKOFF_SECONDS = (3.0, 8.0, 20.0, 45.0)
-_DEFAULT_ATTEMPTS = 5
+# Resending a page belongs to Pico's door to the relay (pico#1271: three requests
+# at most, a pause before each retry). The old 5 tries here × the door's 3 × 4 pages
+# × continuation rounds hammered a busy relay. PICO_EXAM_EXTRACT_ATTEMPTS stays as
+# an ops knob (a whole-page re-ask, e.g. after a 240 s page timeout); default once.
+_DEFAULT_ATTEMPTS = 1
+# Pages of one paper in flight; the relay key's slot cap bounds all papers together.
 _DEFAULT_CONCURRENCY = 4
 # Reasoning effort for one page image. "low" (thinking=False) matched or beat "medium"
 # on every page of the 1092×1648 gold scan (21 runs, edu-core#1506) and returns rubric
@@ -1002,12 +1008,14 @@ async def _complete_with_retry(
             )
         except ExtractError:
             raise
-        except Exception as exc:  # noqa: BLE001 — retried, then surfaced by the caller
+        except Exception as exc:
             if is_safety_block(exc):
                 raise SafetyBlocked(str(exc)) from exc
             last = exc
             if n + 1 < tries:
-                await sleep(_RETRY_BACKOFF_SECONDS[min(n, len(_RETRY_BACKOFF_SECONDS) - 1)])
+                from pico_orchestrator.upstream import backoff
+
+                await sleep(backoff(exc, n))
     assert last is not None
     raise last
 

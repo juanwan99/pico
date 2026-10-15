@@ -26,11 +26,6 @@ GOLD_SINGLE = ["C", "D", "C", "B", "D", "A", "C", "D", "C", "D", "C", "A"]
 GOLD_MULTI = ["ACD", "AC", "ABC", "BC"]
 
 
-@pytest.fixture(autouse=True)
-def _no_retry_backoff(monkeypatch):
-    monkeypatch.setattr(ex, "_RETRY_BACKOFF_SECONDS", (0.0, 0.0, 0.0, 0.0))
-
-
 def _gold_items(page: int | None = None, *, rubric: bool = False) -> list[dict]:
     items = []
     for i, letter in enumerate(GOLD_SINGLE, start=1):
@@ -303,7 +298,9 @@ async def test_extract_pages_all_failed_is_model_failed():
     with pytest.raises(ex.ExtractError) as caught:
         await ex.extract_pages([_page(1)], complete=_stub({1: RuntimeError("boom")}, calls))
     assert caught.value.code == "model.failed"
-    assert len(calls) == 5, "transient failures get PICO_EXAM_EXTRACT_ATTEMPTS (default 5) tries"
+    # Resending is the relay door's (model_complete → provider.call_once, 3 at most);
+    # this layer asks once unless ops set PICO_EXAM_EXTRACT_ATTEMPTS (pico#1283).
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio
@@ -327,6 +324,7 @@ async def test_page_retry_recovers_from_transient_relay_reset():
         thinking=None,
         usage={},
         model_out={},
+        attempts=2,  # the ops knob; the default is one ask, the door resends
         sleep=fake_sleep,
     )
     assert json.loads(out)[0]["number"] == 1

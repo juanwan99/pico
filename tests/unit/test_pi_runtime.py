@@ -160,7 +160,7 @@ async def test_pi_path_text_only_without_network(monkeypatch: pytest.MonkeyPatch
             model="deepseek-chat",
         ),
     )
-    monkeypatch.setattr("pico_orchestrator.pi_runtime.AsyncOpenAI", _FakeClient)
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _FakeClient)
 
     events: list[tuple[str, dict[str, Any]]] = []
 
@@ -231,7 +231,7 @@ async def test_pi_path_tool_call_loop(monkeypatch: pytest.MonkeyPatch) -> None:
             model="deepseek-chat",
         ),
     )
-    monkeypatch.setattr("pico_orchestrator.pi_runtime.AsyncOpenAI", _FakeClient)
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _FakeClient)
 
     events: list[tuple[str, dict[str, Any]]] = []
 
@@ -297,7 +297,7 @@ async def test_pi_deep_lane_circuit_breaker_bails_on_no_progress(
             model="deepseek-v4-flash",
         ),
     )
-    monkeypatch.setattr("pico_orchestrator.pi_runtime.AsyncOpenAI", _FakeClient)
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _FakeClient)
     # calculator tool exists in the default gateway; make it raise ToolError.
     import pico_orchestrator.pi_runtime as pi_rt
     from pico_orchestrator.gateway import ToolError
@@ -391,7 +391,7 @@ async def test_pi_fast_lane_never_trips_circuit_breaker(
             model="deepseek-v4-flash",
         ),
     )
-    monkeypatch.setattr("pico_orchestrator.pi_runtime.AsyncOpenAI", _FakeClient)
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _FakeClient)
 
     import pico_orchestrator.pi_runtime as pi_rt
     from pico_orchestrator.gateway import ToolError

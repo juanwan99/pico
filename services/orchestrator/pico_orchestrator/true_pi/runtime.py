@@ -478,7 +478,9 @@ async def _run_true_pi_once(
             if openai_overlay and rid:
                 from pico_orchestrator.llm_file_pass import has_turn_files, pass_base_url
 
-                if has_turn_files(rid):
+                # Without the box Pi would call the relay itself, outside the
+                # door (pico#1283): it goes through our llm-pass hop instead.
+                if has_turn_files(rid) or not box_mode:
                     pi_base = pass_base_url(rid)
                     logger.info("true_pi llm-pass baseUrl run_id=%s", rid)
             tool_server = ToolServer(
