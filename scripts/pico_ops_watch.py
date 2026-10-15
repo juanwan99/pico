@@ -235,9 +235,14 @@ def shown(key: str, value: str | None) -> str:
     return value if len(value) <= 80 else value[:77] + "..."
 
 
+# Written by every deploy (scripts/prod-update.sh): the deploy itself is the record
+# (git + /health revision). Counting it mailed an "unlogged .env change" per deploy.
+DEPLOY_KEYS = frozenset({"PICO_GIT_SHA"})
+
+
 def env_diff(old: dict[str, str], new: dict[str, str]) -> list[str]:
     out = []
-    for k in sorted(set(old) | set(new)):
+    for k in sorted((set(old) | set(new)) - DEPLOY_KEYS):
         if old.get(k) != new.get(k):
             out.append(f"{k}: {shown(k, old.get(k))} -> {shown(k, new.get(k))}")
     return out

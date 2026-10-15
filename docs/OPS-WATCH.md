@@ -8,7 +8,7 @@ ECS 用户定时器 `pico-ops-watch.timer` 每 5 分钟跑一次 `scripts/pico_o
 | runs | pico.db 里近 60 分钟结束的任务（经 api 容器只读） | 失败（含系统取消）≥ 4 个且占 ≥ 30%。老师自己点停不算失败。信里按原因分组 |
 | upstream | New API 容器日志（`docker logs --since 上一轮`）里的 relay 状态码和 `channel error` 行 | 出现 403（钥被停 / 被封，要人处理），或 429 + 5xx ≥ 5。`docker logs` 本身失败算「检查本身出错」并发信，游标不前移，下一轮补读 |
 | buildcache | `docker buildx du` 的 Private（独占） | > 35 GB，和每小时清理的上限一致。`docker system df` 的总数含和镜像共用的层，删不到，不看它 |
-| env | `/opt/pico/.env` 和上次记录的快照比 | 有改动但没走 `env-set` / `env-record`：自动补记一行 UNLOGGED 并发信 |
+| env | `/opt/pico/.env` 和上次记录的快照比 | 有改动但没走 `env-set` / `env-record`：自动补记一行 UNLOGGED 并发信。不算发版每次都会改的 `PICO_GIT_SHA`，发版本身有 git 和 `/health` revision 可查 |
 
 阈值可用环境变量改（`PICO_OPS_RUNS_RATE` 等，见脚本头）。任何一项检查自己报错（docker 不通、容器改名），都按「检查本身出错」发信，不当作正常。
 
