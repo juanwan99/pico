@@ -9,9 +9,8 @@
 | `pico-data.tgz` | pico_data 其余（会话、记忆）；不含 `*.bak*` 临时副本 | tar |
 | `teacher-disks.tgz` | 老师盘 | tar |
 | `librechat-files.tgz` | LibreChat 上传和图片 | tar |
+| `meili.dump` | Meilisearch（能从源重建，留着为了快恢复） | `POST /dumps` |
 | `SHA256SUMS` | 以上校验 | |
-
-Meilisearch 不备份（卡上合同）：索引从 pico.db 账本重建，见下面「真恢复」第 5 步。
 
 - 大于 128 MB 的文件切成 `名字.part-000…` 分段上传：代理会在单个上传约 10 分钟后断开，分段后断了只重传那一段。`SHA256SUMS` 记的是整文件，演练时先拼回再校验。
 - 上传后用 `rclone check --size-only` 对一遍远端；本地临时目录随即删掉（不占盘）。
@@ -24,7 +23,8 @@ Meilisearch 不备份（卡上合同）：索引从 pico.db 账本重建，见�
 `bash scripts/backup-pico.sh drill`：拉最新一份，进临时容器恢复（`--network none`，不碰现网），打印：
 - mongo 各集合条数；
 - pico.db `quick_check` 和 runs 条数；
-- 各 tar 的条目数。
+- 各 tar 的条目数；
+- meili 各索引文档数。
 
 ## 真恢复（出事时，人工）
 
@@ -32,4 +32,4 @@ Meilisearch 不备份（卡上合同）：索引从 pico.db 账本重建，见�
 2. mongo：`docker exec -i pico-mongo-1 mongorestore --archive --gzip --drop < mongo.archive.gz`。
 3. pico.db：解压后替换 pico_data 里的 `pico.db`（先删 `pico.db-wal` / `pico.db-shm`）。
 4. tar：解到原卷。
-5. meili：起空库后在 api 容器里 `curl -X POST 'http://127.0.0.1:18765/v1/kb/reindex-all?force=1'`，从账本重投影（不再 OCR，见 `docs/KB-INGEST-FORMATS.md`）。
+5. meili：用 `--import-dump` 起。
