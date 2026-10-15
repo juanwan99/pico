@@ -1168,17 +1168,23 @@ async def extract_pages(
         # the old "earlier page wins" merge let page 1's guess beat the real page (#3157).
         return [i for i in items if is_material(i) or i["number"] not in on_page or number in on_page[i["number"]]]
 
+    by_page = {int(p["page"]): p for p in pages}
+
     async def read(image: dict[str, Any], number: int) -> str:
-        messages = [
-            {"role": "system", "content": prompts["system"]},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": _fill_user_template(prompts["user_page"], subject=tag, roster=page_roster(number))},
-                    {"type": "image", "mime": image["mime"], "data_b64": image["data_b64"]},
-                ],
-            },
+        content: list[dict[str, Any]] = [
+            {"type": "text", "text": _fill_user_template(prompts["user_page"], subject=tag, roster=page_roster(number))},
+            {"type": "image", "mime": image["mime"], "data_b64": image["data_b64"]},
         ]
+        nxt = by_page.get(number + 1)
+        if task == "solve" and nxt is not None:
+            # A choice question at the foot of a page has its options on the next one (一模定稿 5:
+            # stem + A/B on page 1, C/D on page 2; 13: stem + figure on 3, options on 4). Alone,
+            # page 1 left 5 blank or guessed from A/B (edu-core#3164); the next page rides along.
+            content += [
+                {"type": "text", "text": "下一页（只用来看本页最后一题接下去的部分）："},
+                {"type": "image", "mime": nxt["mime"], "data_b64": nxt["data_b64"]},
+            ]
+        messages = [{"role": "system", "content": prompts["system"]}, {"role": "user", "content": content}]
         return await _complete_with_retry(
             complete, messages, thinking=page_thinking(), usage=usage, model_out=model_out
         )

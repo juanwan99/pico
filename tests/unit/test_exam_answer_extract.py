@@ -1402,3 +1402,29 @@ async def test_only_structure_reads_whole_paper():
     calls.clear()
     await ex.extract_pages([_page(1)], task="structure", complete=_whole_stub("[]", per_page, calls))
     assert calls == [("page", 1)], "a one-page paper is one call either way"
+
+
+@pytest.mark.asyncio
+async def test_solve_page_sees_the_next_page_for_a_question_that_runs_over() -> None:
+    # 一模定稿 5: stem + A/B at the foot of page 1, C/D on page 2 — page 1 is asked with
+    # page 2 riding along; the last page has no next page; structure / paper stay one image
+    calls: list = []
+
+    async def complete(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        content = messages[-1]["content"]
+        imgs = [int(base64.b64decode(p["data_b64"]).decode()) for p in content if p["type"] == "image"]
+        calls.append((imgs, content[0]["text"]))
+        if imgs[0] == 1:
+            return json.dumps([_solve_item(5, "C", "连下一页读全选项")])
+        return json.dumps([_solve_item(9, "B")])
+
+    pages = [_page(1), _page(2), _page(3)]
+    roster = "5 single_choice options=4 pages=1\n9 single_choice options=4 pages=3"
+    result = await ex.extract_pages(pages, task="solve", roster=roster, complete=complete)
+    assert {q["number"]: q["answer"] for q in result["questions"]} == {5: "C", 9: "B"}
+    assert sorted(c[0] for c in calls) == [[1, 2], [3]], "第 2 页没题不调；第 3 页是最后一页"
+    assert "下一页起头的新题不要做" in calls[0][1]
+
+    calls.clear()
+    await ex.extract_pages(pages, task="paper", complete=complete)
+    assert all(len(c[0]) == 1 for c in calls)
