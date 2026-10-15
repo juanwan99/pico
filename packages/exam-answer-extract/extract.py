@@ -680,11 +680,14 @@ def merge_items(batches: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
         for item in batch:
             if is_material(item):
                 continue
+            page = (item.get("source") or {}).get("page")
             prev = by_no.get(item["number"])
             if prev is None:
-                by_no[item["number"]] = dict(item)
+                by_no[item["number"]] = {**item, "on_pages": [page] if page else []}
                 continue
             merged = dict(prev)
+            if page and page not in merged["on_pages"]:
+                merged["on_pages"] = sorted([*merged["on_pages"], page])
             if not prev["answer"] and item["answer"]:
                 merged.update(
                     {
@@ -725,6 +728,36 @@ def json_looks_truncated(raw: str) -> bool:
     if s.endswith("]"):
         return False
     return "[" in s or '"number"' in s
+
+
+_ROSTER_PAGES_RE = re.compile(r"\s+pages=([\d,]+)")
+
+
+def roster_pages(roster: str) -> dict[int, set[int]]:
+    """题号 → pages it sits on, from roster lines tagged ` pages=2,3` (edu sends the pages the
+    paper read found each question on). Untagged lines are absent: every page may answer them."""
+    out: dict[int, set[int]] = {}
+    for line in (roster or "").splitlines():
+        m = re.match(r"\s*(\d+)\s", line + " ")
+        tag = _ROSTER_PAGES_RE.search(line)
+        if not m or not tag:
+            continue
+        pages = {int(p) for p in tag.group(1).split(",") if p.isdigit() and int(p) > 0}
+        if pages:
+            out[int(m.group(1))] = pages
+    return out
+
+
+def roster_for_page(roster: str, page: int) -> str:
+    """The roster lines this page may answer, page tags stripped. A tagged question is asked
+    only on its own pages, so a page cannot guess at a question it cannot see."""
+    keep: list[str] = []
+    for line in (roster or "").splitlines():
+        tag = _ROSTER_PAGES_RE.search(line)
+        if tag and page not in {int(p) for p in tag.group(1).split(",") if p.isdigit()}:
+            continue
+        keep.append(_ROSTER_PAGES_RE.sub("", line))
+    return "\n".join(keep).strip()
 
 
 def roster_numbers(roster: str) -> list[int]:
@@ -980,7 +1013,8 @@ async def _complete_with_retry(
 
 
 def _fill_user_template(template: str, *, subject: str, text: str = "", roster: str = "") -> str:
-    table = (roster or "").strip() or "（无题号表，按试卷全部作答）"
+    # page tags steer which page is asked; the model never sees them (text reads have no pages)
+    table = _ROSTER_PAGES_RE.sub("", roster or "").strip() or "（无题号表，按试卷全部作答）"
     return (
         (template or "")
         .replace("{{subject}}", subject)
@@ -1103,13 +1137,23 @@ async def extract_pages(
     usage: dict[str, Any] = {}
     model_out: dict[str, Any] = {}
 
-    async def read(image: dict[str, Any]) -> str:
+    on_page = roster_pages(roster)
+
+    def page_roster(number: int) -> str:
+        return roster_for_page(roster, number) if on_page else roster
+
+    def own(number: int, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # A question the paper read placed on other pages is not this page's to answer:
+        # the old "earlier page wins" merge let page 1's guess beat the real page (#3157).
+        return [i for i in items if is_material(i) or i["number"] not in on_page or number in on_page[i["number"]]]
+
+    async def read(image: dict[str, Any], number: int) -> str:
         messages = [
             {"role": "system", "content": prompts["system"]},
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": _fill_user_template(prompts["user_page"], subject=tag, roster=roster)},
+                    {"type": "text", "text": _fill_user_template(prompts["user_page"], subject=tag, roster=page_roster(number))},
                     {"type": "image", "mime": image["mime"], "data_b64": image["data_b64"]},
                 ],
             },
@@ -1128,7 +1172,7 @@ async def extract_pages(
         outs: list[str] = []
         for half in halves:
             try:
-                out = await read(half)
+                out = await read(half, number)
             except ExtractError:
                 raise
             except Exception:  # noqa: BLE001 — that half stays unread, reported below
@@ -1159,20 +1203,23 @@ async def extract_pages(
             "error": f"SafetyBlocked: 整页被安全审查拦下，切半重读后{missing}半页仍没读成" if missing else None,
             "safety": True,
         }
-        return number, items, "\n".join(outs), report
+        return number, own(number, items), "\n".join(outs), report
 
     async def one(page: dict[str, Any]) -> tuple[int, list[dict[str, Any]], str, dict[str, Any]]:
         number = int(page["page"])
+        if on_page and not page_roster(number):
+            # every question on the roster sits on other pages: nothing to answer here
+            return number, [], "", {"page": number, "ok": True, "count": 0, "error": None, "skipped": True}
         async with sem:
             try:
-                out = await read(page)
+                out = await read(page, number)
             except ExtractError:
                 raise
             except SafetyBlocked as exc:
                 return await read_halves(number, page, exc)
             except Exception as exc:  # noqa: BLE001
                 return number, [], "", _failed_page(number, exc)
-        items = items_from_model_text(out, page=number, task=task)
+        items = own(number, items_from_model_text(out, page=number, task=task))
         return number, items, out, {"page": number, "ok": True, "count": len(items), "error": None}
 
     results = await asyncio.gather(*(one(p) for p in pages))

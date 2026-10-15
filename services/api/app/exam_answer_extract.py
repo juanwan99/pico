@@ -106,6 +106,9 @@ async def post_exam_answer_extract(
         pages.sort(key=lambda p: p["page"])
     else:
         digest.update((body.text or "").encode("utf-8"))
+    # The same pages go out once per task (paper, then solve / answers): the task and roster are
+    # part of what was asked, else the second call shares the first one's usage key and goes unbilled.
+    digest.update(f"\0task={body.task or 'answers'}\0roster={body.roster or ''}".encode())
     content_sha = digest.hexdigest()
 
     result: dict[str, Any] | None = None

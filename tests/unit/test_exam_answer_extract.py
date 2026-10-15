@@ -1172,3 +1172,93 @@ def test_route_reads_a_16_page_paper(client: TestClient, monkeypatch):
     assert [q["stem"] for q in body["questions"]] == [f"第{n}题" for n in range(1, 17)]
     # one model call per page: a 16-page paper costs 16 calls
     assert len(calls) == 16
+
+
+def _solve_item(n: int, answer: str, analysis: str = "") -> dict:
+    return {"number": n, "type": "single_choice", "options_count": 4, "answer": answer, "analysis": analysis}
+
+
+@pytest.mark.asyncio
+async def test_solve_answers_each_question_only_on_its_own_page():
+    """edu-core#3157 现网：第 1 页先到、替第 9 题瞎答（解析写「不在本页」），第 3 页才是真答案。
+    题号表带 pages= 时，第 1 页的第 9 题直接丢掉，最后用第 3 页的；只在别页的题不进本页题号表。"""
+    responses = {
+        1: json.dumps([_solve_item(1, "A", "由题意"), _solve_item(9, "D", "本题不在当前试卷页面中显示。")]),
+        2: json.dumps([_solve_item(9, "C", "也不在本页")]),
+        3: json.dumps([_solve_item(9, "B", "由正弦定理")]),
+    }
+    calls: list = []
+    roster = "1 single_choice options=4 pages=1\n9 single_choice options=4 pages=3"
+    result = await ex.extract_pages(
+        [_page(1), _page(2), _page(3)], task="solve", roster=roster, complete=_stub(responses, calls)
+    )
+    by_no = {q["number"]: q for q in result["questions"]}
+    assert by_no[9]["answer"] == "B"
+    assert "不在" not in by_no[9]["analysis"] and by_no[9]["analysis"] == "由正弦定理"
+    assert by_no[1]["answer"] == "A"
+    assert len(calls) == 2, "第 2 页没有题，不调模型"
+    asked = {int(base64.b64decode(next(p for p in m[-1]["content"] if p["type"] == "image")["data_b64"]).decode()): m[-1]["content"][0]["text"] for m in calls}
+    assert "1 single_choice options=4" in asked[1] and "9 single_choice" not in asked[1]
+    assert "9 single_choice options=4" in asked[3] and "1 single_choice" not in asked[3]
+    assert "pages=" not in asked[1] + asked[3], "页号标记不发给模型"
+    assert {r["page"]: r.get("skipped") for r in result["pages"]}[2] is True
+
+
+@pytest.mark.asyncio
+async def test_solve_roster_without_pages_asks_every_page_as_before():
+    calls: list = []
+    result = await ex.extract_pages(
+        [_page(1), _page(2)],
+        task="solve",
+        roster="1 single_choice options=4\n2 single_choice options=4",
+        complete=_stub({1: json.dumps([_solve_item(1, "A")]), 2: json.dumps([_solve_item(2, "B")])}, calls),
+    )
+    assert len(calls) == 2
+    assert [q["answer"] for q in result["questions"]] == ["A", "B"]
+
+
+@pytest.mark.asyncio
+async def test_paper_read_reports_every_page_a_question_sits_on():
+    page1 = [{"number": 17, "type": "short_answer", "answer": "", "stem": "如图……(1) 求", "sub_count": 1}]
+    page2 = [{"number": 0, "type": "short_answer", "answer": "", "stem": "(2) 求", "continued": True}]
+    result = await ex.extract_pages(
+        [_page(1), _page(2)], task="paper", complete=_stub({1: json.dumps(page1), 2: json.dumps(page2)})
+    )
+    assert result["questions"][0]["on_pages"] == [1, 2]
+
+
+def test_roster_page_helpers():
+    roster = "1 single_choice options=4 pages=1\n14 short_answer 小问=(1)(2) pages=2,3\n20 fill_blank"
+    assert ex.roster_pages(roster) == {1: {1}, 14: {2, 3}}
+    assert ex.roster_for_page(roster, 3) == "14 short_answer 小问=(1)(2)\n20 fill_blank"
+    assert ex.roster_for_page(roster, 1) == "1 single_choice options=4\n20 fill_blank"
+
+
+def test_route_bills_each_task_on_the_same_pages(client: TestClient, monkeypatch, tmp_path):
+    """同一份页图先 paper 再 solve：两次各记一笔，不能共用一个幂等键（edu-core#3157 现网只记了 paper）。"""
+    monkeypatch.setattr(ex, "model_complete", _stub(json.dumps([_solve_item(1, "A")])))
+    for task, roster in (("paper", ""), ("solve", "1 single_choice options=4")):
+        res = client.post(
+            "/v1/exam/answer-extract",
+            json={"pages": [_page_in(1)], "task": task, "roster": roster},
+            headers=_headers(),
+        )
+        assert res.status_code == 200, res.text
+    again = client.post(
+        "/v1/exam/answer-extract",
+        json={"pages": [_page_in(1)], "task": "solve", "roster": "1 single_choice options=4"},
+        headers=_headers(),
+    )
+    assert again.status_code == 200
+    rows = _usage_rows(tmp_path)
+    assert len({r["idempotency_key"] for r in rows}) == 2, "paper、solve 各一笔；同一请求重发不重记"
+
+
+@pytest.mark.asyncio
+async def test_text_read_strips_roster_page_tags() -> None:
+    calls: list = []
+    complete = _stub('[{"number": 9, "type": "short_answer", "answer": "x"}]', calls)
+    await ex.extract_text("9. 求证", task="solve", roster="9 short_answer pages=3", complete=complete)
+    sent = calls[0][-1]["content"]
+    assert "pages=" not in sent
+    assert "9 short_answer" in sent
