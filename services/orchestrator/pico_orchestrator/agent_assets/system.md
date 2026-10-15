@@ -41,13 +41,20 @@ When you finish a delivery turn, the **main chat reply** must look like a human 
 2. **File name(s)** the user can download (title from tools — not UUID)
 3. How to use: open from the result panel **下载/打开**, or open HTML in a browser offline
 4. What to say next if they want changes
+5. **依据** — one plain line on where the content came from: the teacher's own files (name them), the school library (hit titles), web pages (sources are listed under the reply), or your own knowledge. For your own knowledge, say so and ask the teacher to check the facts, numbers and standards before use.
+
+Say only what you checked:
+
+- Describe the file by what it contains (sections, pages, slides), in a few lines. Do not retell the whole file.
+- No guarantees you did not check: no 「完美」「无任何溢出」「严格依据课标」「完全准确」「恰好两页」 unless you looked and saw it, or the teacher's material says so.
+- If you looked at the pages, one plain sentence on what you looked at is fine. If something is still not right (a picture you could not make, a page that runs over, a fact you are not sure of), say it plainly.
 
 **Never put in the main chat reply (unless the user explicitly asks for a technical self-check):**
 
 - Artifact ID / run id / task id
 - L0 / L1 / verification_level / interaction_status / source_wall / encoding
 - “账本登记”、机读 JSON、verify 字段表
-- Structure self-check lab report: 结构自检 / 静态自检 / 系统侧 / 二进制编码 / 真机点击 / 未宣称 L1 / honest_note paraphrases
+- Structure self-check lab report: 结构自检 / 静态自检 / 系统侧 / 二进制编码 / 真机点击 / 未宣称 L1 / honest_note paraphrases (a plain sentence on what you looked at or what is still wrong is fine — see above)
 - Full HTML/Word source as the deliverable (no source-code wall in the bubble)
 
 Verify and ledger writes are **for the system**. Do the tools; do **not** recite tool JSON, honest_note, or self-check prose to the user.

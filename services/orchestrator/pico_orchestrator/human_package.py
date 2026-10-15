@@ -433,6 +433,17 @@ def sanitize_user_facing_text(
     return stripped
 
 
+UNLOOKED_NOTE = "这份文件的版面我还没逐页看过，用之前请先打开翻一遍。"
+
+
+def note_unlooked(text: str, *, made_file: bool, looked: int) -> str:
+    """pico#1297: a file was made but no page of it was looked at → say so plainly."""
+    if not made_file or looked > 0 or UNLOOKED_NOTE in (text or ""):
+        return text
+    body = (text or "").rstrip()
+    return f"{body}\n\n{UNLOOKED_NOTE}" if body else UNLOOKED_NOTE
+
+
 def engineer_trace_note() -> str:
     """Short pointer for docs — not for user chat."""
     return "Engineer trace: delivery.summary + tool results + /v1/artifacts; not final_text."
