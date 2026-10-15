@@ -1761,6 +1761,7 @@ async def test_solve_page_reads_again_without_thinking_when_thinking_runs_out(mo
     result = await ex.extract_pages([_page(1)], task="solve", roster=roster, complete=stub(cut))
     assert seen == [(1, True), (1, False)]
     assert [q["number"] for q in result["questions"]] == [20, 21]
+    assert "第 1 页没用推理做题，AI 答案请重点核对" in result["warnings"]
 
     seen.clear()
     result = await ex.extract_pages([_page(1)], task="solve", roster=roster, complete=stub(TimeoutError()))
@@ -1772,10 +1773,11 @@ async def test_solve_page_reads_again_without_thinking_when_thinking_runs_out(mo
     result = await ex.extract_pages([_page(1)], task="solve", roster=roster, complete=stub("注意看：PSY 变成了上游基因！"))
     assert seen == [(1, True), (1, False)]
 
-    # 推成了就不再读
+    # 推成了就不再读，也不提示
     seen.clear()
-    await ex.extract_pages([_page(1)], task="solve", roster=roster, complete=stub(full))
+    result = await ex.extract_pages([_page(1)], task="solve", roster=roster, complete=stub(full))
     assert seen == [(1, True)]
+    assert not any("没用推理" in w for w in result["warnings"])
 
 
 def test_thinking_adds_output_headroom(monkeypatch) -> None:

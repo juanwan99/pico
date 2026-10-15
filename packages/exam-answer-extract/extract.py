@@ -1460,6 +1460,7 @@ async def extract_pages(
     by_page = {int(p["page"]): p for p in pages}
 
     thinking = task_thinking(task, page_thinking())
+    unthought: set[int] = set()  # 推爆了、不推理读成的页
 
     async def read(image: dict[str, Any] | None, number: int, text: str = "") -> str:
         content: list[dict[str, Any]] = [
@@ -1495,7 +1496,9 @@ async def extract_pages(
             if not json_looks_truncated(out) and parse_json_array(out) is not None:
                 return out
             logger.warning("exam extract page %s thinking ran out, reading without", number)
-        return await _complete_with_retry(complete, messages, thinking=False, usage=usage, model_out=model_out)
+        out = await _complete_with_retry(complete, messages, thinking=False, usage=usage, model_out=model_out)
+        unthought.add(number)
+        return out
 
     async def read_halves(
         number: int, page: dict[str, Any], blocked: SafetyBlocked
@@ -1684,6 +1687,10 @@ async def extract_pages(
         if missing:
             nums = "、".join(str(n) for n in missing)
             result["warnings"].append(f"第 {nums} 题按所在页没做出答案，请老师核对或手动填")
+    if unthought and task == "solve":
+        # 不推理做的答案准头低（一模 5 题不推理答 B、推理答 D），老师得知道哪几页要重点核
+        nums = "、".join(str(n) for n in sorted(unthought))
+        result["warnings"].append(f"第 {nums} 页没用推理做题，AI 答案请重点核对")
     return result
 
 
