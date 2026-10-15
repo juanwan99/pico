@@ -206,10 +206,11 @@ async def test_usage_limit_is_not_resumed() -> None:
 
 
 def test_pi_settings_carry_retry_knobs() -> None:
+    # pico#1271: the run proxy is the one retry layer; Pi's own is off.
     blob = official_compaction_settings(256_000)
-    assert blob["retry"]["enabled"] is True
-    assert blob["retry"]["maxRetries"] == PI_RETRY_MAX >= 3
-    assert blob["retry"]["baseDelayMs"] >= 2_000
+    assert blob["retry"]["enabled"] is False
+    assert blob["retry"]["maxRetries"] == PI_RETRY_MAX == 0
+    assert official_compaction_settings(256_000, retry_max=2)["retry"]["enabled"] is True
     assert blob["httpIdleTimeoutMs"] == 900_000
 
 
@@ -426,12 +427,3 @@ async def test_toolless_wall_fails_as_timeout(monkeypatch: pytest.MonkeyPatch) -
     assert result.status == "failed"
     assert "timeout" in str(result.error)
     assert not any(p.get("code") == "wall.stop" for k, p in events if k == "run.status")
-
-
-def test_toolless_pi_retry_budget_is_one() -> None:
-    from pico_orchestrator.true_pi.client import PI_RETRY_MAX_TOOLLESS
-
-    assert PI_RETRY_MAX_TOOLLESS == 1
-    doc = official_compaction_settings(128_000, retry_max=PI_RETRY_MAX_TOOLLESS)
-    assert doc["retry"]["maxRetries"] == 1
-    assert official_compaction_settings(128_000)["retry"]["maxRetries"] == PI_RETRY_MAX

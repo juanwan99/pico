@@ -212,15 +212,25 @@ async def run_true_pi_agent(
     primary = str(getattr(caps, "backend_model", "") or "") or str(
         runtime_policy_for_model(ui or None).get("backend_model") or ""
     )
-    models = [m for m in brain_candidates(primary) if m] or [primary]
+    from pico_orchestrator import upstream
+
+    # One switch at most (pico#1271): the head model, then one backup.
+    models = ([m for m in brain_candidates(primary) if m] or [primary])[:2]
     last: RunResult | None = None
     gate: _FailoverGate | None = None
+    rid = str(kwargs.get("run_id") or "")
     for i, mid in enumerate(models):
         # Switching models is invisible to the teacher (owner 10-14 14:28).
         gate = _FailoverGate(emit, "")
         # Only the head model is cut off on a stalled first token; the next one
         # gets all the time it needs (a slow answer beats none).
         stall = pi_stall_switch_s() if i == 0 and len(models) > 1 else 0.0
+        st = upstream.run_state(rid)
+        if st is not None:
+            # The stall switch already moves on at the hedge's moment: no
+            # same-model hedge to cancel a second later.
+            st.no_hedge = stall > 0
+            st.last_status = None
         last = await _run_true_pi_once(
             emit=gate.emit,
             **{**kwargs, "caps": replace(caps, backend_model=mid), "stall_switch_s": stall},
@@ -230,11 +240,11 @@ async def run_true_pi_agent(
         if (
             gate.live
             or last.status in {"succeeded", "cancelled"}
-            or not should_failover(last, first=i == 0)
+            or not should_failover(last, first=i == 0, relay=upstream.upstream_error(rid))
         ):
             await gate.flush()
             return last
-        why = f"{last.code or ''} {last.error or ''}"
+        why = f"{last.code or ''} {last.error or ''} {upstream.upstream_error(rid)}"
         if is_model_dead(why):
             mark_down(mid)
         elif is_stall(why):
@@ -587,10 +597,6 @@ async def _run_true_pi_once(
                     ),
                 },
             )
-            if toolless:
-                from pico_orchestrator.true_pi.client import PI_RETRY_MAX_TOOLLESS
-
-                transport.retry_max = PI_RETRY_MAX_TOOLLESS
             # Bind the tool port while writing models.json so spawn is not
             # waiting on both serially (#1005 首字).
             url_task = asyncio.create_task(tool_server.start())
@@ -989,9 +995,11 @@ async def _run_true_pi_once(
         # did work must not throw the whole long task away. Pi keeps the turn in
         # its session; ask it to carry on from where it stopped. Before any
         # output brain-HA still fails over to the next model instead.
+        from pico_orchestrator import upstream
         from pico_orchestrator.true_pi.config import resume_max
 
         budget = 0 if toolless else resume_max()
+        spare = upstream.run_state(rid)
         while (
             state.settled
             and state.provider_error
@@ -999,7 +1007,12 @@ async def _run_true_pi_once(
             and not state.no_resume
             and state.resumes < budget
             and _provider_fail_code(state.provider_error) != "model.usage_limit"
+            # A resume is one more upstream request: it comes out of the run's
+            # spare pool, with the proxy's hedges and retries (pico#1271).
+            and spare is not None
+            and spare.spare > 0
         ):
+            spare.spare -= 1
             state.resumes += 1
             reason = str(state.provider_error)[:200]
             logger.info("true_pi resume run_id=%s n=%s/%s reason=%s", rid, state.resumes, budget, reason)

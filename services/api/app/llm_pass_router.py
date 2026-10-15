@@ -7,6 +7,7 @@ import logging
 import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
+from pico_orchestrator import upstream as door
 from pico_orchestrator.llm_file_pass import splice_responses_body, turn_files
 
 from app.loopback import is_loopback_host, request_on_loopback_socket
@@ -63,6 +64,8 @@ async def llm_pass(run_id: str, path: str, request: Request) -> Response:
         except Exception:
             logger.exception("llm-pass splice skipped run_id=%s", run_id)
     timeout = httpx.Timeout(600.0, connect=10.0)
+    auth = headers.get("authorization") or headers.get("Authorization") or ""
+    release = await door.acquire(auth.removeprefix("Bearer ").strip(), "pi_step")
     client = httpx.AsyncClient(timeout=timeout, follow_redirects=False)
     req = client.build_request(
         request.method, target, headers=headers, content=raw or None
@@ -71,6 +74,7 @@ async def llm_pass(run_id: str, path: str, request: Request) -> Response:
         upstream = await client.send(req, stream=True)
     except Exception:
         await client.aclose()
+        release()
         raise
 
     async def _iter():
@@ -78,8 +82,11 @@ async def llm_pass(run_id: str, path: str, request: Request) -> Response:
             async for chunk in upstream.aiter_bytes():
                 yield chunk
         finally:
-            await upstream.aclose()
-            await client.aclose()
+            try:
+                await upstream.aclose()
+                await client.aclose()
+            finally:
+                release()
 
     out_headers = {
         key: value

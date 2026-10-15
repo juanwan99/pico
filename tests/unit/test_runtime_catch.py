@@ -192,7 +192,7 @@ def test_t_long_office_named_word_still_no_guess() -> None:
 
 
 def test_prepare_agent_home_toolless_retry_budget(tmp_path: Path) -> None:
-    """#1195: a toolless run writes Pi's retry budget as 1 into settings.json."""
+    """The transport's retry_max reaches Pi's settings.json (Pi retry is off by default, pico#1271)."""
     t = SubprocessTransport(
         session_dir=tmp_path / "sess",
         tool_url="http://127.0.0.1:1",

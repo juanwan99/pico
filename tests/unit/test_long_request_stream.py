@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from pico_orchestrator import provider
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
@@ -352,15 +353,15 @@ def _text_stream(*texts: str, fail_after: bool = False) -> object:
 
 
 @pytest.mark.asyncio
-async def test_stream_chat_waits_out_new_api_overload(monkeypatch: pytest.MonkeyPatch) -> None:
-    """New API 503s while the host CPU is pegged; back off instead of failing (#1135)."""
+async def test_stream_chat_overload_retries_under_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """New API 503 while the host CPU is pegged (#1135): retried at once, no 3-minute backoff (pico#1271)."""
     slept = _gemini_env(monkeypatch)
     calls = {"n": 0}
 
     class _Completions:
         async def create(self, **_kwargs: object) -> object:
             calls["n"] += 1
-            if calls["n"] <= 3:
+            if calls["n"] <= 1:
                 raise _Overloaded()
             return _text_stream("ok")
 
@@ -371,36 +372,35 @@ async def test_stream_chat_waits_out_new_api_overload(monkeypatch: pytest.Monkey
     monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _Client)
     chunks = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
     assert chunks == ["ok"]
-    assert slept == [3.0, 6.0, 12.0]
+    assert calls["n"] == 2 and slept == []
 
 
 @pytest.mark.asyncio
 async def test_stream_chat_overload_gives_up_and_never_replays(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Bounded backoff; once text went out, a retry would duplicate it — raise instead."""
-    from pico_orchestrator.provider import OVERLOAD_RETRY_MAX
-
+    """Three requests at most, no sleeps; once text went out, a retry would duplicate it — raise instead."""
     slept = _gemini_env(monkeypatch)
 
-    class _Always:
-        async def create(self, **_kwargs: object) -> object:
-            raise _Overloaded()
-
-    class _MidStream:
-        async def create(self, **_kwargs: object) -> object:
-            return _text_stream("half", fail_after=True)
-
-    for completions, want_sleeps in ((_Always(), OVERLOAD_RETRY_MAX), (_MidStream(), 0)):
+    for fail_mid, want_calls in ((False, 3), (True, 1)):
         slept.clear()
+        calls = {"n": 0}
 
-        def _client(_c: object = completions, **_kwargs: object) -> SimpleNamespace:
+        class _Completions:
+            async def create(self, _mid: bool = fail_mid, _calls: dict = calls, **_kwargs: object) -> object:
+                _calls["n"] += 1
+                if _mid:
+                    return _text_stream("half", fail_after=True)
+                raise _Overloaded()
+
+        def _client(_c: object = _Completions(), **_kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(chat=SimpleNamespace(completions=_c))
 
         monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _client)
+        provider._CLIENTS.clear()  # one shared client per key: drop the last case's
         with pytest.raises(RuntimeError, match="overloaded"):
             _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
-        assert len(slept) == want_sleeps
+        assert calls["n"] == want_calls and slept == []
 
 
 class _UrlError502(Exception):
@@ -449,8 +449,8 @@ async def test_stream_chat_5xx_twice_fails(monkeypatch: pytest.MonkeyPatch) -> N
     )
     with pytest.raises(RuntimeError, match="URLError"):
         _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
-    # The hedged race gives one model four attempts, then gives up.
-    assert calls["n"] == 4
+    # One budget (pico#1271): three requests, then give up.
+    assert calls["n"] == 3
 
 
 @pytest.mark.asyncio
@@ -482,6 +482,7 @@ async def test_stream_chat_first_byte_timeout_resends_once(
     assert calls["n"] == 2
 
     calls["n"] = 0
+    provider._CLIENTS.clear()
 
     class _AlwaysHung:
         async def create(self, **_kwargs: object) -> object:
@@ -494,4 +495,4 @@ async def test_stream_chat_first_byte_timeout_resends_once(
     )
     with pytest.raises(RuntimeError, match="first byte timeout"):
         _ = [p async for p in stream_chat("hi", model="pico-fast", thinking=False)]
-    assert calls["n"] == 4
+    assert calls["n"] == 3

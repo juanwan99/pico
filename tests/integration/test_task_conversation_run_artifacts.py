@@ -1508,6 +1508,42 @@ async def test_json_only_hung_up_caller_gets_answer_on_resend(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_json_only_resend_while_running_joins_the_first(tmp_path, monkeypatch) -> None:
+    """pico#1271 / #1259: a re-send while the first is still answering waits on it — one model call, one run."""
+    settings = await _fresh_db(tmp_path, monkeypatch, "json-join.db")
+    monkeypatch.setattr("app.openai_compat._CLIENT_GONE_POLL_S", 0.01)
+    release = asyncio.Event()
+    calls: list[str] = []
+
+    async def slow_stream(*_args, usage_out=None, **_kwargs) -> AsyncIterator[str]:
+        calls.append("x")
+        await release.wait()
+        yield '{"items":["joined"]}'
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", slow_stream)
+    envelope = '{"output":"json_only_no_files","items":[{"kicker":"在途"}]}'
+    first = asyncio.create_task(_json_only_call(settings, envelope, member="member-join"))
+    for _ in range(300):
+        if calls:
+            break
+        await asyncio.sleep(0.01)
+    second = asyncio.create_task(_json_only_call(settings, envelope, member="member-join"))
+    await asyncio.sleep(0.2)
+    assert len(calls) == 1 and not second.done()
+    release.set()
+    a, b = await asyncio.wait_for(asyncio.gather(first, second), timeout=5)
+
+    assert len(calls) == 1
+    assert b.headers["X-Pico-Replay"] == "inflight"
+    assert json.loads(b.body)["choices"][0]["message"]["content"] == '{"items":["joined"]}'
+    assert a["choices"][0]["message"]["content"] == '{"items":["joined"]}'
+    from sqlalchemy import func, select
+
+    async with session_factory()() as session:
+        assert int(await session.scalar(select(func.count()).select_from(RunRow))) == 1
+
+
+@pytest.mark.asyncio
 async def test_json_only_replay_skips_header_only_and_failures(tmp_path, monkeypatch) -> None:
     """#1204: exam grading re-runs on purpose; a failed answer is never replayed."""
     settings = await _fresh_db(tmp_path, monkeypatch, "json-replay-skip.db")

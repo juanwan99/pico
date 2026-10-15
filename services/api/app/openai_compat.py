@@ -1396,6 +1396,28 @@ def _failure_response(
     )
 
 
+async def _join_running(request: Request | None, work: asyncio.Task | None) -> Response | None:
+    """Wait on an identical json_only call already in flight (pico#1271 / #1259).
+
+    None = nothing to join, or it did not finish with an answer: the caller
+    makes its own call then.
+    """
+    if work is None:
+        return None
+    while True:
+        done, _ = await asyncio.wait({work}, timeout=_CLIENT_GONE_POLL_S)
+        if done:
+            break
+        if request is not None and await request.is_disconnected():
+            return Response(status_code=499)
+    if work.cancelled() or work.exception() is not None:
+        return None
+    out = work.result()
+    if isinstance(out, dict):
+        return JSONResponse(out, headers={"X-Pico-Replay": "inflight"})
+    return out
+
+
 async def _client_gone_first(
     request: Request | None,
     work: asyncio.Task,
@@ -1942,6 +1964,9 @@ async def chat_completions(
                 replayed = json_only_replay.get(replay_key)
                 if replayed is not None:
                     return JSONResponse(replayed, headers={"X-Pico-Replay": "1"})
+                joined = await _join_running(request, json_only_replay.running(replay_key))
+                if joined is not None:
+                    return joined
         if not use_direct:
             await _supersede_active_turns(principal, conversation_id)
         task_id, run_id = await _ledger_task_run(
@@ -2022,6 +2047,8 @@ async def chat_completions(
                 return _reply(text, direct_finish.get("finish_reason"), direct_usage, None)
 
             work = asyncio.create_task(_direct_reply())
+            if replay_key is not None:
+                json_only_replay.track(replay_key, work)
             if await _client_gone_first(request, work, run_id, keep=replay_key is not None):
                 return Response(status_code=499)
             return work.result()

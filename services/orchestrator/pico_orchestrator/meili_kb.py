@@ -268,6 +268,9 @@ def rerank_documents_with_usage(
     cleaned = [str(t or "")[:2000] for t in texts]
     if not base or not key or not _is_new_api_loopback(base) or not cleaned:
         return None, None
+    from pico_orchestrator import upstream
+
+    upstream.count_sync(key, "rerank")
     try:
         status, body = HttpxClient().request(
             "POST",
