@@ -1,4 +1,4 @@
-"""pico#1296: look at the finished file before answering.
+"""pico#1296: look at the finished file before answering (and pico#1297: own up when it was not looked at).
 
 The workspace rules say how to look (render pages, `read` the pictures), and
 once per run, when the model starts writing a file the teacher will open,
@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from pico_orchestrator.human_package import UNLOOKED_NOTE, note_unlooked
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi import runner
 from pico_orchestrator.true_pi.client import FakeTransport
@@ -97,15 +98,22 @@ def _script(*calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-async def _run(monkeypatch: pytest.MonkeyPatch, transport: FakeTransport, *, workspace: bool = True):
+async def _no_land(**_kw: Any) -> list[tuple[str, dict[str, Any]]]:
+    return []
+
+
+async def _run(
+    monkeypatch: pytest.MonkeyPatch,
+    transport: FakeTransport,
+    *,
+    workspace: bool = True,
+    land: Any = _no_land,
+):
     async def fake_list(_key: Any) -> dict[str, Any]:
         return {}
 
-    async def fake_land(**_kw: Any) -> list[tuple[str, dict[str, Any]]]:
-        return []
-
     monkeypatch.setattr(runner, "list_outputs", fake_list)
-    monkeypatch.setattr(runner, "land_outputs", fake_land)
+    monkeypatch.setattr(runner, "land_outputs", land)
     if workspace:
         transport.runner = SimpleNamespace(key="ws-key")
     events: list[tuple[str, dict[str, Any]]] = []
@@ -175,3 +183,70 @@ async def test_a_failed_steer_never_fails_the_run(monkeypatch: pytest.MonkeyPatc
     kinds = [k for k, _ in events]
     assert "run.look_check" not in kinds
     assert "run.error" not in kinds
+
+
+# pico#1297: a landed file nobody looked at → the reply says so plainly.
+
+
+async def _final_text(monkeypatch: pytest.MonkeyPatch, *calls: list[dict[str, Any]]) -> str:
+    async def fake_land(**_kw: Any) -> list[tuple[str, dict[str, Any]]]:
+        return [("workspace_output", {"title": "a.html", "bytes": 3, "via": "workspace"})]
+
+    transport = FakeTransport(scripted=_script(*calls))
+    events = await _run(monkeypatch, transport, land=fake_land)
+    texts = [p.get("text", "") for k, p in events if k == "message.delta"]
+    return texts[-1] if texts else ""
+
+
+@pytest.mark.asyncio
+async def test_unlooked_file_is_owned_up_to(monkeypatch: pytest.MonkeyPatch) -> None:
+    text = await _final_text(
+        monkeypatch, _call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "x"})
+    )
+    assert text.startswith("做好了。")
+    assert UNLOOKED_NOTE in text
+
+
+@pytest.mark.asyncio
+async def test_looked_file_gets_no_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    text = await _final_text(
+        monkeypatch,
+        _call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "x"}),
+        _call("c2", "read", {"path": "/workspace/work/look/a.png"}),
+    )
+    assert text.startswith("做好了。")
+    assert UNLOOKED_NOTE not in text
+
+
+def test_note_unlooked() -> None:
+    assert note_unlooked("好了", made_file=False, looked=0) == "好了"
+    assert note_unlooked("好了", made_file=True, looked=2) == "好了"
+    once = note_unlooked("好了", made_file=True, looked=0)
+    assert once == f"好了\n\n{UNLOOKED_NOTE}"
+    assert note_unlooked(once, made_file=True, looked=0) == once
+    assert note_unlooked("", made_file=True, looked=0) == UNLOOKED_NOTE
+
+
+@pytest.mark.asyncio
+async def test_unlooked_note_reaches_the_live_bubble(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_land(**_kw: Any) -> list[tuple[str, dict[str, Any]]]:
+        return [("workspace_output", {"title": "a.html", "bytes": 3, "via": "workspace"})]
+
+    streamed = [{"type": "text_delta", "delta": "做好了。"}]
+    transport = FakeTransport(
+        scripted=_script(
+            _call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "x"}), streamed
+        )
+    )
+    events = await _run(monkeypatch, transport, land=fake_land)
+    live = "".join(p.get("text", "") for k, p in events if k == "message.stream")
+    assert live == f"做好了。\n\n{UNLOOKED_NOTE}"
+
+
+def test_reply_rules_ask_for_basis_and_no_unchecked_claims() -> None:
+    from pico_orchestrator.true_pi.runtime import pico_system_text
+
+    text = pico_system_text()
+    assert "**依据**" in text
+    assert "your own knowledge" in text and "check the facts" in text
+    assert "No guarantees you did not check" in text

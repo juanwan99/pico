@@ -1201,6 +1201,7 @@ async def _run_true_pi_once(
 
         # Human package
         from pico_orchestrator.human_package import (
+            note_unlooked,
             sanitize_user_facing_text,
             titles_from_tool_results,
         )
@@ -1209,6 +1210,15 @@ async def _run_true_pi_once(
         titles = titles_from_tool_results(state.tool_results)
         base = (state.final_parts[-1] if state.final_parts else "") or ""
         human = sanitize_user_facing_text(base, artifact_titles=titles)
+        landed_file = any(
+            name == "workspace_output" and not res.get("error") for name, res in state.tool_results
+        )
+        owned = note_unlooked(
+            human, made_file=state.visual_output and landed_file, looked=state.look_reads
+        )
+        # The live bubble already streamed the model's words: stream the note too.
+        unlooked_tail = owned[len(human) :] if owned.startswith(human) else ""
+        human = owned
         from pico_orchestrator.web_tools import attach_teacher_sources
 
         human = attach_teacher_sources(human, state.tool_results)
@@ -1228,6 +1238,8 @@ async def _run_true_pi_once(
             )
         if final_text:
             payload = {"text": final_text, **tag}
+            if state.text_streamed and unlooked_tail:
+                await emit("message.stream", {"text": unlooked_tail, **tag})
             if state.text_streamed:
                 # Live SSE already got token deltas. Ledger the cleaned
                 # answer once; do not dump the whole bubble again.
