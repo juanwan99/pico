@@ -31,6 +31,9 @@ LIBRECHAT="${PICO_BACKUP_LIBRECHAT_CONTAINER:-pico-librechat-1}"
 RCLONE_BIN="${PICO_BACKUP_RCLONE:-rclone}"
 RETRY_MAX="${PICO_BACKUP_RETRY_MAX:-6}"
 STALE_HOURS="${PICO_BACKUP_STALE_HOURS:-26}"
+# The proxy drops a single upload after ~10 min (~250–500 MB at its speed) and
+# rclone then restarts the whole file. Parts this size each finish in a couple of minutes.
+PART_MB="${PICO_BACKUP_PART_MB:-128}"
 
 umask 077
 mkdir -p "$WORK" "$LOG_DIR"
@@ -148,6 +151,14 @@ raise SystemExit(0 if ok == "ok" else "quick_check: " + ok)
   dump_meili "$dir/meili.dump"
 
   (cd "$dir" && sha256sum -- * >SHA256SUMS)
+  # Sums are of the whole files; big ones go up as NAME.part-000, -001, … (drill joins them).
+  local f
+  for f in "$dir"/*; do
+    [[ "$(basename "$f")" == SHA256SUMS ]] && continue
+    if [[ "$(stat -c %s "$f")" -gt $((PART_MB * 1048576)) ]]; then
+      split -b "${PART_MB}M" -d -a 3 "$f" "$f.part-" && rm -f "$f"
+    fi
+  done
   log "upload $(du -sh "$dir" | cut -f1) → $REMOTE/$stamp"
   rclone_cmd copy "$dir" "$REMOTE/$stamp" || fail "upload (see $WORK/rclone.err)"
   # Off-host means the remote has every file at the right size.
@@ -169,6 +180,12 @@ cmd_drill() {
   rm -rf "$dir" && mkdir -p "$dir"
   trap 'rm -rf "$dir"; docker rm -f pico-drill-mongo pico-drill-meili >/dev/null 2>&1 || true' EXIT
   rclone_cmd copy "$REMOTE/$latest" "$dir"
+  local part base
+  for part in "$dir"/*.part-000; do
+    [[ -e "$part" ]] || continue
+    base="${part%.part-000}"
+    cat "$base".part-* >"$base" && rm -f "$base".part-*
+  done
   (cd "$dir" && sha256sum -c --quiet SHA256SUMS) && echo "sha256 ok"
 
   docker run -d --rm --name pico-drill-mongo --network none mongo:7 >/dev/null

@@ -12,6 +12,7 @@
 | `meili.dump` | Meilisearch（能从源重建，留着为了快恢复） | `POST /dumps` |
 | `SHA256SUMS` | 以上校验 | |
 
+- 大于 128 MB 的文件切成 `名字.part-000…` 分段上传：代理会在单个上传约 10 分钟后断开，分段后断了只重传那一段。`SHA256SUMS` 记的是整文件，演练时先拼回再校验。
 - 上传后用 `rclone check --size-only` 对一遍远端；本地临时目录随即删掉（不占盘）。
 - 失败：写 `~/logs/pico-backup-status.json`（state=FAIL），并用 `~/scripts/edu-backup-alert.py` 发信。日志 `~/logs/pico-backup.log`。
 - 没跑起来（定时器停了、机器宕了）不会写 FAIL：`pico-backup-watch.timer` 每小时看一次，上次成功超过 26 小时就发信（12 小时内只发一封）。
