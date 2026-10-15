@@ -1312,8 +1312,9 @@ def _whole_stub(whole, per_page: dict | None = None, calls: list | None = None):
 async def test_structure_reads_whole_paper_in_one_call_so_section_rules_cross_pages():
     calls: list = []
     whole = json.dumps(
-        [{"number": n, "type": "single_choice", "options_count": 4, "score": 2} for n in range(1, 13)]
-        + [{"number": n, "type": "multi_choice", "options_count": 4, "score": 4} for n in range(13, 17)]
+        [{"number": n, "type": "single_choice", "options_count": 4, "score": 2, "page": 1 + n // 7} for n in range(1, 13)]
+        + [{"number": n, "type": "multi_choice", "options_count": 4, "score": 4, "page": 2} for n in range(13, 16)]
+        + [{"number": 16, "type": "multi_choice", "options_count": 4, "score": 4, "pages": [2, 3]}]
     )
     result = await ex.extract_pages(
         [_page(1), _page(2), _page(3)], task="structure", complete=_whole_stub(whole, calls=calls)
@@ -1330,7 +1331,21 @@ async def test_structure_reads_whole_paper_in_one_call_so_section_rules_cross_pa
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("whole", [RuntimeError("upstream 503"), RuntimeError("prompt_blocked: SAFETY"), "[]", "不是 JSON"])
+@pytest.mark.parametrize(
+    "whole",
+    [
+        RuntimeError("upstream 503"),
+        RuntimeError("prompt_blocked: SAFETY"),
+        "[]",
+        "不是 JSON",
+        # partial: 1–12 back, 大题 13–21 lost (16:3x live) → per page
+        json.dumps([{"number": n, "type": "single_choice", "score": 2, "page": 1} for n in range(1, 13)]),
+        # a gap in the middle
+        json.dumps([{"number": n, "type": "single_choice", "score": 2, "page": 2} for n in (1, 2, 4)]),
+        # numbers run through but nothing on the last page
+        json.dumps([{"number": n, "type": "single_choice", "score": 2, "page": 1} for n in (1, 2)]),
+    ],
+)
 async def test_structure_whole_read_failure_falls_back_to_per_page(whole):
     calls: list = []
     per_page = {

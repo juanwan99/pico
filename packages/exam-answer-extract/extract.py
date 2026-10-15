@@ -1245,6 +1245,25 @@ async def extract_pages(
         if not items:
             logger.warning("exam structure whole-paper read empty, per page instead: %s", _preview(out))
             return None
+        # A partial read is worse than per page (16:3x live: only the choice section came back,
+        # every 大题 lost): 题号 must run 1..max with no gap and some question must reach the last page.
+        numbers = {i["number"] for i in items if not is_material(i)}
+        top = max(numbers, default=0)
+        gaps = [n for n in range(1, top + 1) if n not in numbers]
+        on_pages = {
+            int(p)
+            for r in _flatten(parse_json_array(out) or [])
+            if isinstance(r, dict)
+            for p in (r.get("pages") if isinstance(r.get("pages"), list) else [r.get("pages", r.get("page"))])
+            if isinstance(p, (int, float)) and not isinstance(p, bool)
+        }
+        last = int(pages[-1]["page"])
+        if not top or gaps or last not in on_pages:
+            logger.warning(
+                "exam structure whole-paper read partial (max %s, gaps %s, pages %s of %s), per page instead",
+                top, gaps[:20], sorted(on_pages), last,
+            )
+            return None
         reports = [{"page": int(p["page"]), "ok": True, "count": 0, "error": None} for p in pages]
         reports[0]["count"] = len(items)
         return _finish("pages", [items] + [[] for _ in pages[1:]], reports, [], out, usage, model_out)
