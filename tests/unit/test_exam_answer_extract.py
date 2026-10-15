@@ -904,8 +904,9 @@ def _ink_page(bands: list[tuple[int, int]], height: int = 300) -> dict:
     return {"page": 2, "mime": "image/png", "data_b64": base64.b64encode(buf.getvalue()).decode()}
 
 
-def _halves_stub(top, bottom, calls: list, extra: dict | None = None):
-    """Full 300-px page is blocked; a 150-px half with ink at row 100 is the bottom one."""
+def _halves_stub(top, bottom, calls: list, extra: dict | None = None, whole: tuple[int, str] | None = None):
+    """Full 300-px page is blocked; a 150-px half with ink at row 100 is the bottom one.
+    ``whole=(k, text)``: the full page is blocked k times, then reads as ``text``."""
     import io
 
     from PIL import Image
@@ -917,6 +918,8 @@ def _halves_stub(top, bottom, calls: list, extra: dict | None = None):
         if height == 300:
             calls.append(300)
             out = RuntimeError(_BLOCKED)
+            if whole and calls.count(300) > whole[0]:
+                out = whole[1]
         elif height == 150:
             name = "bottom" if pic.getpixel((50, 100)) < 128 else "top"
             calls.append(name)
@@ -947,7 +950,18 @@ def test_split_cuts_on_the_blank_row_nearest_the_middle():
 
 
 @pytest.mark.asyncio
-async def test_safety_blocked_page_is_read_as_two_halves_not_retried():
+async def test_safety_block_comes_and_goes_so_the_whole_page_is_asked_again():
+    """edu-core#3164: the same biology page was blocked in 1 of 6 identical reads."""
+    calls: list = []
+    page = json.dumps([{"number": 17, "type": "short_answer", "score": 11, "stem": "光合细胞器"}])
+    result = await ex.extract_pages([_ink_page(_BANDS)], complete=_halves_stub("[]", "[]", calls, whole=(1, page)))
+    assert calls == [300, 300], "asked once more, read whole, no halves"
+    assert [q["number"] for q in result["questions"]] == [17]
+    assert result["pages"] == [{"page": 2, "ok": True, "count": 1, "error": None, "safety": True}]
+
+
+@pytest.mark.asyncio
+async def test_safety_blocked_page_still_blocked_is_read_as_two_halves():
     """pico#1193: Gemini blocks the whole chemistry key page at any safetySettings; halves pass."""
     calls: list = []
     top = json.dumps([
@@ -964,7 +978,7 @@ async def test_safety_blocked_page_is_read_as_two_halves_not_retried():
         [_ink_page(_BANDS)],
         complete=_halves_stub(top, bottom, calls),
     )
-    assert calls == [300, "top", "bottom"], "a SAFETY block is deterministic: no retry of the full page"
+    assert calls == [300, 300, 300, "top", "bottom"], "whole page asked twice more, then halves"
     by_no = {q["number"]: q for q in result["questions"]}
     assert sorted(by_no) == [8, 15, 16]
     assert [s["sub"] for s in by_no[15]["subs"]] == [1, 2]

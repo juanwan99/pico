@@ -929,8 +929,12 @@ def _failed_page(page: int, exc: BaseException) -> dict[str, Any]:
 
 # Gemini blocks some whole pages at the prompt (``prompt_blocked … SAFETY``) whatever
 # safetySettings say: OFF / BLOCK_NONE were blocked alike on a chemistry key whose
-# halves each read fine (pico#1193). The block is deterministic, so it is never retried;
-# the page is read again as two halves instead.
+# halves each read fine (pico#1193). The block is not deterministic either: one biology
+# page (fragile-X pedigree + gel, edu-core#3164) was blocked in 1 of 6 identical reads, and
+# whole + both halves in two live runs. So the whole page is asked again a couple of times
+# before it is cut in halves (backup brains were tried: sol 400s on this path, grok
+# timed out on a full page and misread a small one).
+_SAFETY_REASKS = 2
 _SAFETY_BLOCK_RE = re.compile(r"prompt_blocked|blocked by Gemini|\bSAFETY\b|PROHIBITED_CONTENT")
 
 
@@ -1281,7 +1285,21 @@ async def extract_pages(
             except SafetyBlocked as exc:
                 # 原文原因留在日志里（老师只看到「被安全审查拦下」），查是哪类拦截
                 logger.warning("exam extract page %s safety blocked: %s", number, str(exc)[:400])
-                return await read_halves(number, page, exc)
+                out = None
+                for _ in range(_env_int("PICO_EXAM_EXTRACT_SAFETY_REASKS", _SAFETY_REASKS)):
+                    try:
+                        out = await read(page, number)
+                        break
+                    except SafetyBlocked as again:
+                        logger.warning("exam extract page %s blocked again: %s", number, str(again)[:200])
+                    except ExtractError:
+                        raise
+                    except Exception:  # noqa: BLE001 — halves below
+                        break
+                if out is None:
+                    return await read_halves(number, page, exc)
+                items = own(number, items_from_model_text(out, page=number, task=task))
+                return number, items, out, {"page": number, "ok": True, "count": len(items), "error": None, "safety": True}
             except Exception as exc:  # noqa: BLE001
                 return number, [], "", _failed_page(number, exc)
         items = own(number, items_from_model_text(out, page=number, task=task))
