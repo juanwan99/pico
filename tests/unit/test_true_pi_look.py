@@ -18,7 +18,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from pico_orchestrator.human_package import UNLOOKED_NOTE, note_unlooked
+from pico_orchestrator.human_package import (
+    UNLOOKED_NOTE,
+    UNREAD_NOTE_TAIL,
+    note_unlooked,
+    note_unread_basis,
+)
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi import runner
 from pico_orchestrator.true_pi.client import FakeTransport
@@ -86,8 +91,8 @@ def _call(cid: str, tool: str, args: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _script(*calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    done = {"role": "assistant", "content": [{"type": "text", "text": "做好了。"}]}
+def _script(*calls: list[dict[str, Any]], final: str = "做好了。") -> list[dict[str, Any]]:
+    done = {"role": "assistant", "content": [{"type": "text", "text": final}]}
     out: list[dict[str, Any]] = [{"type": "agent_start"}, {"type": "turn_start"}]
     for c in calls:
         out.extend(c)
@@ -251,3 +256,43 @@ def test_reply_rules_ask_for_basis_and_no_unchecked_claims() -> None:
     assert "your own knowledge" in text and "check the facts" in text
     assert "only if you opened it this turn" in text
     assert "No guarantees you did not check" in text
+
+
+def test_note_unread_basis_names_what_was_not_opened() -> None:
+    reply = "做好了。\n**依据**：按通用知识与《某某安全指导纲要》整理，请核对。"
+    noted = note_unread_basis(reply, opened="老师：做一份班会 PPT")
+    assert noted == f"{reply}\n\n《某某安全指导纲要》{UNREAD_NOTE_TAIL}"
+    assert note_unread_basis(noted, opened="老师：做一份班会 PPT") == noted
+
+
+def test_note_unread_basis_keeps_what_was_opened() -> None:
+    reply = "**依据**：基于您上传的《期中成绩.csv》计算。"
+    assert note_unread_basis(reply, opened="/workspace/attachments/期中成绩.csv") == reply
+    reply = "**依据**：按《浮力》一章的通用知识整理。"
+    assert note_unread_basis(reply, opened="初二物理《浮力》复习讲义") == reply
+    # Only the basis line is checked; titles elsewhere are the model's own words.
+    assert note_unread_basis("讲义《浮力专题》已做好。", opened="") == "讲义《浮力专题》已做好。"
+
+
+@pytest.mark.asyncio
+async def test_unread_basis_note_reaches_the_live_bubble(monkeypatch: pytest.MonkeyPatch) -> None:
+    reply = "依据：《没打开的指南》。"
+    transport = FakeTransport(scripted=_script([{"type": "text_delta", "delta": reply}], final=reply))
+    events = await _run(monkeypatch, transport)
+    live = "".join(p.get("text", "") for k, p in events if k == "message.stream")
+    assert live.endswith(f"《没打开的指南》{UNREAD_NOTE_TAIL}")
+    final = [p.get("text", "") for k, p in events if k == "message.delta"][-1]
+    assert final.endswith(f"《没打开的指南》{UNREAD_NOTE_TAIL}")
+
+
+@pytest.mark.asyncio
+async def test_basis_read_from_an_attachment_gets_no_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = FakeTransport(
+        scripted=_script(
+            _call("c1", "read", {"path": "/workspace/attachments/学校安全手册.pdf"}),
+            final="依据：《学校安全手册》。",
+        )
+    )
+    events = await _run(monkeypatch, transport)
+    final = [p.get("text", "") for k, p in events if k == "message.delta"][-1]
+    assert UNREAD_NOTE_TAIL not in final
