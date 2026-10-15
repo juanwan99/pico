@@ -3,8 +3,9 @@
  * Chromium on repaint (#1215); office/files windows and a dropped stream fall
  * back to polling the PNG. Click → click_x/y, wheel → scroll, keys → Enter/Tab/…,
  * mouse drag → press / move / release (#1236: slider checks are the teacher's step).
- * Dead session: honest copy + reopen. Login chrome only when the live page
- * actually has a text/password field. Password never leaves this pane.
+ * Typing (#1265): a hidden textarea under the pane takes keys, IME and paste and
+ * types straight into the page's focused field — account, password, 中文 alike.
+ * Dead session: honest copy + reopen. Typed text is never logged.
  * Takeover (#1230): while the AI works the page the pane says「AI 正在操作 · 接管」;
  * 接管 stops the task and holds the page (the AI's hands are refused) until 交还 AI.
  * Hand back (#1238): the AI's turn ended on this page →「让 AI 接着做」(the caller's node).
@@ -46,7 +47,11 @@ const PANE_KEYS = new Set([
   'ArrowRight',
   'PageUp',
   'PageDown',
+  'Home',
+  'End',
 ]);
+/** Typed characters gather this long, then go to the page as one `text`. */
+const TYPE_FLUSH_MS = 60;
 const VIEWPORT_W = 1280;
 const VIEWPORT_H = 800;
 
@@ -113,14 +118,16 @@ export default function SandboxWebPane({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState<'loading' | 'live' | 'dead'>('loading');
-  const [hasTextInput, setHasTextInput] = useState(false);
-  const [hasPasswordInput, setHasPasswordInput] = useState(false);
   const [chromeOpen, setChromeOpen] = useState(false);
-  const [visibleText, setVisibleText] = useState('');
   const [humanHold, setHumanHold] = useState(false);
   const [aiActing, setAiActing] = useState(false);
   const [holding, setHolding] = useState(false);
-  const secretRef = useRef<HTMLInputElement>(null);
+  const typeRef = useRef<HTMLTextAreaElement>(null);
+  const [typeAt, setTypeAt] = useState<{ left: number; top: number } | null>(null);
+  /** Pane input goes out in order: typed text before the key or click after it. */
+  const inputChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const typedRef = useRef({ text: '', timer: 0 });
+  const composingRef = useRef(false);
   const objectUrlRef = useRef<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const liveRef = useRef(live);
@@ -138,8 +145,6 @@ export default function SandboxWebPane({
     windows?: PicoSandboxWindow[];
     kind?: string;
     files?: Array<{ name: string }>;
-    has_text_input?: boolean;
-    has_password_input?: boolean;
     human_hold?: boolean;
     ai_acting?: boolean;
   }) => {
@@ -158,12 +163,6 @@ export default function SandboxWebPane({
     if (Array.isArray(meta.files)) {
       setFiles(meta.files);
     }
-    if (typeof meta.has_text_input === 'boolean') {
-      setHasTextInput(meta.has_text_input);
-    }
-    if (typeof meta.has_password_input === 'boolean') {
-      setHasPasswordInput(meta.has_password_input);
-    }
     if (typeof meta.human_hold === 'boolean') {
       setHumanHold(meta.human_hold);
     }
@@ -176,8 +175,6 @@ export default function SandboxWebPane({
     setLive('dead');
     setStatus('已关');
     setError(null);
-    setHasTextInput(false);
-    setHasPasswordInput(false);
     setChromeOpen(false);
   }, []);
 
@@ -320,17 +317,17 @@ export default function SandboxWebPane({
     };
   }, [fitsPane, sessionId]);
 
-  const sendInput = async (body: {
-    click_x?: number;
-    click_y?: number;
-    text?: string;
-    secret?: string;
-    key?: string;
-  }) => {
+  const postInOrder = (body: { click_x?: number; click_y?: number; text?: string; key?: string }) => {
+    const next = inputChainRef.current.then(() => postPicoSandboxInput(sessionId, body));
+    inputChainRef.current = next.catch(() => undefined);
+    return next;
+  };
+
+  const sendInput = async (body: { click_x?: number; click_y?: number; text?: string; key?: string }) => {
     setBusy(true);
     setError(null);
     try {
-      const meta = await postPicoSandboxInput(sessionId, body);
+      const meta = await postInOrder(body);
       applyMeta(meta);
       if (!streamingRef.current) {
         await refreshShot();
@@ -369,9 +366,19 @@ export default function SandboxWebPane({
       return;
     }
     const at = toPage(ev.clientX, ev.clientY);
-    if (!at || busy || live !== 'live') {
-      return;
+    if (!at || live !== 'live') {
+      return; // Not gated on busy: input is queued in order, a quick click after typing must land.
     }
+    const stage = stageRef.current?.getBoundingClientRect();
+    if (stage) {
+      const el = stageRef.current;
+      setTypeAt({
+        left: ev.clientX - stage.left + (el?.scrollLeft || 0),
+        top: ev.clientY - stage.top + (el?.scrollTop || 0),
+      });
+    }
+    typeRef.current?.focus({ preventScroll: true });
+    flushTyped();
     await sendInput({ click_x: at.x, click_y: at.y });
   };
 
@@ -481,33 +488,62 @@ export default function SandboxWebPane({
     }, SCROLL_FLUSH_MS);
   };
 
-  const onViewportKey = (ev: React.KeyboardEvent<HTMLImageElement>) => {
-    if (!PANE_KEYS.has(ev.key) || busy || live !== 'live') {
+  const flushTyped = () => {
+    const pending = typedRef.current;
+    window.clearTimeout(pending.timer);
+    pending.timer = 0;
+    const text = pending.text;
+    pending.text = '';
+    if (text) {
+      void sendInput({ text });
+    }
+  };
+
+  const queueTyped = (text: string) => {
+    if (!text || live !== 'live') {
       return;
     }
+    const pending = typedRef.current;
+    pending.text += text;
+    window.clearTimeout(pending.timer);
+    pending.timer = window.setTimeout(flushTyped, TYPE_FLUSH_MS);
+  };
+
+  const onTypeKey = (ev: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (live !== 'live' || composingRef.current || ev.nativeEvent.isComposing || ev.key === 'Process') {
+      return;
+    }
+    const mod = ev.ctrlKey || ev.metaKey;
+    if (mod && ev.key.toLowerCase() === 'a') {
+      ev.preventDefault();
+      flushTyped();
+      void sendInput({ key: 'Control+a' });
+      return;
+    }
+    if (mod || ev.altKey) {
+      return; // Ctrl+V lands in onPaste; other shortcuts stay with this browser.
+    }
+    if (PANE_KEYS.has(ev.key)) {
+      ev.preventDefault();
+      flushTyped();
+      void sendInput({ key: ev.key });
+      return;
+    }
+    if (ev.key.length === 1) {
+      ev.preventDefault();
+      queueTyped(ev.key);
+    }
+  };
+
+  const onTypeCompositionEnd = (ev: React.CompositionEvent<HTMLTextAreaElement>) => {
+    composingRef.current = false;
+    queueTyped(ev.data);
+    ev.currentTarget.value = '';
+  };
+
+  const onTypePaste = (ev: React.ClipboardEvent<HTMLTextAreaElement>) => {
     ev.preventDefault();
-    void sendInput({ key: ev.key });
-  };
-
-  const sendVisible = async () => {
-    const value = visibleText;
-    if (!value) {
-      return;
-    }
-    setVisibleText('');
-    await sendInput({ text: value });
-  };
-
-  const sendSecret = async () => {
-    const el = secretRef.current;
-    const value = el?.value || '';
-    if (!value) {
-      return;
-    }
-    if (el) {
-      el.value = '';
-    }
-    await sendInput({ secret: value });
+    queueTyped(ev.clipboardData.getData('text'));
   };
 
   const switchWindow = async (next: PicoSandboxWindow) => {
@@ -569,8 +605,6 @@ export default function SandboxWebPane({
   const takeover: 'ai' | 'human' | null =
     live !== 'live' ? null : humanHold ? 'human' : aiBusy && aiActing ? 'ai' : null;
 
-  const showLogin =
-    live === 'live' && !isOffice && focusedKind === 'browser' && (hasTextInput || hasPasswordInput);
 
   if (live === 'dead') {
     return (
@@ -684,7 +718,7 @@ export default function SandboxWebPane({
                   {humanCopy ||
                     (isOffice
                       ? '沙箱内容框：只渲染页面/幻灯片，不是 Writer/Impress 整窗。'
-                      : '请在此画面自行登录，不要在聊天里发送密码')}
+                      : '点画面里的输入框直接打字登录；密码只进这个隔离网页，不要在聊天里发')}
                 </p>
                 <p className="mt-0.5 px-1 text-[10px] text-[#9a9a9a]" data-testid="sandbox-web-status">
                   {status}
@@ -768,10 +802,8 @@ export default function SandboxWebPane({
               onDragStart={(ev) => ev.preventDefault()}
               draggable={false}
               onWheel={onViewportWheel}
-              onKeyDown={onViewportKey}
-              tabIndex={0}
               style={{ width: `${Math.round(zoom * 100)}%` }}
-              className="mx-auto block h-auto max-w-none cursor-crosshair bg-white"
+              className="mx-auto block h-auto max-w-none cursor-default bg-white"
               data-testid="sandbox-web-viewport"
             />
           ) : (
@@ -782,72 +814,35 @@ export default function SandboxWebPane({
               打开中
             </div>
           )}
+          {live === 'live' ? (
+            <textarea
+              ref={typeRef}
+              aria-label="在隔离网页里打字"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              onKeyDown={onTypeKey}
+              onCompositionStart={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEnd={onTypeCompositionEnd}
+              onPaste={onTypePaste}
+              onChange={(ev) => {
+                // Text that arrives without a keydown (voice / mobile keyboards) still goes in.
+                if (!composingRef.current) {
+                  queueTyped(ev.currentTarget.value);
+                  ev.currentTarget.value = '';
+                }
+              }}
+              style={{ left: typeAt?.left ?? 0, top: typeAt?.top ?? 0 }}
+              className="pointer-events-none absolute h-4 w-px resize-none overflow-hidden border-0 p-0 opacity-0"
+              data-testid="sandbox-web-type"
+            />
+          ) : null}
         </div>
       </div>
-      {showLogin ? (
-        <form
-          className="space-y-1.5 border-t border-black/[0.06] px-2 py-2"
-          data-testid="sandbox-login-form"
-          onSubmit={(ev) => {
-            ev.preventDefault();
-            void sendVisible();
-          }}
-          autoComplete="off"
-        >
-          {hasTextInput ? (
-            <label className="block text-[11px] text-[#6b6b6b]">
-              可见输入
-              <input
-                value={visibleText}
-                onChange={(e) => setVisibleText(e.target.value)}
-                className="mt-0.5 w-full rounded-md border border-black/[0.08] bg-white px-2 py-1.5 text-[12px] outline-none"
-                data-testid="sandbox-web-text"
-                autoComplete="off"
-              />
-            </label>
-          ) : null}
-          {hasPasswordInput ? (
-            <label className="block text-[11px] text-[#6b6b6b]">
-              密码（只进隔离会话）
-              <input
-                ref={secretRef}
-                type="password"
-                className="mt-0.5 w-full rounded-md border border-black/[0.08] bg-white px-2 py-1.5 text-[12px] outline-none"
-                data-testid="sandbox-web-password"
-                autoComplete="new-password"
-              />
-            </label>
-          ) : null}
-          <div className="flex gap-1">
-            {hasTextInput ? (
-              <button
-                type="submit"
-                disabled={busy}
-                className="rounded-md bg-[#1a1a1a] px-2.5 py-1 text-[11.5px] font-medium text-white disabled:opacity-50"
-                data-testid="sandbox-web-send-text"
-              >
-                送可见字
-              </button>
-            ) : null}
-            {hasPasswordInput ? (
-              <button
-                type="button"
-                disabled={busy}
-                className="rounded-md border border-black/[0.08] px-2.5 py-1 text-[11.5px] disabled:opacity-50"
-                onClick={() => void sendSecret()}
-                data-testid="sandbox-web-send-password"
-              >
-                送密码
-              </button>
-            ) : null}
-          </div>
-          {error ? (
-            <p className="text-[11px] text-red-700" role="alert" data-testid="sandbox-web-error">
-              {error}
-            </p>
-          ) : null}
-        </form>
-      ) : error ? (
+      {error ? (
         <p className="px-2 py-1 text-[11px] text-red-700" role="alert" data-testid="sandbox-web-error">
           {error}
         </p>

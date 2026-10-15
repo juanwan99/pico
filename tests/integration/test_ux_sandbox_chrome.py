@@ -37,8 +37,8 @@ def test_source_locks_composer_and_dead_chrome() -> None:
     assert "sandbox-dead" in pane
     assert "沙箱已关闭" in pane
     assert "sandbox-reopen" in pane
-    assert "sandbox-login-form" in pane
-    assert "has_text_input" in pane
+    assert "sandbox-web-type" in pane
+    assert "onCompositionEnd" in pane
     assert "result-panel-chrome-menu" in result
 
 

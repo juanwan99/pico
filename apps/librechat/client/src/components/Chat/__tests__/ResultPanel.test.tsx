@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -8,6 +8,7 @@ import {
   getPicoSandboxSession,
   openPicoSandboxBrowser,
   openPicoSandboxDocument,
+  postPicoSandboxInput,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -1123,10 +1124,11 @@ describe('ResultPanel sandbox web pane', () => {
     expect(screen.queryByTestId('sandbox-zoom-menu')).not.toBeInTheDocument();
   });
 
-  it('shows login chrome only when the live page reports input fields', async () => {
+  it('#1265: types straight into the page — keys, 中文 IME, paste — in order, no side form', async () => {
     (getPicoSandboxScreenshot as jest.Mock).mockResolvedValue(
       new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }),
     );
+    (postPicoSandboxInput as jest.Mock).mockResolvedValue({});
     (getPicoSandboxSession as jest.Mock).mockResolvedValue({
       session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
       url: 'https://httpbin.org/forms/post',
@@ -1155,9 +1157,30 @@ describe('ResultPanel sandbox web pane', () => {
         />
       </MemoryRouter>,
     );
-    expect(await screen.findByTestId('sandbox-login-form')).toBeInTheDocument();
-    expect(screen.getByTestId('sandbox-web-password')).toHaveAttribute('type', 'password');
-    expect(screen.getByTestId('sandbox-web-text')).toBeInTheDocument();
+    const typer = await screen.findByTestId('sandbox-web-type');
+    expect(screen.getByTestId('sandbox-web-viewport')).toHaveClass('cursor-default');
+    expect(screen.queryByTestId('sandbox-login-form')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sandbox-web-password')).not.toBeInTheDocument();
+    (postPicoSandboxInput as jest.Mock).mockClear();
+    fireEvent.keyDown(typer, { key: 'a' });
+    fireEvent.keyDown(typer, { key: '1' });
+    fireEvent.keyDown(typer, { key: 'Tab' });
+    fireEvent.compositionStart(typer);
+    fireEvent.keyDown(typer, { key: 'Process' });
+    fireEvent.compositionEnd(typer, { data: '你好' });
+    fireEvent.paste(typer, { clipboardData: { getData: () => 'p@ss' } });
+    fireEvent.change(typer, { target: { value: '!' } });
+    fireEvent.keyDown(typer, { key: 'a', ctrlKey: true });
+    fireEvent.keyDown(typer, { key: 'Enter' });
+    await waitFor(() => expect(postPicoSandboxInput).toHaveBeenCalledTimes(5));
+    const sent = (postPicoSandboxInput as jest.Mock).mock.calls.map((c) => c[1]);
+    expect(sent).toEqual([
+      { text: 'a1' },
+      { key: 'Tab' },
+      { text: '你好p@ss!' },
+      { key: 'Control+a' },
+      { key: 'Enter' },
+    ]);
   });
 
   it('#1238: 让 AI 接着做 only on the page the latest turn worked, and not while it runs', async () => {
