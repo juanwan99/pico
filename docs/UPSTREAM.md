@@ -43,7 +43,7 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
 | 知识库 pico-kb | `PICO_KB_API_KEY`（没设就用正式的） | Meili 嵌入、rerank |
 | 探针 pico-probe | `PICO_PROBE_API_KEY` | `brain-switch.py` 预检、`model_hello.py`、`kb-eval.py`、`true-pi-live-smoke.py` |
 
-- 脚本用 `scripts/probe_key.py` 取 token。没设探针 token，或者设成了正式 / 知识库的 token，脚本直接退出，一个请求都不发。
+- 脚本用 `scripts/probe_key.py` 取 token。设成了正式 / 知识库的 token，脚本直接退出，一个请求都不发。还没设的时候先用正式 key，stderr 打醒目警告（brain-switch 是 gemini 出事时切主脑的工具，不能卡在还没建的 token 上）。
 - CI 不打真中转，单测都用假中转。
 
 ## 请求上带的标记

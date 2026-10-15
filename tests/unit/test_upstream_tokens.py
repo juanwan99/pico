@@ -21,9 +21,12 @@ def _load(name: str, rel: str):
     return mod
 
 
-def test_probe_scripts_refuse_the_production_and_kb_tokens() -> None:
-    with pytest.raises(SystemExit, match="missing"):
-        probe_key({"DEEPSEEK_API_KEY": "sk-prod"})
+def test_probe_scripts_refuse_the_production_and_kb_tokens(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Not created yet: production key, loudly — brain-switch must still work.
+    assert probe_key({"DEEPSEEK_API_KEY": "sk-prod"}) == "sk-prod"
+    assert "未设 pico-probe" in capsys.readouterr().err
     with pytest.raises(SystemExit, match="production"):
         probe_key({"DEEPSEEK_API_KEY": "sk-prod", "PICO_PROBE_API_KEY": "sk-prod"})
     with pytest.raises(SystemExit, match="production"):
@@ -43,13 +46,17 @@ def test_brain_switch_preflights_on_the_probe_token(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(bs, "preflight", lambda _b, key, *_a: used.append(key) or False)
     argv = ["brain-switch.py", "--primary", "gemini-3.8-flash", "--card", "pico#1271", "--why", "t"]
     monkeypatch.setattr(sys, "argv", argv)
-    with pytest.raises(SystemExit, match="missing"):
+    assert bs.main() == 1
+    assert used == ["sk-prod"]  # no pico-probe yet: production, with a warning
+
+    env["PICO_PROBE_API_KEY"] = "sk-prod"
+    with pytest.raises(SystemExit, match="production"):
         bs.main()
-    assert used == []  # nothing sent before the token check
+    assert used == ["sk-prod"]  # refused before anything is sent
 
     env["PICO_PROBE_API_KEY"] = "sk-probe"
     assert bs.main() == 1
-    assert used == ["sk-probe"]
+    assert used == ["sk-prod", "sk-probe"]
 
 
 def test_kb_uses_its_own_token_and_marks_it_for_meili(monkeypatch: pytest.MonkeyPatch) -> None:
