@@ -296,3 +296,83 @@ async def test_basis_read_from_an_attachment_gets_no_note(monkeypatch: pytest.Mo
     events = await _run(monkeypatch, transport)
     final = [p.get("text", "") for k, p in events if k == "message.delta"][-1]
     assert UNREAD_NOTE_TAIL not in final
+
+
+
+# pico#1296 hard cap: 8 pictures or 2 rounds, then the box answers a picture read with text.
+
+
+def _look(state: Any, path: str = "/workspace/work/look/p-1.png") -> None:
+    state.look_call("read", {"path": path})
+
+
+def test_look_cap_after_eight_pictures() -> None:
+    from pico_orchestrator.true_pi.events import EventMapState
+
+    state = EventMapState()
+    for _ in range(9):
+        _look(state)
+    assert (state.look_reads, state.look_rounds, state.look_capped) == (8, 1, 1)
+
+
+def test_look_cap_on_a_third_round() -> None:
+    from pico_orchestrator.true_pi.events import EventMapState
+
+    state = EventMapState()
+    _look(state)
+    state.look_call("bash", {"command": "pdftoppm -r 90 -png -f 2 -l 2 a.pdf p"})
+    _look(state)  # re-rendering is not a fix: same round
+    state.look_call("edit", {"path": "/workspace/work/content_01.json"})
+    _look(state)
+    state.look_call("write", {"path": "/workspace/work/content_02.json", "content": "{}"})
+    _look(state)
+    _look(state, "/workspace/attachments/学生作文.jpg")  # the teacher's picture is not a look
+    assert (state.look_reads, state.look_rounds, state.look_capped) == (3, 2, 1)
+
+
+def test_look_cap_rule_matches_the_box_extension() -> None:
+    from pathlib import Path
+
+    from pico_orchestrator.true_pi.config import look_cap_extension_path
+    from pico_orchestrator.true_pi.runner import (
+        LOOK_CAP_TEXT,
+        LOOK_MAX_PICTURES,
+        LOOK_MAX_ROUNDS,
+        WORKSPACE_SYSTEM,
+    )
+
+    ts = Path(look_cap_extension_path()).read_text(encoding="utf-8")
+    assert f"const MAX_PICTURES = {LOOK_MAX_PICTURES};" in ts
+    assert f"const MAX_ROUNDS = {LOOK_MAX_ROUNDS};" in ts
+    assert f'const CAP_TEXT = "{LOOK_CAP_TEXT}";' in ts
+    assert '"write" || event.toolName === "edit"' in ts and "/attachments/" in ts
+    assert "看图额度用完" in WORKSPACE_SYSTEM and "-r 90" in WORKSPACE_SYSTEM
+
+
+@pytest.mark.asyncio
+async def test_steers_once_when_the_look_cap_is_hit(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.true_pi.runner import LOOK_CAP_STEER
+
+    reads = [_call(f"r{i}", "read", {"path": f"/workspace/work/look/p-{i}.png"}) for i in range(10)]
+    transport = FakeTransport(
+        scripted=_script(
+            _call("c1", "write", {"path": "/workspace/outputs/a.docx", "content": "x"}), *reads
+        )
+    )
+    events = await _run(monkeypatch, transport)
+    assert _steers(transport) == [LOOK_STEER, LOOK_CAP_STEER]
+    caps = [p for k, p in events if k == "run.look_cap"]
+    assert len(caps) == 1 and caps[0]["capped"] == 1
+
+
+@pytest.mark.asyncio
+async def test_no_cap_steer_within_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    reads = [_call(f"r{i}", "read", {"path": f"/workspace/work/look/p-{i}.png"}) for i in range(8)]
+    transport = FakeTransport(
+        scripted=_script(
+            _call("c1", "write", {"path": "/workspace/outputs/a.docx", "content": "x"}), *reads
+        )
+    )
+    events = await _run(monkeypatch, transport)
+    assert _steers(transport) == [LOOK_STEER]
+    assert "run.look_cap" not in [k for k, _ in events]

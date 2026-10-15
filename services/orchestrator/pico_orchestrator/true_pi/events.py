@@ -17,7 +17,12 @@ from pico_orchestrator.sandbox_session_event import (
 )
 from pico_orchestrator.true_pi.client import RpcEvent
 from pico_orchestrator.true_pi.config import RUNTIME_LABEL
-from pico_orchestrator.true_pi.runner import look_read_call, visual_output_call
+from pico_orchestrator.true_pi.runner import (
+    LOOK_MAX_PICTURES,
+    LOOK_MAX_ROUNDS,
+    look_read_call,
+    visual_output_call,
+)
 
 # Pi's retry budget before #1135; non-overload errors before output keep it.
 PRE_OUTPUT_RETRIES = 5
@@ -80,8 +85,31 @@ class EventMapState:
     visual_output: bool = False
     look_steered: bool = False
     look_reads: int = 0
+    # Hard cap (look-cap.ts mirror): rounds of looks, a write/edit since the last
+    # look (the next look starts a new round), looks the box answered with text.
+    look_rounds: int = 0
+    look_changed: bool = True
+    look_capped: int = 0
+    look_cap_steered: bool = False
     # pico#1297: paths the model opened with read (attachments included).
     read_paths: list[str] = field(default_factory=list)
+
+    def look_call(self, tool: str, args: dict[str, Any]) -> None:
+        """Count a look the way true_pi_bridge/look-cap.ts does (keep identical)."""
+        if tool in {"write", "edit"}:
+            self.look_changed = True
+            return
+        if not look_read_call(tool, args):
+            return
+        new_round = self.look_changed
+        if self.look_reads >= LOOK_MAX_PICTURES or (
+            new_round and self.look_rounds >= LOOK_MAX_ROUNDS
+        ):
+            self.look_capped += 1
+            return
+        self.look_rounds += int(new_round)
+        self.look_changed = False
+        self.look_reads += 1
 
     @property
     def has_output(self) -> bool:
@@ -262,8 +290,7 @@ async def map_event(
         state.event_kinds.append("tool.call")
         if visual_output_call(name, args):
             state.visual_output = True
-        if look_read_call(name, args):
-            state.look_reads += 1
+        state.look_call(name, args)
         if name == "read":
             state.read_paths.append(str(args.get("path") or args.get("file_path") or ""))
         step = workbench_call_step_line(name, args)

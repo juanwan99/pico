@@ -62,10 +62,10 @@ You have an isolated Linux workspace at `/workspace` with read / write / edit / 
 - Keep every tool call under about 150 lines. Nothing reaches the teacher until a call's arguments are complete, so a 1000-line script is minutes of silence, and an upstream error regenerates all of it. For a long document, deck, workbook or page, keep content apart from code: first `write` the content as data files, one per section or per 3–5 slides (e.g. `/workspace/work/content_01.json`, `content_02.json`, …, each its own `write` call); then `write` one short build script (under 100 lines) that loops over those files and applies the styling. Never embed all the text in the build script. Never use `cat << EOF` (or any heredoc) in `bash` to create a file: use `write`, then run it. To change a file, `edit` only the lines that change.
 - Save only the files the teacher should receive in `/workspace/outputs/`; they are delivered when you finish, nothing else is. When the teacher asked for a program, script or project, its code files are deliverables: put them there. Scripts you only use to build a document, and scratch files, stay elsewhere (e.g. `/workspace/work/`).
 - Look at what you made before you say it is done; counting pages is not looking. `read` on a .png / .jpg shows you the picture. Render, then `read`:
-  - Word / PPT / Excel: `soffice --headless --convert-to pdf --outdir /workspace/work/look <file>`; then for the PDF `pdftoppm -r 60 -png [-f N -l N] <pdf> /workspace/work/look/p`.
+  - Word / PPT / Excel: `soffice --headless --convert-to pdf --outdir /workspace/work/look <file>`; then for the PDF `pdftoppm -r 60 -png [-f N -l N] <pdf> /workspace/work/look/p`; pages with a table or formula at `-r 90` (small text is unreadable at 60).
   - Web page: Playwright screenshot (`p.chromium.launch(args=["--no-sandbox"])`, `page.goto("file:///workspace/outputs/<name>.html")`, `page.screenshot(path=..., full_page=True)`).
   - Chart or picture: `read` the file itself.
-  Look at the first page, the last page, and pages with a table, picture, chart or formula: at most 8 pictures in all. Check them against what the teacher asked: right and complete content; nothing cut off, overlapping, garbled (□ boxes), blank or out of order; every picture fits the text beside it. Fix what is wrong, then look again only at what you changed. One round, then finish.
+  Look at the first page, the last page, and pages with a table, picture, chart or formula: at most 8 pictures in all. Check them against what the teacher asked: right and complete content; nothing cut off, overlapping, garbled (□ boxes), blank or out of order; every picture fits the text beside it. Fix what is wrong, then look again only at what you changed. At most 2 rounds and 8 pictures: after that `read` on a picture returns 「看图额度用完」; finish and tell the teacher plainly what is still not right.
 - Then `ls -l /workspace/outputs`: a file that is not there was not delivered.
 - The workspace persists across turns of this conversation: revise earlier files in place.
 """
@@ -80,6 +80,13 @@ LOOK_STEER = (
     "Fix what is wrong and look again only at what you changed. If something is still "
     "wrong after that, tell the teacher plainly."
 )
+# pico#1296 hard cap, enforced in the box by true_pi_bridge/look-cap.ts (same rule
+# as EventMapState.look_call): past 8 pictures, or a 3rd round of looks, `read`
+# returns LOOK_CAP_TEXT, and Pico steers once with LOOK_CAP_STEER.
+LOOK_MAX_PICTURES = 8
+LOOK_MAX_ROUNDS = 2
+LOOK_CAP_TEXT = "看图额度用完。"
+LOOK_CAP_STEER = "不再看，直接交；没改好的地方跟老师说清楚。"
 _VISUAL_EXT = re.compile(r"\.(docx|pptx|xlsx|pdf|html?|png|jpe?g|svg)\b", re.IGNORECASE)
 _IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 _FILE_TOOLS = frozenset({"write", "edit", "bash"})
