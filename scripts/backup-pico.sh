@@ -11,7 +11,7 @@
 #   pico-data.tgz           rest of the pico_data volume (sessions, memory; no *.bak* copies)
 #   teacher-disks.tgz       teachers' own files
 #   librechat-files.tgz     LibreChat uploads + images
-#   meili.dump              Meilisearch dump (rebuildable, kept for a fast restore)
+# Meilisearch is not backed up: it is rebuilt from the ledger in pico.db (kb reindex-all).
 #   SHA256SUMS
 # Never restores onto live. Fails closed: status JSON + mail alert.
 set -euo pipefail
@@ -26,7 +26,6 @@ ALERT_BIN="${PICO_BACKUP_ALERT:-$HOME/scripts/edu-backup-alert.py}"
 PICO_ENV="${PICO_BACKUP_ENV:-/opt/pico/.env}"
 API="${PICO_BACKUP_API_CONTAINER:-pico-pico-api-1}"
 MONGO="${PICO_BACKUP_MONGO_CONTAINER:-pico-mongo-1}"
-MEILI="${PICO_BACKUP_MEILI_CONTAINER:-pico-meilisearch-1}"
 LIBRECHAT="${PICO_BACKUP_LIBRECHAT_CONTAINER:-pico-librechat-1}"
 RCLONE_BIN="${PICO_BACKUP_RCLONE:-rclone}"
 RETRY_MAX="${PICO_BACKUP_RETRY_MAX:-6}"
@@ -82,36 +81,6 @@ rclone_cmd() {
 
 nonempty() { [[ -s "$1" ]] || fail "empty $(basename "$1")"; }
 
-meili_key() { grep -E '^MEILI_MASTER_KEY=' "$PICO_ENV" | tail -1 | cut -d= -f2-; }
-
-# Meilisearch dump through its own API, from inside the api container (it reads PICO_MEILI_URL).
-dump_meili() {
-  local out="$1" key uid
-  key="$(meili_key)"
-  [[ -n "$key" ]] || fail "MEILI_MASTER_KEY missing"
-  uid="$(docker exec -i -e K="$key" "$API" python3 - <<'PY'
-import json, os, time, urllib.request
-base, key = os.environ.get("PICO_MEILI_URL") or "http://127.0.0.1:7700", os.environ["K"]
-def call(method, path):
-    req = urllib.request.Request(base + path, method=method, headers={"Authorization": f"Bearer {key}"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
-task = call("POST", "/dumps")["taskUid"]
-for _ in range(600):
-    t = call("GET", f"/tasks/{task}")
-    if t["status"] in ("succeeded", "failed", "canceled"):
-        break
-    time.sleep(2)
-if t["status"] != "succeeded":
-    raise SystemExit(f"dump {t['status']}")
-print(t["details"]["dumpUid"])
-PY
-)" || fail "meili dump"
-  docker exec "$MEILI" cat "/meili_data/dumps/$uid.dump" >"$out" || fail "meili dump copy"
-  docker exec "$MEILI" rm -f "/meili_data/dumps/$uid.dump" || true
-  nonempty "$out"
-}
-
 cmd_run() {
   exec 9>"$WORK/run.lock"
   flock -n 9 || fail "another run holds the lock"
@@ -147,8 +116,6 @@ raise SystemExit(0 if ok == "ok" else "quick_check: " + ok)
   docker exec "$LIBRECHAT" tar -C /app -czf - uploads client/public/images >"$dir/librechat-files.tgz" || fail "librechat tar"
   for f in pico-data.tgz teacher-disks.tgz librechat-files.tgz; do nonempty "$dir/$f"; done
 
-  log "meili"
-  dump_meili "$dir/meili.dump"
 
   (cd "$dir" && sha256sum -- * >SHA256SUMS)
   # Sums are of the whole files; big ones go up as NAME.part-000, -001, … (drill joins them).
@@ -171,14 +138,14 @@ raise SystemExit(0 if ok == "ok" else "quick_check: " + ok)
 
 # Restore drill: newest backup → throwaway containers, no network, nothing live touched.
 cmd_drill() {
-  local latest dir img_api img_meili out
+  local latest dir img_api out
   export https_proxy="$PROXY" HTTPS_PROXY="$PROXY"
   latest="$("$RCLONE_BIN" lsf "$REMOTE" --dirs-only 2>/dev/null | sort | tail -1)"
   latest="${latest%/}"
   [[ -n "$latest" ]] || { echo "no backup on $REMOTE" >&2; exit 1; }
   dir="$WORK/drill-$latest"
   rm -rf "$dir" && mkdir -p "$dir"
-  trap 'rm -rf "$dir"; docker rm -f pico-drill-mongo pico-drill-meili >/dev/null 2>&1 || true' EXIT
+  trap 'rm -rf "$dir"; docker rm -f pico-drill-mongo >/dev/null 2>&1 || true' EXIT
   rclone_cmd copy "$REMOTE/$latest" "$dir"
   local part base
   for part in "$dir"/*.part-000; do
@@ -207,15 +174,6 @@ print("pico.db restored:", c.execute("pragma quick_check").fetchone()[0],
     echo "$f entries=$(tar -tzf "$dir/$f" | wc -l)"
   done
 
-  img_meili="$(docker inspect -f '{{.Config.Image}}' "$MEILI")"
-  docker run -d --rm --name pico-drill-meili --network none -v "$dir/meili.dump:/d.dump:ro" \
-    "$img_meili" meilisearch --import-dump /d.dump --db-path /tmp/drill-db --master-key drill-only-key >/dev/null
-  for _ in $(seq 1 120); do
-    docker exec pico-drill-meili sh -c 'wget -qO- http://127.0.0.1:7700/health' 2>/dev/null | grep -q available && break
-    sleep 3
-  done
-  out="$(docker exec pico-drill-meili sh -c 'wget -qO- --header "Authorization: Bearer drill-only-key" http://127.0.0.1:7700/stats')"
-  echo "meili restored: $(python3 -c 'import json,sys; s=json.loads(sys.argv[1]); print(" ".join(f"{k}={v[\"numberOfDocuments\"]}" for k,v in s["indexes"].items()))' "$out")"
   echo "DRILL_OK $latest"
 }
 
