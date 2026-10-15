@@ -1148,6 +1148,8 @@ def vote_structure(reads: list[list[dict[str, Any]]]) -> tuple[list[dict[str, An
     for number in numbers:
         found = [q for read in reads for q in read if q["number"] == number]
         if len(found) < need:
+            # a card one question short with nobody told is worse than one too many
+            warnings.append(f"第 {number} 题只有一次读到，没排进卡，请老师核对卷上有没有这题")
             continue
         sigs = [structure_signature(q) for q in found]
         best = max(sigs, key=lambda s: (sigs.count(s), -sigs.index(s)))

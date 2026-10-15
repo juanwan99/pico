@@ -1558,6 +1558,7 @@ async def test_structure_question_seen_by_one_read_of_three_is_dropped():
         complete=_seq_stub([json.dumps(extra), _structure_rows(2), _structure_rows(2)], calls),
     )
     assert [q["number"] for q in result["questions"]][-1] == 18
+    assert "第 19 题只有一次读到，没排进卡，请老师核对卷上有没有这题" in result["warnings"]
 
 
 @pytest.mark.asyncio
