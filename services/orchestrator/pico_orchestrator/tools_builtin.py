@@ -884,7 +884,8 @@ def _workspace_handlers(
                 # Meili + rerank are blocking HTTP; every run shares this loop.
                 # School rows get pruned by edu permission / field allowlist
                 # below; ask for a wider pool so the pruned list still fills.
-                fetch_limit = min(50, limit * 2) if include_school else limit
+                # pico#1298: Pico drafts indexed before then are dropped below too.
+                fetch_limit = min(50, limit * 2)
                 result = await asyncio.to_thread(
                     search_materials,
                     query,
@@ -941,6 +942,16 @@ def _workspace_handlers(
                 degraded = True
                 mode = "down"
                 hits = []
+            own = [str(h["artifact_id"]) for h in hits if h["scope"] != "school"]
+            if own:
+                # pico#1298: a file Pico made is not the teacher's material.
+                try:
+                    from app.artifact_store import pico_draft_ids
+
+                    drafts = await pico_draft_ids(own)
+                    hits = [h for h in hits if h["scope"] == "school" or h["artifact_id"] not in drafts]
+                except Exception:  # noqa: BLE001 — no ledger here: keep the index's word
+                    logger.warning("kb_search draft filter unavailable")
             if include_school and hits:
                 # #1175: Meili knows school_id only. edu says which school
                 # files this teacher may read now (field perm · active · read).
@@ -955,7 +966,7 @@ def _workspace_handlers(
                     school_bind = "unavailable"
                 if school_bind == "unavailable":
                     degraded = True
-                hits = hits[:limit]
+            hits = hits[:limit]
 
         sources = [
             {

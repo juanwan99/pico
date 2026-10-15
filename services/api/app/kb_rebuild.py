@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from app.artifact_store import decode_artifact_payload
 from app.auth import Principal
-from app.db import ArtifactRow, TaskRow, session_factory
+from app.db import ArtifactRow, TaskRow, is_teacher_material, session_factory
 
 _FLUSH = 80
 _PER_MIN = 600
@@ -109,6 +109,10 @@ async def rebuild_materials(
             skipped += 1
             continue
         if not is_material(kind=artifact.kind, title=artifact.title):
+            skipped += 1
+            continue
+        if not is_teacher_material(artifact.origin, task.title):
+            # pico#1298: Pico drafts are not library material.
             skipped += 1
             continue
         if known is not None and str(artifact.id) in known:

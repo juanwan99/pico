@@ -12,7 +12,16 @@ from pico_orchestrator.gateway import Principal, ToolError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db import ArtifactRow, PersonalFolderRow, RunRow, TaskRow, append_event, new_id
+from app.db import (
+    ArtifactRow,
+    PersonalFolderRow,
+    RunRow,
+    TaskRow,
+    append_event,
+    is_teacher_material,
+    new_id,
+    session_factory,
+)
 
 ENCODING_UTF8 = "utf8"
 ENCODING_BASE64 = "base64"
@@ -20,6 +29,25 @@ ENCODING_BASE64 = "base64"
 # six inlined PNGs became ~12MiB and froze the result-area chips.
 TASK_LIST_INLINE_MAX_BYTES = 8_192
 logger = logging.getLogger(__name__)
+
+
+async def pico_draft_ids(artifact_ids: list[str]) -> set[str]:
+    """pico#1298: which of these ledger ids are Pico-made files, not the teacher's own.
+
+    Ids not in this ledger (school files from edu) are never drafts.
+    """
+    ids = sorted({str(i) for i in artifact_ids if i})
+    if not ids:
+        return set()
+    async with session_factory()() as session:
+        rows = (
+            await session.execute(
+                select(ArtifactRow.id, ArtifactRow.origin, TaskRow.title)
+                .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+                .where(ArtifactRow.id.in_(ids))
+            )
+        ).all()
+    return {str(aid) for aid, origin, title in rows if not is_teacher_material(origin, title)}
 
 
 def artifact_inline_for_list(
@@ -170,6 +198,7 @@ class LedgerArtifactStore:
                 content_sha256=digest,
                 byte_size=byte_size,
                 folder_id=folder_id,
+                origin="pico",
             )
             session.add(artifact)
             await session.flush()
@@ -208,20 +237,8 @@ class LedgerArtifactStore:
                 "download_path": f"/v1/artifacts/{artifact.id}/content?download=true",
                 "folder_id": getattr(artifact, "folder_id", "") or "",
             }
-        try:
-            from pico_orchestrator.meili_kb import project_material_artifact
-
-            # Blocking HTTP: off the event loop every run shares (#1135).
-            await asyncio.to_thread(
-                project_material_artifact,
-                principal,
-                artifact_id=str(out["artifact_id"]),
-                title=title,
-                kind=kind,
-                content=content,
-            )
-        except Exception as exc:  # noqa: BLE001 — projection must not block the ledger
-            logger.warning("meili project after write failed: %s", type(exc).__name__)
+        # pico#1298: what Pico makes is a draft, not library material. It reaches
+        # kb_search only after the teacher files it into the school (转存).
         try:
             from pico_orchestrator.sandbox_persist import persist_office_to_owner_disk
 
