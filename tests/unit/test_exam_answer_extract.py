@@ -1578,3 +1578,16 @@ async def test_answers_task_from_text_is_still_read_once():
     calls: list = []
     await ex.extract_text("1. C", complete=_seq_stub([json.dumps(_gold_items())], calls))
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_structure_stray_sub_count_on_a_choice_question_is_not_a_disagreement():
+    # 现网 10-15 20:50：一遍给 2、10、13 题（带图的选择题）写了 sub_count 3，卡上照样是 ABCD
+    stray = json.loads(_structure_rows(2))
+    stray[1]["sub_count"] = 3
+    calls: list = []
+    result = await ex.extract_text(
+        "卷", task="structure", complete=_seq_stub([json.dumps(stray), _structure_rows(2)], calls)
+    )
+    assert len(calls) == 2
+    assert result["votes"] == 2

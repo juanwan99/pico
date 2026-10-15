@@ -1119,7 +1119,10 @@ _STRUCTURE_VOTES = 2
 
 
 def structure_signature(q: dict[str, Any]) -> tuple[Any, ...]:
-    """What the card is built from: 题型 / 分值 / 选项数 / 小问."""
+    """What the card is built from: 题型 / 分值 / 选项数 / 小问 (a choice question has no 小问:
+    a read that gives one a stray sub_count still builds the same card)."""
+    if q.get("type") in ("single_choice", "multi_choice"):
+        return (q.get("type"), q.get("score"), q.get("options_count"), None, ())
     subs = tuple(s.get("sub") for s in q.get("subs") or [])
     return (q.get("type"), q.get("score"), q.get("options_count"), q.get("sub_count"), subs)
 
