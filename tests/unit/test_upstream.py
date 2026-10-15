@@ -139,6 +139,15 @@ class _Chunks:
         raise StopAsyncIteration
 
 
+class _Events(_Chunks):
+    """Responses API stream: text arrives as output_text.delta events."""
+
+    async def __anext__(self):
+        if self._items:
+            return SimpleNamespace(type="response.output_text.delta", delta=self._items.pop(0))
+        raise StopAsyncIteration
+
+
 class _Status(Exception):
     def __init__(self, status: int, text: str) -> None:
         super().__init__(f"Error code: {status} - {text}")
@@ -538,6 +547,78 @@ async def test_exam_page_reads_go_through_the_door(monkeypatch: pytest.MonkeyPat
     await ex.extract_pages(pages, concurrency=4, complete=ex.model_complete)
     assert len(calls) == 6
     assert upstream.stats()["peak"] == {upstream.key_id("sk-test"): 2}  # key cap, not 4
+
+
+def _wire_relay(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """Fake New API that 400s gpt/grok on chat/completions, as the live relay does."""
+    from pico_orchestrator import provider
+
+    provider._CLIENTS.clear()
+    calls: list[tuple[str, str]] = []
+
+    class _Completions:
+        async def create(self, **kwargs):
+            calls.append(("chat", kwargs["model"]))
+            if provider.is_openai_responses_model(kwargs["model"]):
+                raise _Status(400, "invalid_request")
+            if kwargs.get("stream"):
+                return _Chunks("好")
+            return _reply("好")
+
+    class _Responses:
+        async def create(self, **kwargs):
+            calls.append(("responses", kwargs["model"]))
+            return _Events("好")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        lambda **_kw: SimpleNamespace(
+            chat=SimpleNamespace(completions=_Completions()), responses=_Responses()
+        ),
+    )
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_every_road_picks_the_wire_by_the_model_it_sends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pico#1288: the exam road sent gpt-5.6-sol on chat/completions (Gemini brain) → 400.
+
+    The chat backup was already right; pin both so a Gemini outage has a real backup.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages" / "exam-answer-extract"))
+    import extract as ex
+    from pico_orchestrator import provider
+
+    _env(monkeypatch, fallbacks="gpt-5.6-sol")
+    calls = _wire_relay(monkeypatch)
+    real = provider.AsyncOpenAI
+
+    def gemini_down(**kw):
+        client = real(**kw)
+        create = client.chat.completions.create
+
+        async def chat(**kwargs):
+            if kwargs["model"].startswith("gemini"):
+                calls.append(("chat", kwargs["model"]))
+                raise _Status(403, "channel suspended")
+            return await create(**kwargs)
+
+        client.chat.completions.create = chat
+        return client
+
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", gemini_down)
+    assert "".join([p async for p in provider.stream_chat("hi", model="pico-fast")]) == "好"
+    assert calls == [("chat", "gemini-3.8-pro"), ("responses", "gpt-5.6-sol")]
+
+    calls = _wire_relay(monkeypatch)
+    monkeypatch.setattr(provider, "product_backend_model", lambda **_kw: "gpt-5.6-sol")
+    assert await ex.model_complete([{"role": "user", "content": "读题"}]) == "好"
+    assert calls == [("responses", "gpt-5.6-sol")]
 
 
 @pytest.mark.asyncio
