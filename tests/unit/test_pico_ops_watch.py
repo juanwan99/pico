@@ -86,6 +86,19 @@ def test_unlogged_env_change_alerts_once(watch, tmp_path: Path) -> None:
     assert watch.check_env({})[0] is False  # recorded; next round is clean
 
 
+def test_deploy_sha_bump_is_not_an_unlogged_change(watch, tmp_path: Path) -> None:
+    """Every prod-update rewrites PICO_GIT_SHA; live 10-15 that mailed once per deploy."""
+    env = tmp_path / ".env"
+    env.write_text("A=1\nPICO_GIT_SHA=8ff19d98\n", encoding="utf-8")
+    assert watch.check_env({})[0] is False
+    env.write_text("A=1\nPICO_GIT_SHA=44747e73\n", encoding="utf-8")
+    assert watch.check_env({})[0] is False
+    assert not (tmp_path / "trail.log").exists()
+    env.write_text("A=2\nPICO_GIT_SHA=9a9a9a9a\n", encoding="utf-8")
+    bad, _summary, detail = watch.check_env({})
+    assert bad and detail == "A: 1 -> 2"  # a real edit still alerts, without the SHA noise
+
+
 def test_env_set_backs_up_edits_and_trails(watch, tmp_path: Path) -> None:
     env = tmp_path / ".env"
     env.write_text("# keep\nA=1\nB=2\n", encoding="utf-8")
