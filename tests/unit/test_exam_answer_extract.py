@@ -835,8 +835,9 @@ async def test_page_top_continuation_lands_in_last_question_subs_not_rubric():
 
 
 @pytest.mark.asyncio
-async def test_continuation_is_dropped_when_the_page_before_failed_or_there_is_none():
-    """A failed page hides its last question; never hang the continuation on an older one."""
+async def test_continuation_after_a_failed_page_goes_to_the_question_before_the_next_one():
+    """A failed page only hides itself (edu-core#3164): page 3's (3)(4) sit before 18, so they are
+    17's (started on the unread page 2) — never hung on the older 14. Nothing read before → dropped."""
     result = await ex.extract_pages(
         [_page(1), _page(2), _page(3)],
         complete=_stub(
@@ -846,11 +847,78 @@ async def test_continuation_is_dropped_when_the_page_before_failed_or_there_is_n
         ),
     )
     by_no = {q["number"]: q for q in result["questions"]}
-    assert sorted(by_no) == [14, 18]
+    assert sorted(by_no) == [14, 17, 18]
     assert by_no[14]["subs"] == [] and by_no[14]["answer"] == "C"
+    assert [s["sub"] for s in by_no[17]["subs"]] == [3, 4]
 
     alone = await ex.extract_pages([_page(3)], complete=_stub({3: _geo_page3()}))
     assert [q["number"] for q in alone["questions"]] == [18]
+
+
+def test_gap_owner_follows_the_roster_order_and_drops_when_unknown():
+    p1 = ex.items_from_model_text(json.dumps([{"number": 14, "type": "single_choice", "answer": "C"}]), page=1)
+    cont = ex.items_from_model_text(json.dumps([{"number": 0, "type": "short_answer", "answer": "续"}]), page=3)
+    p4 = ex.items_from_model_text(json.dumps([{"number": 22, "type": "short_answer", "answer": "x"}]), page=4)
+    # 语文 numbering skips: the roster says 20 comes before 22, not 21
+    got = ex.attach_continued([p1, [], cont, p4], [True, False, True, True], [14, 20, 22])
+    assert [i["number"] for i in got[2]] == [20]
+    # nothing read after it: the roster's last question; no roster → unknown, dropped
+    assert [i["number"] for i in ex.attach_continued([p1, [], cont], [True, False, True], [14, 15])[2]] == [15]
+    assert ex.attach_continued([p1, [], cont], [True, False, True])[2] == []
+    # a page read fine keeps the old rule: the last question read so far
+    assert [i["number"] for i in ex.attach_continued([p1, cont, p4], [True, True, True], [14, 20, 22])[1]] == [14]
+
+
+def test_continuation_page_numbering_its_subs_from_one_again_lands_under_its_own_marks():
+    """Live probe (edu-core#3164 讲评 PDF 29–33): every continuation page wrote its 小问 as sub 1 —
+    「（2）…」 on 30, 「（3）…」 on 33 — and the merge kept the real (1), dropping the rest."""
+    p29 = _paper_page(29, [{"number": 17, "type": "short_answer", "stem": "镁、锌……回答下列问题：（1）已知 Mg",
+                            "answer": "叶绿体基质（1分）", "subs": [{"sub": 1, "answer": "叶绿体基质"}]}])
+    p30 = _paper_page(30, [{"number": 0, "type": "fill_in_blank", "stem": "（2）研究者开展实验",
+                            "answer": "9\nM3Z3", "subs": [{"sub": 1, "answer": "9\nM3Z3"}]}])
+    p31 = _paper_page(31, [{"number": 0, "type": "short_answer", "stem": "②在实验设计前", "answer": "假设一成立"}])
+    p33 = _paper_page(33, [{"number": 0, "type": "short_answer", "stem": "（3）进一步测得",
+                            "answer": "①非气孔因素", "subs": [{"sub": 1, "answer": "①非气孔因素"}]}])
+    p34 = _paper_page(34, [{"number": 0, "type": "short_answer", "stem": "（4）最后", "answer": "合理施肥"},
+                           {"number": 18, "type": "short_answer", "stem": "（1）系谱", "subs": [{"sub": 1, "answer": "基因突变"}]}])
+    (q17, q18) = ex.merge_items(ex.attach_continued([p29, p30, p31, p33, p34]))
+    assert [(s["sub"], s["answer"]) for s in q17["subs"]] == [
+        (1, "叶绿体基质"), (2, "9\nM3Z3\n②假设一成立"), (3, "①非气孔因素"), (4, "合理施肥")
+    ]
+    assert q17["on_pages"] == [29, 30, 31, 33, 34] and "_tail_sub" not in q17
+    assert q18["subs"][0]["answer"] == "基因突变"
+
+
+def test_continuation_subs_already_on_the_page_marks_stay_as_they_are():
+    p2 = ex.items_from_model_text(_geo_page2(), page=2)
+    p3 = ex.items_from_model_text(_geo_page3(), page=3)
+    q17 = ex.merge_items(ex.attach_continued([p2, p3]))[1]
+    assert [(s["sub"], s["answer"]) for s in q17["subs"]] == [(1, "地形平缓"), (2, "向西、向南"), (3, "灌溉水源"), (4, "威胁与措施")]
+
+
+def test_paper_page_prompt_numbers_continued_subs_by_the_paper():
+    assert "不要从 1 重新数" in ex.load_prompts(task="paper")["user_page"]
+
+
+@pytest.mark.asyncio
+async def test_page_whose_text_prints_answers_but_read_back_none_is_read_again_then_named():
+    """Text layer has 【解析】 yet the read came back bare: one more read; still bare → teacher told."""
+    bare = json.dumps([{"number": 5, "type": "short_answer", "stem": "（1）求"}])
+    full = json.dumps([{"number": 5, "type": "short_answer", "stem": "（1）求", "answer": "x=1"}])
+    seq = {1: [bare, full], 2: [bare, bare]}
+
+    async def complete(messages, **_):
+        img = next(p for p in messages[-1]["content"] if p["type"] == "image")
+        page = int(base64.b64decode(img["data_b64"]).decode())
+        return seq[page].pop(0) if page == 1 else seq[page].pop(0).replace('"number": 5', '"number": 6')
+
+    pages = [{**_page(1), "text": "5．（1）求\n【解析】x=1"}, {**_page(2), "text": "6．（1）求\n【答案】y"}]
+    result = await ex.extract_pages(pages, task="paper", complete=complete)
+    by_no = {q["number"]: q for q in result["questions"]}
+    assert by_no[5]["answer"] == "x=1"
+    assert seq == {1: [], 2: []}
+    assert any(w.startswith("第 2 页文字层里印着答案或解析，读回来没有（第 6 题）") for w in result["warnings"])
+    assert not any(w.startswith("第 1 页文字层") for w in result["warnings"])
 
 
 def test_number_zero_is_continuation_even_without_the_flag():
