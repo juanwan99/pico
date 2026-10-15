@@ -73,6 +73,12 @@ def test_prompts_come_from_skill_md():
     )
     assert "1 single_choice options=3" in filled
     assert "禁止跳号" in filled or "题号表" in filled
+    # 逐页做题：页面只做看得见题干的题。「每一题都必须答」会让第 1 页替后几页的题瞎写
+    # 「本题不在当前页」当解析、空着小问，合并时先到的页又赢（edu-core#3157 现网数学 3 页拍照卷）
+    assert "必须给题号表里的每一题" not in solve["system"]
+    assert "看不见题干的题" in solve["system"] and "不要输出" in solve["system"]
+    assert "只做本页看得见题干的题" in solve["user_page"]
+    assert "必须按表逐题作答" not in solve["user_page"]
 
 
 def test_structure_keeps_items_without_answers():
