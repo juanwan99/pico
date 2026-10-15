@@ -1,6 +1,6 @@
 # pico#1270 · user unit on the ECS host: install with
 #   cp deploy/systemd/pico-backup*.service deploy/systemd/pico-backup*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload \
-#   && systemctl --user enable --now pico-backup.timer pico-backup-watch.timer
+#   && systemctl --user enable --now pico-backup.timer pico-backup-watch.timer pico-backup-drill.timer
 [Unit]
 Description=pico daily backup to Google Drive (gdrive:pico-backup)
 

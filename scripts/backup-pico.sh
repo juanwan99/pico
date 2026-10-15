@@ -3,6 +3,7 @@
 #
 #   backup-pico.sh run     dump everything, upload, verify sizes, prune > KEEP_DAYS, clean local
 #   backup-pico.sh drill   pull the newest backup and restore it into throwaway containers
+#                          (--corrupt flips one byte first: proves a bad backup is stopped)
 #   backup-pico.sh watch   alert when the last good backup is older than STALE_HOURS (26)
 #
 # What goes out (one folder per run, <stamp>/):
@@ -11,7 +12,7 @@
 #   pico-data.tgz           rest of the pico_data volume (sessions, memory; no *.bak* copies)
 #   teacher-disks.tgz       teachers' own files
 #   librechat-files.tgz     LibreChat uploads + images
-#   meili.dump              Meilisearch dump (rebuildable, kept for a fast restore)
+#   meili.dump              Meilisearch dump with vectors (a rebuild would re-embed the whole KB)
 #   SHA256SUMS
 # Never restores onto live. Fails closed: status JSON + mail alert.
 set -euo pipefail
@@ -89,7 +90,8 @@ dump_meili() {
   local out="$1" key uid
   key="$(meili_key)"
   [[ -n "$key" ]] || fail "MEILI_MASTER_KEY missing"
-  uid="$(docker exec -i -e K="$key" "$API" python3 - <<'PY'
+  # -e K without a value: docker copies it from our env, so the key is not on the command line.
+  uid="$(K="$key" docker exec -i -e K "$API" python3 - <<'PY'
 import json, os, time, urllib.request
 base, key = os.environ.get("PICO_MEILI_URL") or "http://127.0.0.1:7700", os.environ["K"]
 def call(method, path):
@@ -170,53 +172,89 @@ raise SystemExit(0 if ok == "ok" else "quick_check: " + ok)
 }
 
 # Restore drill: newest backup → throwaway containers, no network, nothing live touched.
+# Every check fails the drill (status JSON + mail); only a clean pass prints DRILL_OK.
+DRILL_STATUS="${PICO_BACKUP_DRILL_STATUS:-$LOG_DIR/pico-backup-drill-status.json}"
+
+drill_fail() {
+  STATUS_JSON="$DRILL_STATUS" write_status FAIL "$1"
+  if [[ -f "$ALERT_BIN" ]]; then
+    python3 "$ALERT_BIN" --subject "[pico] 备份恢复演练失败 $(hostname)" \
+      --body "pico 备份恢复演练失败：$1。看 $LOG_DIR/pico-backup.log。" >/dev/null 2>&1 || true
+  fi
+  log "DRILL_FAIL $1"
+  exit 1
+}
+
 cmd_drill() {
-  local latest dir img_api img_meili out
+  local corrupt="${1:-}" latest dir img_api img_meili out n f part base
   export https_proxy="$PROXY" HTTPS_PROXY="$PROXY"
-  latest="$("$RCLONE_BIN" lsf "$REMOTE" --dirs-only 2>/dev/null | sort | tail -1)"
+  latest="$("$RCLONE_BIN" lsf "$REMOTE" --dirs-only 2>/dev/null | sort | tail -1)" || true
   latest="${latest%/}"
-  [[ -n "$latest" ]] || { echo "no backup on $REMOTE" >&2; exit 1; }
+  [[ -n "$latest" ]] || drill_fail "no backup on $REMOTE"
   dir="$WORK/drill-$latest"
   rm -rf "$dir" && mkdir -p "$dir"
   trap 'rm -rf "$dir"; docker rm -f pico-drill-mongo pico-drill-meili >/dev/null 2>&1 || true' EXIT
-  rclone_cmd copy "$REMOTE/$latest" "$dir"
-  local part base
+  rclone_cmd copy "$REMOTE/$latest" "$dir" || drill_fail "download $latest"
   for part in "$dir"/*.part-000; do
     [[ -e "$part" ]] || continue
     base="${part%.part-000}"
-    cat "$base".part-* >"$base" && rm -f "$base".part-*
+    cat "$base".part-* >"$base" || drill_fail "join $(basename "$base")"
+    rm -f "$base".part-*
   done
-  (cd "$dir" && sha256sum -c --quiet SHA256SUMS) && echo "sha256 ok"
+  if [[ "$corrupt" == --corrupt ]]; then
+    printf '\xff' | dd of="$dir/mongo.archive.gz" bs=1 seek=1000 conv=notrunc status=none
+    log "drill: flipped one byte of mongo.archive.gz on purpose"
+  fi
+  (cd "$dir" && sha256sum -c --quiet SHA256SUMS) || drill_fail "sha256 mismatch in $latest"
+  log "drill $latest: sha256 ok"
 
-  docker run -d --rm --name pico-drill-mongo --network none mongo:7 >/dev/null
-  sleep 5
-  docker exec -i pico-drill-mongo mongorestore --archive --gzip --quiet <"$dir/mongo.archive.gz"
+  docker run -d --rm --name pico-drill-mongo --network none mongo:7 >/dev/null || drill_fail "start mongo"
+  for _ in $(seq 1 30); do
+    docker exec pico-drill-mongo mongosh --quiet --eval 'db.runCommand({ping:1}).ok' 2>/dev/null | grep -qx 1 && break
+    sleep 2
+  done
+  docker exec -i pico-drill-mongo mongorestore --archive --gzip --quiet <"$dir/mongo.archive.gz" \
+    || drill_fail "mongorestore"
   out="$(docker exec pico-drill-mongo mongosh --quiet LibreChat --eval \
-    'db.getCollectionNames().sort().map(c => c + "=" + db[c].countDocuments()).join(" ")')"
-  echo "mongo restored: $out"
+    'const c = db.getCollectionNames().sort(); c.map(x => x + "=" + db[x].countDocuments()).join(" ")')" \
+    || drill_fail "mongo count"
+  [[ "$out" =~ conversations=[1-9] && "$out" =~ messages=[1-9] ]] || drill_fail "mongo empty: $out"
+  log "drill mongo: $out"
 
-  gunzip -c "$dir/pico.db.gz" >"$dir/pico.db"
+  gunzip -c "$dir/pico.db.gz" >"$dir/pico.db" || drill_fail "gunzip pico.db"
   img_api="$(docker inspect -f '{{.Config.Image}}' "$API")"
-  docker run --rm --network none -v "$dir/pico.db:/x.db:ro" "$img_api" python3 -c '
+  out="$(docker run --rm --network none -v "$dir/pico.db:/x.db:ro" "$img_api" python3 -c '
 import sqlite3
 c = sqlite3.connect("file:/x.db?mode=ro", uri=True)
-print("pico.db restored:", c.execute("pragma quick_check").fetchone()[0],
-      "runs=%d" % c.execute("select count(*) from runs").fetchone()[0])'
+qc = c.execute("pragma quick_check").fetchone()[0]
+runs = c.execute("select count(*) from runs").fetchone()[0]
+print("quick_check=%s runs=%d" % (qc, runs))
+raise SystemExit(0 if qc == "ok" and runs > 0 else 1)')" || drill_fail "pico.db: ${out:-unreadable}"
+  log "drill pico.db: $out"
 
   for f in pico-data.tgz teacher-disks.tgz librechat-files.tgz; do
-    echo "$f entries=$(tar -tzf "$dir/$f" | wc -l)"
+    n="$(tar -tzf "$dir/$f" | wc -l)" || drill_fail "tar $f"
+    [[ "$n" -gt 0 ]] || drill_fail "tar $f empty"
+    log "drill $f: entries=$n"
   done
 
   img_meili="$(docker inspect -f '{{.Config.Image}}' "$MEILI")"
   docker run -d --rm --name pico-drill-meili --network none -v "$dir/meili.dump:/d.dump:ro" \
-    "$img_meili" meilisearch --import-dump /d.dump --db-path /tmp/drill-db --master-key drill-only-key >/dev/null
-  for _ in $(seq 1 120); do
-    docker exec pico-drill-meili sh -c 'wget -qO- http://127.0.0.1:7700/health' 2>/dev/null | grep -q available && break
+    "$img_meili" meilisearch --import-dump /d.dump --db-path /tmp/drill-db --master-key drill-only-key >/dev/null \
+    || drill_fail "start meili"
+  out=""
+  for _ in $(seq 1 200); do
+    out="$(docker exec pico-drill-meili sh -c 'wget -qO- http://127.0.0.1:7700/health' 2>/dev/null)" || true
+    [[ "$out" == *available* ]] && break
     sleep 3
   done
-  out="$(docker exec pico-drill-meili sh -c 'wget -qO- --header "Authorization: Bearer drill-only-key" http://127.0.0.1:7700/stats')"
-  echo "meili restored: $(python3 -c 'import json,sys; s=json.loads(sys.argv[1]); print(" ".join(f"{k}={v[\"numberOfDocuments\"]}" for k,v in s["indexes"].items()))' "$out")"
-  echo "DRILL_OK $latest"
+  [[ "$out" == *available* ]] || drill_fail "meili import did not come up"
+  out="$(docker exec pico-drill-meili sh -c 'wget -qO- --header "Authorization: Bearer drill-only-key" http://127.0.0.1:7700/stats' \
+    | python3 -c 'import json,sys; s=json.load(sys.stdin)["indexes"]; print(" ".join(f"{k}={v[\"numberOfDocuments\"]}" for k,v in s.items())); raise SystemExit(0 if sum(v["numberOfDocuments"] for v in s.values()) else 1)')" \
+    || drill_fail "meili empty: $out"
+  log "drill meili: $out"
+  STATUS_JSON="$DRILL_STATUS" write_status OK "$latest"
+  log "DRILL_OK $latest"
 }
 
 # A run that never starts (timer off, host down, script gone) writes no FAIL: watch the age.
@@ -251,7 +289,7 @@ PY
 
 case "${1:-}" in
   run) cmd_run 2>&1 | tee -a "$LOG_DIR/pico-backup.log"; exit "${PIPESTATUS[0]}" ;;
-  drill) cmd_drill ;;
+  drill) cmd_drill "${2:-}" 2>&1 | tee -a "$LOG_DIR/pico-backup.log"; exit "${PIPESTATUS[0]}" ;;
   watch) cmd_watch 2>&1 | tee -a "$LOG_DIR/pico-backup.log" ;;
-  *) echo "usage: $0 run|drill|watch" >&2; exit 2 ;;
+  *) echo "usage: $0 run|drill [--corrupt]|watch" >&2; exit 2 ;;
 esac
