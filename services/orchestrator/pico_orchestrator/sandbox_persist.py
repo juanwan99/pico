@@ -83,7 +83,7 @@ def _hand_fd(fd: int) -> None:
 def _refuse_link(where: str) -> NoReturn:
     # The sandbox user owns these dirs, so it can plant a link before a teacher's first
     # open; pico-api is root. Following it would read / write / chown / clear anywhere.
-    logger.error("teacher disk: refused a symlink or hard link at %s", where)
+    logger.error("teacher disk: refused a symlink / hard link / non-regular file at %s", where)
     raise ToolError("sandbox.path_denied", "老师盘路径异常，已拒绝")
 
 
@@ -185,16 +185,19 @@ def owner_disk_file(school_id: str, membership_id: str, filename: str) -> Path:
 
 
 def _open_file(name: str, flags: int, dfd: int) -> int:
+    # O_NONBLOCK: a planted FIFO would otherwise hang open() forever (write: ENXIO
+    # with no reader; read: opens, then fails the S_ISREG check). Cleared once regular.
     try:
-        fd = os.open(name, flags | _NOFOLLOW, 0o644, dir_fd=dfd)
+        fd = os.open(name, flags | _NOFOLLOW | os.O_NONBLOCK, 0o644, dir_fd=dfd)
     except OSError as exc:
-        if exc.errno == errno.ELOOP:
+        if exc.errno in (errno.ELOOP, errno.ENXIO):
             _refuse_link(name)
         raise
     st = os.fstat(fd)
     if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:
         os.close(fd)
         _refuse_link(name)
+    os.set_blocking(fd, True)
     return fd
 
 

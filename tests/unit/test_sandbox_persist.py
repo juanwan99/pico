@@ -275,3 +275,21 @@ def test_planted_file_links_are_refused(disk: Path, outside: Path, monkeypatch: 
     assert "soft.docx" not in list_owner_disk_names("school-1", "member-1")
     clear_owner_disk("school-1", "member-1")
     assert (outside / "secret.txt").read_bytes() == b"keep"
+
+
+def test_planted_fifo_is_refused_without_hanging(disk: Path) -> None:
+    """mkfifo needs no privilege: open() on it would block pico-api forever."""
+    import os
+    import time
+
+    write_owner_disk_file("school-1", "member-1", "real.docx", b"x")
+    os.mkfifo(owner_disk_dir("school-1", "member-1") / "pipe.docx")
+    for call in (
+        lambda: write_owner_disk_file("school-1", "member-1", "pipe.docx", b"x"),
+        lambda: read_owner_disk_file("school-1", "member-1", "pipe.docx"),
+    ):
+        started = time.monotonic()
+        with pytest.raises(ToolError) as denied:
+            call()
+        assert denied.value.code == "sandbox.path_denied"
+        assert time.monotonic() - started < 1
