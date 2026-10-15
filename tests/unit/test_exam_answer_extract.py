@@ -1262,3 +1262,26 @@ async def test_text_read_strips_roster_page_tags() -> None:
     sent = calls[0][-1]["content"]
     assert "pages=" not in sent
     assert "9 short_answer" in sent
+
+
+@pytest.mark.asyncio
+async def test_solve_warns_when_a_paged_question_comes_back_empty() -> None:
+    # paper read put 9 on page 2 but its stem is on page 3: page 2 does not answer it,
+    # page 3's answer is filtered off → no answer, and the teacher is told
+    pages = [_page(1), _page(2), _page(3)]
+    complete = _stub(
+        {
+            1: json.dumps([_solve_item(1, "A", "由题意")]),
+            2: "[]",
+            3: json.dumps([_solve_item(1, "A"), _solve_item(9, "B", "由正弦定理")]),
+        }
+    )
+    roster = "1 single_choice options=4 pages=1,3\n9 single_choice options=4 pages=2"
+    result = await ex.extract_pages(pages, task="solve", roster=roster, complete=complete)
+    assert [q["number"] for q in result["questions"]] == [1]
+    assert "第 9 题按所在页没做出答案，请老师核对或手动填" in result["warnings"]
+
+    # nothing answered at all: an empty result with the line, not a failed read
+    only = await ex.extract_pages(pages, task="solve", roster="9 single_choice options=4 pages=2", complete=complete)
+    assert only["questions"] == []
+    assert only["warnings"] == ["第 9 题按所在页没做出答案，请老师核对或手动填"]

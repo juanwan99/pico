@@ -1228,7 +1228,39 @@ async def extract_pages(
     reports = [rep for _, _, _, rep in results]
     errors = [RuntimeError(rep["error"]) for rep in reports if not rep["ok"]]
     last_text = next((out for _, _, out, rep in reversed(results) if rep["ok"]), "")
-    return _finish("pages", batches, reports, errors, last_text, usage, model_out)
+    try:
+        result = _finish("pages", batches, reports, errors, last_text, usage, model_out)
+    except ExtractError as exc:
+        # every tagged question filtered off its wrong pages: an empty answer, not a failed read
+        if not (on_page and exc.code == "extract.empty" and not errors):
+            raise
+        result = {
+            "ok": True,
+            "engine": ENGINE,
+            "mode": "pages",
+            "model": model_out.get("model"),
+            "questions": [],
+            "materials": [],
+            "pages": reports,
+            "warnings": [],
+            "usage": usage or None,
+        }
+    if on_page:
+        # A question whose page the paper read got wrong is filtered off every page and comes
+        # back empty: say so instead of leaving a silent blank (no whole-paper re-ask, that
+        # doubles the calls). edu shows this line to the teacher.
+        answered = {q["number"] for q in result["questions"] if has_answer(q)}
+        missing = sorted(n for n in on_page if n not in answered)
+        if missing:
+            nums = "、".join(str(n) for n in missing)
+            result["warnings"].append(f"第 {nums} 题按所在页没做出答案，请老师核对或手动填")
+    return result
+
+
+def has_answer(q: dict[str, Any]) -> bool:
+    if str(q.get("answer") or "").strip():
+        return True
+    return any(str(s.get("answer") or "").strip() for s in q.get("subs") or [] if isinstance(s, dict))
 
 
 def _finish(
