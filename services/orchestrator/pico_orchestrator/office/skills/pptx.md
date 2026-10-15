@@ -95,3 +95,4 @@ Do not `prs = Presentation()` then recreate the deck. That drops the teacher's t
 ## Check
 
 At least one slide with the teacher's title in the file. If they asked for cards / color blocks / full-bleed, the deck must not be a three-bullet stock layout. Wrong → rewrite with the same title.
+In the workspace, also render the pages and look at them before you answer (Workspace rules: first, last, pages with tables / pictures; at most 8).

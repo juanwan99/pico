@@ -83,3 +83,4 @@ Do not `doc = Document()` then copy text out. That drops styles, headers, and im
 ## Check
 
 Open the bytes in your head against the observation: heading present, body has the teacher's facts, table cells are not empty, file is `.docx`. If wrong, call `sandbox_office_lib` again with the same title.
+In the workspace, also render the pages and look at them before you answer (Workspace rules: first, last, pages with tables / pictures; at most 8).

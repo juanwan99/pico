@@ -26,6 +26,10 @@ Load test (#1135): ``--parallel 20 --repeat 3 --spread 5`` runs every case 3×,
 result records ``queued_max`` (most runs ever ahead of it in the runner's line;
 -1 = never queued).
 
+Look cases (LV*, ``--suite look``, pico#1296) are fresh office / chart / web asks
+with pictures in them; each result records ``look_checks`` (look-before-answer
+steers) and ``look_reads`` (pictures of its own work the model opened).
+
 Extra-long cases (LX*, ``--suite xlong``, #1139) are built to overflow one context
 window so Pi's official compaction has to fire mid-task; each result records
 ``compactions`` / ``compaction_failed`` and the turns they fired in. ``--suite all``
@@ -58,10 +62,18 @@ from typing import Any
 import httpx
 
 ROOT = Path(__file__).resolve().parent.parent
+_LOOK_IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+
+
+def look_read_call(tool: str, args: dict[str, Any]) -> bool:
+    """Same rule as true_pi.runner.look_read_call: `read` on a picture of its own work."""
+    path = str(args.get("path") or args.get("file_path") or "") if isinstance(args, dict) else ""
+    return tool == "read" and path.lower().endswith(_LOOK_IMAGE_EXT) and "/attachments/" not in path
+
 CASES_DIR = ROOT / "testdata" / "longtask-eval"
 CHECKS_DIR = CASES_DIR / "checks"
 PRODUCED_KINDS = {"xlsx", "docx", "pptx", "html"}
-SUITES = {"office": "LT", "coding": "LC", "hard": "LH", "xlong": "LX"}
+SUITES = {"office": "LT", "coding": "LC", "hard": "LH", "xlong": "LX", "look": "LV"}
 DEFAULT_SUITES = ("office", "coding", "hard")
 
 
@@ -88,6 +100,10 @@ class CaseResult:
     notes: list[str] = field(default_factory=list)
     score_points: list[dict[str, str]] = field(default_factory=list)
     artifact_kinds: list[str] = field(default_factory=list)
+    # pico#1296: "look before you answer" steers sent, pictures of its own work opened.
+    look_checks: int = 0
+    look_reads: int = 0
+    run_ids: list[str] = field(default_factory=list)
 
 
 class Pico:
@@ -493,10 +509,17 @@ def _run_events(
             error = error or f"{type(exc).__name__}"
         if res is not None and turn:
             res.turn_status[turn] = status
+        if res is not None:
+            res.run_ids.append(str(rid))
         for e in pico.events(rid):
             kind = str(e.get("kind") or e.get("type") or "")
             if kind == "tool.call":
                 tool_calls += 1
+                payload = e.get("payload") or {}
+                if res is not None and look_read_call(str(payload.get("tool") or ""), payload.get("arguments") or {}):
+                    res.look_reads += 1
+            if res is not None and kind == "run.look_check":
+                res.look_checks += 1
             if kind == "agent.step":
                 steps += 1
             if res is not None and kind == "compaction.end":
