@@ -16,6 +16,7 @@ import logging
 import os
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -867,7 +868,9 @@ async def model_complete(
 
     # Every request goes through Pico's one door to the relay (pico#1271): key
     # slot, three requests at most, pause before a retry. No retry loop here.
-    if P.uses_openai_responses_brain(cfg):
+    # Wire follows the model we send, not the brain's: gpt-*/grok-* on
+    # chat/completions get 400 invalid_request from New API (pico#1288).
+    if P.uses_openai_responses_brain(replace(cfg, model=mid)):
 
         async def read_stream() -> str:
             pieces: list[str] = []

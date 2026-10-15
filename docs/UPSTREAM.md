@@ -28,6 +28,7 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
   - 上游回 401 / 402 / 403（钥被停、没额度）或没有渠道时换模型，不重试。
   - Pi 自己的重试已关（`PI_RETRY_MAX = 0`）。流到一半断了，由 Pico 同会话续跑处理，续跑也从备用池扣。
 - **换模型最多一次**：主模型加一个备用（`brain_candidates(...)[:2]`）。
+- **按发出去的模型选线**：gpt-* / grok-* 走 Responses，Gemini 走 chat/completions。直连、Pi、阅卷三条路都看这一跳实际发的模型，不看主脑。阅卷原来看主脑，把 gpt-5.6-sol 发到 chat/completions，New API 回 400（pico#1288）。
 - **按 key 限并发**：同一把 key 同时最多 16 个请求（`PICO_UPSTREAM_KEY_MAX`），超了排队，最多等 120 s。
 - **本机 403 和上游 403 分开**：
   - 只有上游回的错误状态，才由 run proxy 记进 `upstream.note_upstream_error`。
@@ -49,4 +50,4 @@ key 只显示 sha256 的前 8 位。进程重启后清零（`since` 是起点）
 
 `tests/unit/test_upstream.py` 对直连和 Pi 两条路各测四种情形：按顺序、并发、503、换模型。每种都断言一条消息最多发几个上游请求。CI 必跑。
 
-另外还测：重试的等待时间（2 s、6 s、`Retry-After`）；阅卷、托管循环、llm-pass 都走这扇门；补发输掉的那一路在 1 s 内挂断。最后这条用本机真 HTTP 假中转测，去掉 `stream.close()` 就会失败。
+另外还测：重试的等待时间（2 s、6 s、`Retry-After`）；阅卷、托管循环、llm-pass 都走这扇门；主脑 Gemini 挂了时直连换 sol 走 Responses、阅卷指定 sol 也走 Responses；补发输掉的那一路在 1 s 内挂断。最后这条用本机真 HTTP 假中转测，去掉 `stream.close()` 就会失败。
