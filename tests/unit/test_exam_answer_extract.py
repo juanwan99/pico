@@ -1015,6 +1015,10 @@ def test_escape_latex_keeps_json_escapes_and_fixes_bare_commands():
         ("$a\\to b$ \\to", "$a\\to b$ \to"),
         ("$$\\neg p$$\\nq", "$$\\neg p$$\nq"),
         ("\\perp 与 $\\beta$", "\\perp 与 $\\beta$"),
+        # \b \f never mean backspace / form feed in a paper: LaTeX outside $…$ too
+        ("面积 \\frac{1}{2}ab", "面积 \\frac{1}{2}ab"),
+        ("角 \\beta 的", "角 \\beta 的"),
+        ("\\bar{x} 均值", "\\bar{x} 均值"),
     ],
 )
 def test_escape_latex_ambiguous_escapes_are_latex_only_inside_math(text, want):

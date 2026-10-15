@@ -89,9 +89,10 @@ def strip_fence(content: str | None) -> str:
     return c.strip()
 
 
-# LaTeX commands whose first letter is also a JSON escape (\b \f \n \r \t). Only read as LaTeX
+# LaTeX commands whose first letter is also a JSON escape (\n \r \t). Only read as LaTeX
 # inside $…$: outside math "well\ni think" / "x\tan apple" / "see below\ne.g." are a real newline
-# or tab followed by text, and the model writes formulas in $…$ (SKILL.md).
+# or tab followed by text, and the model writes formulas in $…$ (SKILL.md). \b \f are never
+# meant as JSON escapes in a paper, so they are LaTeX anywhere.
 _LATEX_JSON_LOOKALIKE = frozenset(
     {
         "times", "theta", "tan", "tanh", "text", "textbf", "textrm", "tfrac", "tilde", "to", "top",
@@ -108,9 +109,10 @@ _ESCAPE_RE = re.compile(r'\\(\\|u[0-9a-fA-F]{4}|["/]|[A-Za-z]+|.)', re.DOTALL)
 def _fix_escape(tok: str, in_math: bool) -> str:
     if tok in ("\\", '"', "/") or re.fullmatch(r"u[0-9a-fA-F]{4}", tok):
         return "\\" + tok
-    if tok[0] in "bfnrt":
+    if tok[0] in "nrt":
         # Ambiguous: LaTeX only inside $…$ and only for a known command; else the JSON escape
-        # (just its one letter — the letters after it are ordinary text).
+        # (just its one letter — the letters after it are ordinary text). Paper text never holds
+        # a real backspace / form feed, so \b \f are always LaTeX ("面积 \frac{1}{2}ab").
         if in_math and tok in _LATEX_JSON_LOOKALIKE:
             return "\\\\" + tok
         return "\\" + tok
@@ -121,8 +123,8 @@ def escape_latex(raw: str) -> str:
     r"""Double the backslashes of LaTeX the model left bare inside JSON strings.
 
     Stems are written with $…$ LaTeX. A bare "\perp" makes the whole array unparseable and a
-    bare "\frac" parses as form feed + "rac", silently. Valid JSON escapes are kept; the
-    ambiguous ones (\b \f \n \r \t + letters) are LaTeX only inside $…$ in a JSON string.
+    bare "\frac" parses as form feed + "rac", silently. Valid JSON escapes are kept; \b \f are
+    always LaTeX; the ambiguous \n \r \t + letters are LaTeX only inside $…$ in a JSON string.
     """
     out: list[str] = []
     i, n = 0, len(raw)
