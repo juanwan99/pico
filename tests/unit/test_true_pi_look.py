@@ -249,4 +249,5 @@ def test_reply_rules_ask_for_basis_and_no_unchecked_claims() -> None:
     text = pico_system_text()
     assert "**依据**" in text
     assert "your own knowledge" in text and "check the facts" in text
+    assert "only if you opened it this turn" in text
     assert "No guarantees you did not check" in text
