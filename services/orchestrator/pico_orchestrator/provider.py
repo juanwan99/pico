@@ -438,6 +438,7 @@ async def call_once[T](
     send: Callable[[], Awaitable[T]],
     *,
     run_id: str | None = None,
+    budget: int = upstream.CALL_BUDGET,
 ) -> T:
     """One non-streamed logical call through the door (pico#1271).
 
@@ -455,7 +456,7 @@ async def call_once[T](
 
     result, _ = await upstream.race(
         one,
-        upstream.Call(purpose, run_id=run_id),
+        upstream.Call(purpose, run_id=run_id, budget=budget),
         relaunch=upstream.worth_retry,
         discard=_drop,
     )

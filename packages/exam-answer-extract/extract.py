@@ -863,16 +863,73 @@ async def model_complete(
     mid = P.product_backend_model(deep=False)
     if _has_images(messages):
         mid = vision_model_for_images(mid)
-    if model_out is not None:
-        model_out["model"] = mid
+    # Same New API, next model when the brain's channel or key is dead — the
+    # same rule as chat (pico#1271): 401/402/403, no channel, quota gone. A 429,
+    # a refusal or a timeout stays on this model. Image pages skip a backup
+    # that cannot read images.
+    models = [mid]
+    if cfg.name == "deepseek" and P.uses_new_api_openai_overlay(cfg):
+        from pico_orchestrator.brain_ha import brain_candidates
+        from pico_orchestrator.vision import model_accepts_image
 
-    # Every request goes through Pico's one door to the relay (pico#1271): key
-    # slot, three requests at most, pause before a retry. No retry loop here.
+        images = _has_images(messages)
+        models = [
+            m for m in brain_candidates(mid) if not images or model_accepts_image(m)
+        ][:2] or [mid]
+    from pico_orchestrator import upstream
+    from pico_orchestrator.brain_ha import mark_down
+
+    sent = [0]
+    for i, model in enumerate(models):
+        budget = upstream.CALL_BUDGET - sent[0]  # three requests across both models
+        try:
+            text = await _complete_once(
+                P, cfg, model, messages, sent, budget=budget,
+                max_tokens=max_tokens, thinking=thinking, usage_out=usage_out,
+            )
+        except Exception as exc:
+            if i + 1 >= len(models) or upstream.CALL_BUDGET - sent[0] < 1 or not _brain_dead(exc):
+                raise
+            mark_down(model)
+            logger.warning("exam brain %s dead, next %s: %s", model, models[i + 1], str(exc)[:200])
+            continue
+        if model_out is not None:
+            model_out["model"] = model  # bill the model that answered
+        return text
+    raise AssertionError("unreachable")
+
+
+def _brain_dead(exc: BaseException) -> bool:
+    """This model cannot answer now (key / channel / quota), not a busy or slow one."""
+    from pico_orchestrator import upstream
+    from pico_orchestrator.brain_ha import is_model_dead
+
+    status = upstream.status_of(exc)
+    if status in upstream.RETRY_STATUS or isinstance(exc, TimeoutError):
+        return False
+    return status in upstream.DEAD_STATUS or is_model_dead(f"{exc} {exc.__cause__ or ''}")
+
+
+async def _complete_once(
+    P: Any,
+    cfg: Any,
+    mid: str,
+    messages: list[dict[str, Any]],
+    sent: list[int],
+    *,
+    budget: int,
+    max_tokens: int,
+    thinking: bool | None,
+    usage_out: dict[str, Any] | None,
+) -> str:
+    """One model through Pico's one door (key slot, budget, pause before a retry)."""
+    cfg = replace(cfg, model=mid)
     # Wire follows the model we send, not the brain's: gpt-*/grok-* on
     # chat/completions get 400 invalid_request from New API (pico#1288).
-    if P.uses_openai_responses_brain(replace(cfg, model=mid)):
+    if P.uses_openai_responses_brain(cfg):
 
         async def read_stream() -> str:
+            sent[0] += 1
             pieces: list[str] = []
             async for piece in P._iter_openai_responses(
                 cfg,
@@ -885,7 +942,7 @@ async def model_complete(
                 pieces.append(piece)
             return "".join(pieces)
 
-        return await P.call_once(cfg, "exam", read_stream)
+        return await P.call_once(cfg, "exam", read_stream, budget=budget)
 
     client = P._llm_client(cfg)
     kwargs: dict[str, Any] = {
@@ -898,7 +955,12 @@ async def model_complete(
     extra = P.thinking_extra_body(mid, thinking=thinking)
     if extra:
         kwargs["extra_body"] = extra
-    resp = await P.call_once(cfg, "exam", lambda: client.chat.completions.create(**kwargs))
+
+    async def create() -> Any:
+        sent[0] += 1
+        return await client.chat.completions.create(**kwargs)
+
+    resp = await P.call_once(cfg, "exam", create, budget=budget)
     usage = getattr(resp, "usage", None)
     if usage is not None and usage_out is not None:
         from pico_orchestrator.usage_parse import add_usage, parse_usage_blob

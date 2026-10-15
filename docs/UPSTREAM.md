@@ -5,7 +5,7 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
 | 出口 | 走法 |
 |---|---|
 | 直连对话（侧栏、管家 json_only） | `provider.stream_chat` → `upstream.race` |
-| 阅卷读题（答案卷、逐页做题） | `extract.model_complete` → `provider.call_once`（不再有自己的 5 次重试） |
+| 阅卷读题（答案卷、逐页做题） | `extract.model_complete` → `provider.call_once`（不再有自己的 5 次重试）；主脑的钥或渠道死了（401 / 402 / 403、没渠道、额度没了）换备用脑，有图的页跳过看不了图的模型，两个模型合起来最多 3 发 |
 | Pi 智能体每一步（沙箱） | pi-runner → `ws_proxy_router`（`/internal/ws-proxy/l/…`）→ `upstream.race`；带附件的 GPT 再经 `llm_pass_router`，只发一次（请求头 `x-pico-door: raced`） |
 | Pi 智能体每一步（没有沙箱） | Pi 进程 → `llm_pass_router` → `upstream.race`（不再直连 New API） |
 | 回滚用的托管循环（`PICO_HOSTED_LOOP=1`） | `pi_runtime` → `provider.call_once`（不再自建带重试的客户端） |
@@ -27,7 +27,7 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
   - 三次都忙（429 / 503 / 529），老师看到「Pico 这会儿忙，请稍后再试。」。老师看到的话里不出现「模型」（`teacher_text`）。
   - 上游回 401 / 402 / 403（钥被停、没额度）或没有渠道时换模型，不重试。
   - Pi 自己的重试已关（`PI_RETRY_MAX = 0`）。流到一半断了，由 Pico 同会话续跑处理，续跑也从备用池扣。
-- **换模型最多一次**：主模型加一个备用（`brain_candidates(...)[:2]`）。
+- **换模型最多一次**：主模型加一个备用（`brain_candidates(...)[:2]`）。直连、Pi、阅卷三条路都会换；429（如 Vertex 共享配额）、安全拦截、超时不换。
 - **按发出去的模型选线**：gpt-* / grok-* 走 Responses，Gemini 走 chat/completions。直连、Pi、阅卷三条路都看这一跳实际发的模型，不看主脑。阅卷原来看主脑，把 gpt-5.6-sol 发到 chat/completions，New API 回 400（pico#1288）。
 - **按 key 限并发**：同一把 key 同时最多 16 个请求（`PICO_UPSTREAM_KEY_MAX`），超了排队，最多等 120 s。
 - **本机 403 和上游 403 分开**：
