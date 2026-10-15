@@ -1734,3 +1734,52 @@ def test_page_text_over_cap_is_truncated_not_rejected() -> None:
     page = PageIn(**{**_page_in(1), "text": "字" * (MAX_PAGE_TEXT_CHARS + 500)})
     assert len(page.text) == MAX_PAGE_TEXT_CHARS
     assert PageIn(**_page_in(1)).text is None
+
+
+@pytest.mark.asyncio
+async def test_solve_page_reads_again_without_thinking_when_thinking_runs_out(monkeypatch) -> None:
+    # 推理不封顶：一页推爆输出上限（答案截断）或超时，这页不推理再读一次，不丢题（edu-core#3164 一模 20、21）
+    monkeypatch.delenv("PICO_EXAM_EXTRACT_SOLVE_EFFORT", raising=False)
+    seen: list = []
+    full = json.dumps([_solve_item(20, "aBm"), _solve_item(21, "两条带")], ensure_ascii=False)
+
+    def stub(first):
+        async def complete(messages, *, thinking=None, usage_out=None, model_out=None):
+            image = next(p for p in messages[-1]["content"] if p.get("type") == "image")
+            page = int(base64.b64decode(image["data_b64"]).decode())
+            seen.append((page, thinking))
+            if thinking:
+                if isinstance(first, BaseException):
+                    raise first
+                return first
+            return full
+
+        return complete
+
+    roster = "20 short_answer pages=1\n21 short_answer pages=1"
+    cut = '[{"number": 20, "type": "short_answer", "answer": "aB'
+    result = await ex.extract_pages([_page(1)], task="solve", roster=roster, complete=stub(cut))
+    assert seen == [(1, True), (1, False)]
+    assert [q["number"] for q in result["questions"]] == [20, 21]
+
+    seen.clear()
+    result = await ex.extract_pages([_page(1)], task="solve", roster=roster, complete=stub(TimeoutError()))
+    assert seen == [(1, True), (1, False)], "超时只推一次，不按 3 次重试推"
+    assert [q["number"] for q in result["questions"]] == [20, 21]
+
+    # 推理把思路写进正文、没有 JSON：同样退回
+    seen.clear()
+    result = await ex.extract_pages([_page(1)], task="solve", roster=roster, complete=stub("注意看：PSY 变成了上游基因！"))
+    assert seen == [(1, True), (1, False)]
+
+    # 推成了就不再读
+    seen.clear()
+    await ex.extract_pages([_page(1)], task="solve", roster=roster, complete=stub(full))
+    assert seen == [(1, True)]
+
+
+def test_thinking_adds_output_headroom(monkeypatch) -> None:
+    monkeypatch.delenv("PICO_EXAM_EXTRACT_THINK_TOKENS", raising=False)
+    assert ex.think_tokens() == 16_000
+    monkeypatch.setenv("PICO_EXAM_EXTRACT_THINK_TOKENS", "24000")
+    assert ex.think_tokens() == 24_000
