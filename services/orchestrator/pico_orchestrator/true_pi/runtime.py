@@ -8,6 +8,7 @@ Never changes production default_runtime. Call only when:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import uuid
@@ -1202,6 +1203,7 @@ async def _run_true_pi_once(
         # Human package
         from pico_orchestrator.human_package import (
             note_unlooked,
+            note_unread_basis,
             sanitize_user_facing_text,
             titles_from_tool_results,
         )
@@ -1216,8 +1218,16 @@ async def _run_true_pi_once(
         owned = note_unlooked(
             human, made_file=state.visual_output and landed_file, looked=state.look_reads
         )
-        # The live bubble already streamed the model's words: stream the note too.
-        unlooked_tail = owned[len(human) :] if owned.startswith(human) else ""
+        opened = "\n".join(
+            [
+                full_prompt,
+                *state.read_paths,
+                json.dumps(state.tool_results, ensure_ascii=False, default=str),
+            ]
+        )
+        owned = note_unread_basis(owned, opened=opened)
+        # The live bubble already streamed the model's words: stream the notes too.
+        note_tail = owned[len(human) :] if owned.startswith(human) else ""
         human = owned
         from pico_orchestrator.web_tools import attach_teacher_sources
 
@@ -1238,8 +1248,8 @@ async def _run_true_pi_once(
             )
         if final_text:
             payload = {"text": final_text, **tag}
-            if state.text_streamed and unlooked_tail:
-                await emit("message.stream", {"text": unlooked_tail, **tag})
+            if state.text_streamed and note_tail:
+                await emit("message.stream", {"text": note_tail, **tag})
             if state.text_streamed:
                 # Live SSE already got token deltas. Ledger the cleaned
                 # answer once; do not dump the whole bubble again.

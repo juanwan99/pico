@@ -444,6 +444,39 @@ def note_unlooked(text: str, *, made_file: bool, looked: int) -> str:
     return f"{body}\n\n{UNLOOKED_NOTE}" if body else UNLOOKED_NOTE
 
 
+UNREAD_NOTE_TAIL = "这一轮我没有打开核对，相关内容按通用知识整理，用之前请核对。"
+_BOOK_NAME = re.compile(r"《([^《》\n]{1,60})》")
+_FILE_EXT = re.compile(r"\.[A-Za-z0-9]{1,5}$")
+
+
+def _plain(text: str) -> str:
+    return re.sub(r"[\W_]+", "", text or "").lower()
+
+
+def note_unread_basis(text: str, *, opened: str) -> str:
+    """pico#1297: the 依据 line names 《X》 that nothing this turn opened → say so plainly.
+
+    ``opened`` is everything the turn saw: the teacher's words, attachment paths,
+    and tool results (files read, searches, web pages).
+    """
+    seen = _plain(opened)
+    unread: list[str] = []
+    for line in (text or "").splitlines():
+        if "依据" not in line:
+            continue
+        for name in _BOOK_NAME.findall(line):
+            core = _plain(_FILE_EXT.sub("", name.strip()))
+            if core and core not in seen and name not in unread:
+                unread.append(name)
+    if not unread:
+        return text
+    note = "、".join(f"《{n}》" for n in unread) + UNREAD_NOTE_TAIL
+    if note in (text or ""):
+        return text
+    body = (text or "").rstrip()
+    return f"{body}\n\n{note}"
+
+
 def engineer_trace_note() -> str:
     """Short pointer for docs — not for user chat."""
     return "Engineer trace: delivery.summary + tool results + /v1/artifacts; not final_text."

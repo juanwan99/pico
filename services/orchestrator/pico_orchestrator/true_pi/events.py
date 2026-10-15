@@ -80,6 +80,8 @@ class EventMapState:
     visual_output: bool = False
     look_steered: bool = False
     look_reads: int = 0
+    # pico#1297: paths the model opened with read (attachments included).
+    read_paths: list[str] = field(default_factory=list)
 
     @property
     def has_output(self) -> bool:
@@ -262,6 +264,8 @@ async def map_event(
             state.visual_output = True
         if look_read_call(name, args):
             state.look_reads += 1
+        if name == "read":
+            state.read_paths.append(str(args.get("path") or args.get("file_path") or ""))
         step = workbench_call_step_line(name, args)
         await emit(
             "tool.call",
