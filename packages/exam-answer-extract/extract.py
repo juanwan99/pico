@@ -267,6 +267,19 @@ def count_sub_marks(text: str | None) -> int:
     return max(k, 1)
 
 
+def split_by_sub_marks(text: str | None) -> dict[int, str]:
+    """「（1）…（2）…」→ {1: …, 2: …}: marks taken in order 1, 2, … (a stray f(5) or repeated (1) is text)."""
+    s = str(text or "")
+    marks: list[tuple[int, int, int]] = []
+    for m in _SUB_MARK_RE.finditer(s):
+        if int(m.group(1) or m.group(2)) == len(marks) + 1:
+            marks.append((len(marks) + 1, m.start(), m.end()))
+    if len(marks) < 2:
+        return {}
+    ends = [start for _, start, _ in marks[1:]] + [len(s)]
+    return {n: s[end:stop].strip(" \n；;。") for (n, _, end), stop in zip(marks, ends)}
+
+
 def self_corrected_fix(answer: str | None) -> bool:
     """True when a 改错 pair reads 「X 改为 X」— the wrong word was silently corrected."""
     return any(a.strip() == b.strip() for a, b in _FIX_PAIR_RE.findall(str(answer or "")))
@@ -441,6 +454,10 @@ def normalize_item(
         sub_count = 0
     subs = [] if qtype in ("single_choice", "multi_choice") else _normalize_subs(raw.get("subs"))
     if subs:
+        if any(not s["answer"] for s in subs):
+            # the model wrote the whole 「（1）…（2）…」 in answer and left subs blank (一模 18, edu-core#3164)
+            parts = split_by_sub_marks(answer)
+            subs = [{**s, "answer": s["answer"] or parts.get(s["sub"], "")} for s in subs]
         answer = answer_from_subs(answer, subs)
         sub_count = subs[-1]["sub"]
         if score is None:
@@ -680,8 +697,13 @@ def _merge_text(prev: str, nxt: str) -> str:
     return _merge_rubric(prev or "", nxt or "")
 
 
-def merge_items(batches: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
-    """Merge per-page / per-chunk items by number. Earlier batch wins on answer."""
+def merge_items(batches: list[list[dict[str, Any]]], *, solve: bool = False) -> list[dict[str, Any]]:
+    """Merge per-page / per-chunk items by number. Earlier batch wins on answer.
+
+    solve: every page that shows a question answers all of it, so a second page's analysis /
+    rubric is the same solution written again (一模 10 / 17 / 21 twice over, edu-core#3164); it is
+    only added when that page answered 小问 the earlier one left blank (17 (3)(4) on the next page).
+    """
     by_no: dict[int, dict[str, Any]] = {}
     for batch in batches:
         for item in batch:
@@ -708,9 +730,13 @@ def merge_items(batches: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
                 merged["score"] = item["score"]
             if not prev["section"] and item["section"]:
                 merged["section"] = item["section"]
-            merged["rubric"] = _merge_rubric(prev["rubric"], item["rubric"])
+            answered = {x["sub"] for x in prev.get("subs") or [] if x["answer"]}
+            adds = not solve or any(x["answer"] and x["sub"] not in answered for x in item.get("subs") or [])
+            if adds or not prev["rubric"]:
+                merged["rubric"] = _merge_rubric(prev["rubric"], item["rubric"])
             for key in ("analysis", "stem"):
-                merged[key] = _merge_text(prev.get(key, ""), item.get(key, ""))
+                if adds or not prev.get(key):
+                    merged[key] = _merge_text(prev.get(key, ""), item.get(key, ""))
             merged["figures"] = (prev.get("figures") or []) + (item.get("figures") or [])
             subs = merge_subs(prev.get("subs") or [], item.get("subs") or [])
             merged["subs"] = subs
@@ -1016,6 +1042,7 @@ def is_safety_block(exc: BaseException) -> bool:
 def split_page_image(mime: str, data_b64: str) -> list[dict[str, str]] | None:
     """Cut a page image in two at the emptiest row of its middle third (never mid-line).
 
+    Each half carries y0 / y1, its span on the page (0–1000), to map its figure boxes back.
     None when the bytes are not an image Pillow can open — the page then stays failed.
     """
     from PIL import Image
@@ -1039,8 +1066,64 @@ def split_page_image(mime: str, data_b64: str) -> list[dict[str, str]] | None:
     for box in ((0, 0, width, cut), (0, cut, width, height)):
         buf = io.BytesIO()
         img.crop(box).save(buf, format="PNG")
-        halves.append({"mime": "image/png", "data_b64": base64.b64encode(buf.getvalue()).decode()})
+        halves.append(
+            {
+                "mime": "image/png",
+                "data_b64": base64.b64encode(buf.getvalue()).decode(),
+                "y0": round(box[1] * 1000 / height),
+                "y1": round(box[3] * 1000 / height),
+            }
+        )
     return halves
+
+
+def remap_half_figures(items: list[dict[str, Any]], y0: int, y1: int) -> list[dict[str, Any]]:
+    """A half read gives boxes on the half (0–1000 of its height); the crop runs on the whole page.
+
+    Unmapped, 一模 page 5's bottom-half table box framed 17's text above it (edu-core#3164).
+    """
+
+    def page_y(v: int) -> int:
+        return round(y0 + v * (y1 - y0) / 1000)
+
+    out = []
+    for item in items:
+        figures = [
+            {**f, "box": [f["box"][0], page_y(f["box"][1]), f["box"][2], page_y(f["box"][3])]}
+            for f in item.get("figures") or []
+        ]
+        out.append({**item, "figures": figures})
+    return out
+
+
+def fill_from(base: list[dict[str, Any]], extra: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Items read from a blocked page's text layer fill what the half reads left out.
+
+    A question the halves never saw is added; one they saw keeps its fields (and its figure
+    boxes, the text read has none) and takes only the ones still empty.
+    """
+    out = [dict(i) for i in base]
+    by_no = {i["number"]: i for i in out if not is_material(i) and i["number"] > 0}
+    texts = {m["material"] for m in out if is_material(m)}
+    for item in extra:
+        if is_material(item):
+            if item["material"] and item["material"] not in texts:
+                out.append(item)
+            continue
+        have = by_no.get(item["number"])
+        if have is None:
+            out.append(item)
+            if item["number"] > 0:
+                by_no[item["number"]] = item
+            continue
+        for key in ("stem", "answer", "analysis", "rubric", "section"):
+            if not have.get(key) and item.get(key):
+                have[key] = item[key]
+        if have["score"] is None:
+            have["score"] = item["score"]
+        have["subs"] = merge_subs(have.get("subs") or [], item.get("subs") or [])
+        have["blanks"] = _merge_blanks(have.get("blanks") or [], item.get("blanks") or [])
+    return out
 
 
 # Resending a page belongs to Pico's door to the relay (pico#1271: three requests
@@ -1058,10 +1141,23 @@ _DEFAULT_CONCURRENCY = 4
 # "medium" stays one env flip away. It must ask for thinking explicitly: the provider
 # default for Gemini flash is now thinking off (#1183), so None no longer meant medium.
 _DEFAULT_PAGE_EFFORT = "low"
+_DEFAULT_SOLVE_EFFORT = "medium"
 
 
 def page_thinking() -> bool:
     effort = (os.environ.get("PICO_EXAM_EXTRACT_PAGE_EFFORT") or _DEFAULT_PAGE_EFFORT).strip().lower()
+    return effort == "medium"
+
+
+def task_thinking(task: str, default: bool) -> bool:
+    """Solving thinks; reading (structure / paper / printed answers) keeps its effort.
+
+    Without thinking the solve wrote its working into analysis (「等等，重新分析」, two answers
+    to one question) and got 12 / 21 of 一模定稿 wrong against its own analysis (edu-core#3164).
+    """
+    if task != "solve":
+        return default
+    effort = (os.environ.get("PICO_EXAM_EXTRACT_SOLVE_EFFORT") or _DEFAULT_SOLVE_EFFORT).strip().lower()
     return effort == "medium"
 
 
@@ -1254,7 +1350,7 @@ async def _extract_text_once(
         ]
         try:
             out = await _complete_with_retry(
-                complete, messages, thinking=False, usage=usage, model_out=model_out
+                complete, messages, thinking=task_thinking(task, False), usage=usage, model_out=model_out
             )
         except ExtractError:
             raise
@@ -1291,7 +1387,7 @@ async def _extract_text_once(
         ]
         try:
             out = await _complete_with_retry(
-                complete, messages, thinking=False, usage=usage, model_out=model_out
+                complete, messages, thinking=task_thinking(task, False), usage=usage, model_out=model_out
             )
         except ExtractError:
             raise
@@ -1307,7 +1403,7 @@ async def _extract_text_once(
         merged = merge_items(attach_continued(batches))
         have = {q["number"] for q in merged}
         truncated = json_looks_truncated(out)
-    return _finish("text", batches, reports, errors, last_text, usage, model_out)
+    return _finish("text", batches, reports, errors, last_text, usage, model_out, task)
 
 
 async def extract_pages(
@@ -1349,13 +1445,18 @@ async def extract_pages(
 
     by_page = {int(p["page"]): p for p in pages}
 
-    async def read(image: dict[str, Any], number: int) -> str:
+    thinking = task_thinking(task, page_thinking())
+
+    async def read(image: dict[str, Any] | None, number: int, text: str = "") -> str:
         content: list[dict[str, Any]] = [
             {"type": "text", "text": _fill_user_template(prompts["user_page"], subject=tag, roster=page_roster(number))},
-            {"type": "image", "mime": image["mime"], "data_b64": image["data_b64"]},
         ]
+        if image is not None:
+            content.append({"type": "image", "mime": image["mime"], "data_b64": image["data_b64"]})
+        if text:
+            content.append({"type": "text", "text": (PAGE_TEXT_HEAD if image is not None else PAGE_TEXT_ONLY_HEAD) + text})
         nxt = by_page.get(number + 1)
-        if task == "solve" and nxt is not None:
+        if task == "solve" and nxt is not None and image is not None:
             # A choice question at the foot of a page has its options on the next one (一模定稿 5:
             # stem + A/B on page 1, C/D on page 2; 13: stem + figure on 3, options on 4). Alone,
             # page 1 left 5 blank or guessed from A/B (edu-core#3164); the next page rides along.
@@ -1365,7 +1466,7 @@ async def extract_pages(
             ]
         messages = [{"role": "system", "content": prompts["system"]}, {"role": "user", "content": content}]
         return await _complete_with_retry(
-            complete, messages, thinking=page_thinking(), usage=usage, model_out=model_out
+            complete, messages, thinking=thinking, usage=usage, model_out=model_out
         )
 
     async def read_halves(
@@ -1385,7 +1486,7 @@ async def extract_pages(
                 parts.append(None)
                 continue
             outs.append(out)
-            parts.append(items_from_model_text(out, page=number, task=task))
+            parts.append(remap_half_figures(items_from_model_text(out, page=number, task=task), half["y0"], half["y1"]))
         top, bottom = parts
         # The bottom half's leading number 0 continues the top half's last question;
         # with the top unread its owner is unknown, so it is dropped (as across pages).
@@ -1402,6 +1503,21 @@ async def extract_pages(
                 continue
             items.append({**item, "number": last} if item["number"] == 0 and last else item)
         missing = "".join(name for name, part in (("上", top), ("下", bottom)) if part is None)
+        if missing and page.get("text"):
+            # A half the brain still refuses: read the page from its PDF text layer instead (一模 5,
+            # 16–18 stems lost, edu-core#3164). No image, so no figure boxes from this read.
+            try:
+                out = await read(None, number, page["text"])
+            except ExtractError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — stays reported as blocked
+                logger.warning("exam extract page %s text-only read failed: %s", number, str(exc)[:200])
+            else:
+                outs.append(out)
+                extra = [{**i, "figures": []} for i in items_from_model_text(out, page=number, task=task)]
+                items = fill_from(items, extra)
+                report = {"page": number, "ok": True, "count": len(items), "error": None, "safety": True, "text_only": True}
+                return number, own(number, items), "\n".join(outs), report
         report = {
             "page": number,
             "ok": not missing,
@@ -1458,7 +1574,7 @@ async def extract_pages(
             return None
         reports = [{"page": int(p["page"]), "ok": True, "count": 0, "error": None} for p in pages]
         reports[0]["count"] = len(items)
-        return _finish("pages", [items] + [[] for _ in pages[1:]], reports, [], out, usage, model_out)
+        return _finish("pages", [items] + [[] for _ in pages[1:]], reports, [], out, usage, model_out, task)
 
     async def one(page: dict[str, Any]) -> tuple[int, list[dict[str, Any]], str, dict[str, Any]]:
         number = int(page["page"])
@@ -1467,7 +1583,7 @@ async def extract_pages(
             return number, [], "", {"page": number, "ok": True, "count": 0, "error": None, "skipped": True}
         async with sem:
             try:
-                out = await read(page, number)
+                out = await read(page, number, page.get("text") or "")
             except ExtractError:
                 raise
             except SafetyBlocked as exc:
@@ -1476,7 +1592,7 @@ async def extract_pages(
                 out = None
                 for _ in range(_env_int("PICO_EXAM_EXTRACT_SAFETY_REASKS", _SAFETY_REASKS)):
                     try:
-                        out = await read(page, number)
+                        out = await read(page, number, page.get("text") or "")
                         break
                     except SafetyBlocked as again:
                         logger.warning("exam extract page %s blocked again: %s", number, str(again)[:200])
@@ -1515,7 +1631,7 @@ async def extract_pages(
     errors = [RuntimeError(rep["error"]) for rep in reports if not rep["ok"]]
     last_text = next((out for _, _, out, rep in reversed(results) if rep["ok"]), "")
     try:
-        result = _finish("pages", batches, reports, errors, last_text, usage, model_out)
+        result = _finish("pages", batches, reports, errors, last_text, usage, model_out, task)
     except ExtractError as exc:
         # every tagged question filtered off its wrong pages: an empty answer, not a failed read
         if not (on_page and exc.code == "extract.empty" and not errors):
@@ -1543,6 +1659,31 @@ async def extract_pages(
     return result
 
 
+# Page text layer (edu pdftotext per page, edu-core#3164): 讲评课件 hide answers under grey boxes in the
+# slide image while the text layer has them; images mis-read 芟 as 茇. The brain takes words from the
+# text and structure / figures from the image.
+PAGE_TEXT_HEAD = (
+    "本页文字层（从文件里直接取出的原字：图上看不清、被色块盖住的字也在里面；顺序可能乱，图里的字可能没有）。"
+    "题干、选项、答案、解析、分数的字以它为准，题号结构和图仍看页图：\n"
+)
+PAGE_TEXT_ONLY_HEAD = (
+    "本页的页图没法给你（被审查拦下），下面是本页文字层（从文件里直接取出的原字，顺序可能乱、图没有）。"
+    "照它把本页的题读出来，figures 写 []：\n"
+)
+
+_ANALYSIS_PICK_RE = re.compile(r"(?:故选|故答案为|答案为|答案是|应选|所以选|因此选)\s*[：:]?\s*([A-H](?:\s*[、,，和与及]?\s*[A-H])*)")
+
+
+def analysis_pick(q: dict[str, Any]) -> str | None:
+    """A choice question's letters by its own analysis (「故选 BC」, last one wins); None when it names none."""
+    if q["type"] not in ("single_choice", "multi_choice"):
+        return None
+    found = _ANALYSIS_PICK_RE.findall(q.get("analysis") or "")
+    if not found:
+        return None
+    return "".join(sorted(set(re.sub(r"[^A-H]", "", found[-1]))))
+
+
 def has_answer(q: dict[str, Any]) -> bool:
     if str(q.get("answer") or "").strip():
         return True
@@ -1557,10 +1698,11 @@ def _finish(
     last_text: str,
     usage: dict[str, Any],
     model_out: dict[str, Any],
+    task: str = "answers",
 ) -> dict[str, Any]:
     ok = [rep["ok"] for rep in reports] if len(reports) == len(batches) else None
     attached = attach_continued(batches, ok)
-    questions = merge_items(attached)
+    questions = merge_items(attached, solve=task == "solve")
     materials = collect_materials(attached, questions)
     warnings: list[str] = []
     blocked = [rep["page"] for rep in reports if rep.get("safety") and not rep["ok"]]
@@ -1579,6 +1721,10 @@ def _finish(
             + "。请换清晰卷或改用带题号的 Word / 文本。",
         )
     for q in questions:
+        picked = analysis_pick(q) if task == "solve" else None
+        if picked and picked != "".join(sorted(set(q["answer"]))):
+            q["uncertain"] = True
+            warnings.append(f"第 {q['number']} 题解析结论是 {picked}、答案写的是 {q['answer'] or '空'}，请老师核对")
         if self_corrected_fix(q["answer"]):
             q["uncertain"] = True
             warnings.append(f"第 {q['number']} 题改错答案左右读成同一个词，卷面错字可能被读成了正字，请老师按卷面核对")

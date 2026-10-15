@@ -1592,3 +1592,137 @@ async def test_structure_stray_sub_count_on_a_choice_question_is_not_a_disagreem
     )
     assert len(calls) == 2
     assert result["votes"] == 2
+
+
+# --------------------------------------------------------------------------- edu-core#3164 一次修完
+
+
+def test_route_page_text_reaches_the_read(client: TestClient, monkeypatch):
+    seen: list = []
+
+    async def complete(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        seen.append([p.get("text", "") for p in messages[-1]["content"] if p["type"] == "text"])
+        return json.dumps(_gold_items()[:1])
+
+    monkeypatch.setattr(ex, "model_complete", complete)
+    res = client.post(
+        "/v1/exam/answer-extract",
+        json={"pages": [{**_page_in(1), "text": "1．下列叙述正确的是"}, _page_in(2)]},
+        headers=_headers(),
+    )
+    assert res.status_code == 200, res.text
+    texts = sorted(seen, key=len)
+    assert len(texts[0]) == 1, "没有文字层的页只有提示一段"
+    assert texts[1][1].startswith(ex.PAGE_TEXT_HEAD) and texts[1][1].endswith("1．下列叙述正确的是")
+
+
+def test_split_halves_carry_their_span_on_the_page():
+    halves = ex.split_page_image("image/png", _ink_page(_BANDS)["data_b64"])
+    assert [(h["y0"], h["y1"]) for h in halves] == [(0, 500), (500, 1000)]
+
+
+@pytest.mark.asyncio
+async def test_blocked_half_falls_back_to_the_page_text_layer():
+    """一模 5：整页、下半页都被拦，16–18 题干全丢；文字层读出来补上，图框按整页换算。"""
+    calls: list = []
+    texts: list = []
+    top = json.dumps([
+        {"number": 16, "type": "multi_choice", "stem": "脆性X综合征…表型", "options_count": 4,
+         "figures": [{"box_2d": [100, 10, 500, 90]}]},
+    ])
+    inner = _halves_stub(top, RuntimeError(_BLOCKED), calls)
+    from_text = json.dumps([
+        {"number": 16, "type": "multi_choice", "stem": "（不该覆盖）", "answer": "BC", "options_count": 4},
+        {"number": 17, "type": "short_answer", "stem": "我国科学家将ATP合成酶…", "score": 11,
+         "figures": [{"box_2d": [1, 1, 900, 900]}]},
+    ])
+
+    async def complete(messages, **kw):
+        content = messages[-1]["content"]
+        texts.append([p["text"] for p in content if p["type"] == "text"])
+        if not any(p["type"] == "image" for p in content):
+            calls.append("text")
+            return from_text
+        return await inner(messages, **kw)
+
+    page = {**_ink_page(_BANDS), "text": "16．脆性X综合征……\n17．（11分）我国科学家将ATP合成酶……"}
+    result = await ex.extract_pages([page], task="paper", complete=complete)
+    assert calls == [300, 300, 300, "top", "bottom", "text"]
+    assert texts[0][-1].startswith(ex.PAGE_TEXT_HEAD), "整页读带文字层"
+    assert not any(t.startswith(ex.PAGE_TEXT_HEAD) for t in texts[3] + texts[4]), "半页不带整页的字"
+    assert texts[5][-1].startswith(ex.PAGE_TEXT_ONLY_HEAD)
+    by_no = {q["number"]: q for q in result["questions"]}
+    assert by_no[16]["stem"] == "脆性X综合征…表型" and by_no[16]["answer"] == "BC"
+    assert by_no[16]["figures"] == [{"page": 2, "box": [10, 50, 90, 250]}], "上半页框按整页换算"
+    assert by_no[17]["stem"].startswith("我国科学家") and by_no[17]["figures"] == []
+    assert result["pages"] == [
+        {"page": 2, "ok": True, "count": 2, "error": None, "safety": True, "text_only": True}
+    ]
+    assert not any("切成两半" in w for w in result["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_bottom_half_figure_boxes_map_back_to_the_page():
+    calls: list = []
+    bottom = json.dumps([{"number": 18, "type": "short_answer", "figures": [{"box_2d": [100, 10, 500, 90]}]}])
+    result = await ex.extract_pages([_ink_page(_BANDS)], task="paper", complete=_halves_stub("[]", bottom, calls))
+    assert result["questions"][0]["figures"] == [{"page": 2, "box": [10, 550, 90, 750]}]
+
+
+def test_solve_merge_keeps_one_solution_per_question():
+    def item(n, subs, analysis, rubric):
+        return {
+            "number": n, "type": "short_answer", "answer": "", "rubric": rubric, "analysis": analysis,
+            "stem": "", "score": None, "options_count": None, "sub_count": 1, "section": None,
+            "subs": [{"sub": k, "answer": a, "score": None} for k, a in subs], "has_figure": False,
+            "blanks": [], "figures": [], "uncertain": False, "source": {"page": 1, "quote": ""},
+        }
+
+    page4 = [item(10, [], "从图中可以看出…C项错误", ""), item(17, [(1, "甲"), (2, "乙")], "（1）（2）解析", "（1）2分")]
+    page5 = [item(10, [], "由题图可知…C项错误", ""), item(17, [(1, "甲"), (2, "乙"), (3, "丙")], "（3）解析", "（3）2分")]
+    for n, p in ((4, page4), (5, page5)):
+        for i in p:
+            i["source"]["page"] = n
+    merged = {q["number"]: q for q in ex.merge_items([page4, page5], solve=True)}
+    assert merged[10]["analysis"] == "从图中可以看出…C项错误", "同一题第二份解答不再接上"
+    assert merged[17]["analysis"] == "（1）（2）解析\n（3）解析", "后页答了新小问才接上"
+    assert merged[17]["rubric"] == "（1）2分\n（3）2分"
+    plain = {q["number"]: q for q in ex.merge_items([page4, page5])}
+    assert plain[10]["analysis"].count("C项错误") == 2, "读卷（续页）照旧接上"
+
+
+def test_whole_answer_fills_blank_subs():
+    q = ex.normalize_item(
+        {"number": 18, "type": "short_answer", "answer": "（1）河虾 （2）①耐受性高②循环、整体",
+         "subs": [{"sub": 1, "answer": ""}, {"sub": 2, "answer": ""}]},
+        page=6, task="solve",
+    )
+    assert [s["answer"] for s in q["subs"]] == ["河虾", "①耐受性高②循环、整体"]
+    assert ex.split_by_sub_marks("f(5) 无小问") == {}
+
+
+@pytest.mark.asyncio
+async def test_solve_thinks_and_flags_analysis_that_picks_other_letters(monkeypatch):
+    monkeypatch.delenv("PICO_EXAM_EXTRACT_SOLVE_EFFORT", raising=False)
+    thinking: list = []
+
+    async def complete(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        thinking_seen.append(thinking)
+        return json.dumps([
+            {"number": 12, "type": "single_choice", "options_count": 4, "answer": "D",
+             "analysis": "……因此G基因导入的位置是细胞质中，故选A"},
+            {"number": 14, "type": "multi_choice", "options_count": 4, "answer": "CB", "analysis": "……故选 B、C"},
+        ])
+
+    thinking_seen = thinking
+    result = await ex.extract_pages([_page(1)], task="solve", roster="12 single_choice\n14 multi_choice", complete=complete)
+    assert thinking == [True], "做题开推理"
+    by_no = {q["number"]: q for q in result["questions"]}
+    assert by_no[12]["uncertain"] is True and by_no[14]["uncertain"] is False
+    assert "第 12 题解析结论是 A、答案写的是 D，请老师核对" in result["warnings"]
+    assert not any("第 14 题" in w for w in result["warnings"])
+
+    thinking.clear()
+    await ex.extract_pages([_page(1)], task="paper", complete=complete)
+    assert thinking == [False], "读卷不开推理"
+    assert ex.task_thinking("structure", False) is False

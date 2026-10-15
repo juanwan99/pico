@@ -31,6 +31,7 @@ MAX_PAGES = 60
 MAX_PAGE_BYTES = 4 * 1024 * 1024
 MAX_TOTAL_BYTES = 40 * 1024 * 1024
 MAX_TEXT_CHARS = 400_000
+MAX_PAGE_TEXT_CHARS = 20_000
 PAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 
 PKG = Path("/app/packages/exam-answer-extract")
@@ -44,6 +45,8 @@ class PageIn(BaseModel):
     page: int = Field(ge=1, le=MAX_PAGES)
     mime: str = Field(default="image/jpeg", max_length=32)
     content_b64: str
+    # 本页 PDF 文字层（edu pdftotext 按页切，edu-core#3164）：字以它为准，被拦的整页按它读
+    text: str | None = Field(default=None, max_length=MAX_PAGE_TEXT_CHARS)
 
 
 class ExtractIn(BaseModel):
@@ -102,8 +105,15 @@ async def post_exam_answer_extract(
             if total > MAX_TOTAL_BYTES:
                 raise _bad("page.too_large", "页图总量太大（上限 40MB）", 413)
             digest.update(data)
+            page_text = (page.text or "").strip()
+            digest.update(page_text.encode("utf-8"))
             pages.append(
-                {"page": page.page, "mime": mime, "data_b64": base64.b64encode(data).decode()}
+                {
+                    "page": page.page,
+                    "mime": mime,
+                    "data_b64": base64.b64encode(data).decode(),
+                    **({"text": page_text} if page_text else {}),
+                }
             )
         pages.sort(key=lambda p: p["page"])
     else:
