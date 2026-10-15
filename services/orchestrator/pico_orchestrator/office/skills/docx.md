@@ -75,6 +75,7 @@ Do not `doc = Document()` then copy text out. That drops styles, headers, and im
 - Header/footer: `section.header` / `section.footer`. Page numbers are footer text unless you attach a PAGE field; do not claim a field you did not add.
 - Lists: `doc.add_paragraph("项", style="List Bullet")` or `List Number`.
 - East-Asian font: set `w:eastAsia` on the run or Normal style. Latin `font.name` alone will not pick 宋体.
+- Fonts: name the font the teacher's computer has — 宋体 / 黑体 / 楷体 / 仿宋 / 微软雅黑 for Chinese, Calibri / Times New Roman / Arial for Latin. Here they render with installed look-alikes (same style, Regular + Bold), so previews match. Do not name other fonts.
 - Pictures: `IMAGE_PATHS[i]` from `image_artifact_ids`, or a PNG you render into the workdir. Do not invent a host path.
 - Same title replaces the file the teacher opens. Change existing files with `artifact_id` + `load_doc()`. Edit runs in place (`p.runs`, table cells). Do not rebuild a blank `Document()` and paste text.
 - After save, the tool observation is what landed. `ok` is not finished.

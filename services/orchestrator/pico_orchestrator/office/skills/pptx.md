@@ -84,6 +84,7 @@ Do not `prs = Presentation()` then recreate the deck. That drops the teacher's t
 ## Rules
 
 - Widescreen 13.333×7.5 unless the teacher asked otherwise.
+- Fonts: name the font the teacher's computer has — 宋体 / 黑体 / 楷体 / 仿宋 / 微软雅黑 for Chinese, Calibri / Times New Roman / Arial for Latin. Here they render with installed look-alikes (same style, Regular + Bold), so previews match. Do not name other fonts.
 - Blank layout index 6 has no `shapes.title`. Do not write `slide.shapes.title.text` on a blank slide.
 - Color blocks: `add_shape` + `fill.solid()` + `RGBColor`. Spec path cannot place these.
 - Helpers `add_title_slide` / `add_content_slide` / `add_table` are injected. Aliases: `image=`, `prs=`, `IMAGE_PATHS[0]`.

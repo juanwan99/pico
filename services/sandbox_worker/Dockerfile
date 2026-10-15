@@ -53,6 +53,22 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     chmod -R a+rX /opt/ms-playwright
 
+# Fonts (pico#1295). Playwright's deps bring one CJK font in one weight
+# (WenQuanYi); "宋体" in a teacher's Word file matched a Latin font and bold
+# Chinese could not render. Noto CJK = Song + Hei in Regular/Bold, UKai = Kai,
+# Carlito/Caladea = Calibri/Cambria metrics, DejaVu = math symbols.
+# The conf maps Windows/Mac names to these; matplotlib defaults to Chinese.
+COPY --chmod=0644 services/sandbox_worker/fonts/24-pico-cjk.conf services/sandbox_worker/fonts/64-pico-cjk-fallback.conf /etc/fonts/conf.d/
+COPY --chmod=0644 services/sandbox_worker/fonts/mpl_cjk_defaults.py /tmp/mpl_cjk_defaults.py
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      fonts-noto-cjk fonts-arphic-ukai fonts-crosextra-carlito fonts-crosextra-caladea fonts-dejavu-core; \
+    rm -rf /var/lib/apt/lists/*; \
+    fc-cache -f; \
+    python /tmp/mpl_cjk_defaults.py; \
+    rm /tmp/mpl_cjk_defaults.py
+
 COPY services /app/services
 
 # Official mermaid UMD (pin in mermaid_pin.py). No runtime CDN.

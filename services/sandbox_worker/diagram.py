@@ -131,7 +131,7 @@ async def render_diagram(*, source: str, kind: str = "mermaid") -> dict[str, Any
         outcome = await page.evaluate(
             """async (payload) => {
                 const source = payload.source;
-                const font = 'WenQuanYi Zen Hei, Noto Sans CJK SC, sans-serif';
+                const font = 'Noto Sans CJK SC, WenQuanYi Zen Hei, sans-serif';
                 try {
                     if (typeof mermaid === 'undefined') {
                         return { ok: false, error: 'mermaid_global_missing' };
