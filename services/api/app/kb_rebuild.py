@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+import time
 from typing import Any
 
 from pico_orchestrator.meili_kb import (
@@ -18,6 +21,32 @@ from app.auth import Principal
 from app.db import ArtifactRow, TaskRow, session_factory
 
 _FLUSH = 80
+_PER_MIN = 600
+
+
+def rebuild_per_min() -> int:
+    try:
+        return max(60, int(os.environ.get("PICO_KB_REBUILD_PER_MIN") or _PER_MIN))
+    except ValueError:
+        return _PER_MIN
+
+
+class _Pace:
+    """Chunks written per minute (pico#1271). Each chunk is one embedding request
+    Meili makes to New API; 09-16's full ingest hit ch5 with ~2,100 a minute. The
+    first minute's worth goes at once, so a deploy's small incremental pass
+    never waits; a full rebuild (~72k chunks) takes about two hours."""
+
+    def __init__(self, per_min: int) -> None:
+        self.per_min = per_min
+        self.sent = 0
+        self.t0 = time.monotonic()
+
+    async def after(self, n: int) -> None:
+        self.sent += n
+        wait = (self.sent - self.per_min) * 60.0 / self.per_min - (time.monotonic() - self.t0)
+        if wait > 0:
+            await asyncio.sleep(wait)
 
 
 async def rebuild_materials(
@@ -60,16 +89,20 @@ async def rebuild_materials(
             continue
         stored_by_task_title[(str(task.id), str(artifact.title or ""))] = body
 
-    def _flush() -> None:
+    pace = _Pace(rebuild_per_min())
+
+    def _flush() -> int:
         nonlocal pending, pending_arts, indexed, skipped
         if not pending:
-            return
+            return 0
+        flushed = len(pending)
         if upsert_documents(pending, replace_artifact=False):
             indexed += pending_arts
         else:
             skipped += pending_arts
         pending = []
         pending_arts = 0
+        return flushed
 
     for artifact, task in rows:
         if is_lab_school(str(task.school_id or "")):
@@ -111,7 +144,7 @@ async def rebuild_materials(
         pending.extend(docs)
         pending_arts += 1
         if len(pending) >= _FLUSH:
-            _flush()
+            await pace.after(_flush())
     _flush()
     return {
         "ok": True,

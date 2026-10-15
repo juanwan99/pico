@@ -5,7 +5,8 @@
 exam AI marking failed for 14 minutes before anyone saw it. Never again flip
 blind:
 
-1. Preflight every candidate straight at the relay (DEEPSEEK_BASE_URL): one text
+1. Preflight every candidate straight at the relay (DEEPSEEK_BASE_URL, pico-probe
+   token PICO_PROBE_API_KEY): one text
    turn, one image turn. Primary must pass both; at least one fallback must pass
    both (image work needs a landing). A fallback that is down now stays listed
    (failover skips it, #1261) with a DOWN line.
@@ -36,6 +37,8 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
+
+from probe_key import probe_key
 
 ROOT = Path(__file__).resolve().parents[1]
 PICO_ENV = Path("/opt/pico/.env")
@@ -207,11 +210,11 @@ def main() -> int:
     args = ap.parse_args()
     fallbacks = [m.strip() for m in args.fallbacks.split(",") if m.strip()]
     env = env_file(PICO_ENV)
-    base, key = env.get("DEEPSEEK_BASE_URL", ""), env.get("DEEPSEEK_API_KEY", "")
-    token = env.get("PICO_OPENAI_PROXY_KEY", "")
-    if not base or not key or not token:
-        print("MISSING DEEPSEEK_BASE_URL / DEEPSEEK_API_KEY / PICO_OPENAI_PROXY_KEY")
+    base, token = env.get("DEEPSEEK_BASE_URL", ""), env.get("PICO_OPENAI_PROXY_KEY", "")
+    if not base or not token:
+        print("MISSING DEEPSEEK_BASE_URL / PICO_OPENAI_PROXY_KEY")
         return 2
+    key = probe_key(env)  # preflight hits the relay on pico-probe, not production
     print(f"now primary={env.get('DEEPSEEK_MODEL')} fallbacks={env.get('PICO_BRAIN_FALLBACKS', '')}", flush=True)
     if not preflight(base, key, args.primary, fallbacks):
         print("NOT SWITCHED")

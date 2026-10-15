@@ -248,6 +248,7 @@ async def run_pi_agent(
                 "model": str(getattr(caps, "backend_model", "") or "") or provider.model,
                 "messages": messages,
                 "max_tokens": min(4096, max(256, caps.max_tokens - token_usage["total_tokens"])),
+                "user": "pico-hosted",
             }
             if tool_schemas:
                 create_kwargs["tools"] = tool_schemas

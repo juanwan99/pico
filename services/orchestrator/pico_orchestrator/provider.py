@@ -574,6 +574,7 @@ async def _iter_openai_responses(
     max_tokens: int,
     thinking: bool | None,
     usage_out: dict | None = None,
+    purpose: str = "direct",
 ) -> AsyncIterator[str]:
     """Official Responses stream. Never chat.completions against ``/openai``."""
     client = _llm_client(provider)
@@ -588,6 +589,10 @@ async def _iter_openai_responses(
     }
     if instructions:
         kwargs["instructions"] = instructions
+    kwargs["user"] = upstream.caller(purpose)
+    prompt_key = upstream.cache_key(instructions)
+    if prompt_key:
+        kwargs["prompt_cache_key"] = prompt_key
     # One try: resending belongs to the race in stream_chat (pico#1271).
     yielded = False
     stream = await client.responses.create(**kwargs)
@@ -668,6 +673,7 @@ async def stream_chat(
                 mid, thinking=think
             ),
             "stream_options": {"include_usage": True},
+            "user": upstream.caller("direct"),
         }
         stream = await client.chat.completions.create(**kwargs)
         spent = 0

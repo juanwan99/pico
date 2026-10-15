@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator.provider import resolve_provider, stream_chat
+from probe_key import use_probe_key
 
 
 async def main() -> int:
@@ -42,4 +43,5 @@ if __name__ == "__main__":
                 continue
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    use_probe_key()
     raise SystemExit(asyncio.run(main()))
