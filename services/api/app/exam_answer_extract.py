@@ -63,6 +63,9 @@ class ExtractIn(BaseModel):
     item_id: str | None = Field(default=None, max_length=80)
     task: str | None = Field(default="answers", max_length=16)
     roster: str | None = Field(default=None, max_length=20000)
+    # pages of this call in flight; edu sends two calls at once (paper + 答案卷) and splits 4 between
+    # them (edu-core#3164). Unset = the package default.
+    concurrency: int | None = Field(default=None, ge=1, le=4)
 
 
 def _bad(code: str, message: str, status: int = 400) -> HTTPException:
@@ -144,6 +147,7 @@ async def post_exam_answer_extract(
                     subject_name=body.subject_name,
                     task=body.task or "answers",
                     roster=body.roster or "",
+                    concurrency=body.concurrency,
                 )
             else:
                 result = await extract_mod.extract_text(
