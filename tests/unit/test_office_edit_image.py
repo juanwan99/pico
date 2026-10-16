@@ -335,7 +335,7 @@ async def test_generate_image_gateway_fixed_error_no_retry_and_run_shut(
     with pytest.raises(ToolError) as first:
         await generate_image_with_usage("课堂插画", run_id="run-shut")
     assert first.value.code == "image.unavailable"
-    assert "别再调用出图" in first.value.message
+    assert "这一轮别再调用出图" in first.value.message
     assert calls["n"] == 1
     # Same run, reworded prompt: answered at once, New API not reached again.
     with pytest.raises(ToolError) as again:
@@ -348,36 +348,123 @@ async def test_generate_image_gateway_fixed_error_no_retry_and_run_shut(
     assert calls["n"] == 2
 
 
-@pytest.mark.asyncio
-async def test_generate_image_transient_500_does_not_shut_run(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _gateway_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "http://127.0.0.1:3000")
     monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEY", "test-gw-not-a-secret")
     monkeypatch.setenv("PICO_IMAGE_GATEWAY_MODEL", "imagen-4.0-generate-001")
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+
+
+def _png_reply() -> SimpleNamespace:
+    return SimpleNamespace(
+        status_code=200,
+        json=lambda: {"data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]},
+    )
+
+
+@pytest.mark.asyncio
+async def test_generate_image_door_down_shuts_run_after_two_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Vertex proxy down → New API 500 do_request_failed: not on any list, still ≤2 requests a run."""
+    _gateway_env(monkeypatch)
     calls = {"n": 0}
 
     async def fake_post(payload, *, api_key, timeout, url=None):
         calls["n"] += 1
-        if calls["n"] <= 2:
-            body = {"error": {"code": "bad_response_status_code"}}
-            return SimpleNamespace(status_code=500, headers={}, json=lambda: body)
-        return SimpleNamespace(
-            status_code=200,
-            json=lambda: {
-                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
-            },
-        )
+        body = {"error": {"type": "new_api_error", "code": "do_request_failed"}}
+        return SimpleNamespace(status_code=500, headers={}, json=lambda: body)
 
     monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_post)
-    with pytest.raises(ToolError) as busy:
-        await generate_image_with_usage("课堂插画", run_id="run-busy")
-    assert busy.value.code == "image.provider"
+    for prompt in ("课堂插画", "换个说法的插画", "第三种说法"):
+        with pytest.raises(ToolError) as exc:
+            await generate_image_with_usage(prompt, run_id="run-down")
+        assert exc.value.code == "image.unavailable"
+        assert "换一句描述" not in exc.value.message
     assert calls["n"] == 2
-    raw, ext, _usage = await generate_image_with_usage("课堂插画", run_id="run-busy")
-    assert ext == "png" and raw.startswith(b"\x89PNG")
-    assert calls["n"] == 3
+
+
+@pytest.mark.asyncio
+async def test_generate_image_500_message_never_asks_to_reword(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _gateway_env(monkeypatch)
+
+    async def fake_post(payload, *, api_key, timeout, url=None):
+        body = {"error": {"code": "bad_response_status_code"}}
+        return SimpleNamespace(status_code=502, headers={}, json=lambda: body)
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_post)
+    with pytest.raises(ToolError) as exc:
+        await generate_image_bytes("课堂插画")
+    assert exc.value.code == "image.provider"
+    assert "换一句描述" not in exc.value.message
+    assert "和描述怎么写无关" in exc.value.message
+
+
+@pytest.mark.asyncio
+async def test_generate_image_success_resets_run_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _gateway_env(monkeypatch)
+    replies = iter(["500", "ok", "500", "ok"])
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout, url=None):
+        calls["n"] += 1
+        if next(replies) == "500":
+            body = {"error": {"code": "bad_response_status_code"}}
+            return SimpleNamespace(status_code=500, headers={}, json=lambda: body)
+        return _png_reply()
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_post)
+    for _ in range(2):
+        _raw, ext, _usage = await generate_image_with_usage("课堂插画", run_id="run-flaky")
+        assert ext == "png"
+    assert calls["n"] == 4
+
+
+@pytest.mark.asyncio
+async def test_generate_image_spent_run_spare_sends_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The run's spare pool already spent by chat calls: a failed image is not resent."""
+    from pico_orchestrator import upstream
+
+    _gateway_env(monkeypatch)
+    upstream.run_state("run-spent").spare = 0
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout, url=None):
+        calls["n"] += 1
+        body = {"error": {"code": "bad_response_status_code"}}
+        return SimpleNamespace(status_code=500, headers={}, json=lambda: body)
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_post)
+    with pytest.raises(ToolError) as exc:
+        await generate_image_with_usage("课堂插画", run_id="run-spent")
+    assert exc.value.code == "image.provider"
+    assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_image_quota_shuts_run_and_names_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _gateway_env(monkeypatch)
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout, url=None):
+        calls["n"] += 1
+        body = {"error": {"code": "insufficient_user_quota"}}
+        return SimpleNamespace(status_code=500, headers={}, json=lambda: body)
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_post)
+    for _ in range(2):
+        with pytest.raises(ToolError) as exc:
+            await generate_image_with_usage("课堂插画", run_id="run-quota")
+        assert "管理员充值" in exc.value.message
+    assert calls["n"] == 1
 
 
 def _429(retry_after: str | None = None, *, code: str | None = None) -> SimpleNamespace:
