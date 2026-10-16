@@ -80,15 +80,19 @@ Token 规则：
 - `model` 禁止长期留 `pico-fast` / `pico-deep`；档位只进 `extra.ui_model`。
 - **禁止**把 Pi `cost`、倍率、公式写入账本或 extra。
 
-**积分（派生 · 业主 2026-09-03）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py` + `config/channel-rates.json`。表上**不增加**人民币列。token 列仍是提供方桶。
+**积分（派生 · 业主 2026-09-03，统一价 2026-10-16 pico#1315）：** 读路径附加 `points`（`N.NNN` 或 `null`）。换算**只**在 `app/points_meter.py` + `config/channel-rates.json`。表上**不增加**人民币列。token 列仍是提供方桶。
 
 ```text
-成本 = 该渠道价签 × token（或出图/检索按次）
-售价 = 成本 × 2.5
-积分 = 售价(元) × 1000     # 1 元 = 1000 积分
+对话模型 token（不分模型、不分快速/深度）：
+  售价 = 新输入×5 + 缓存命中×0.5 + 缓存写入×5 + 输出×10   # 元/百万 token，teacher_rate
+  深度模式「想」的 token 已在输出里（reasoning ⊂ completion），不另加倍率
+出图 / 检索 / 按次：
+  成本 = 该渠道价签 × 张数或次数（出图有 usageMetadata 时按价签 token）
+  售价 = 成本 × 2.5
+积分 = 售价(元) × 100     # 1 元 = 100 积分
 ```
 
-价签按 **渠道×模型**（同一模型不同渠道必须各有一条）。无价签 → 该渠道锁死，不准调用。钱/钱包在 edu-core；edu 拉 export 的 `points` **禁止再乘**。Pico 不做充值/支付/余额。`pico-fast`/`pico-deep` 是档位不是计费型号。出图优先用提供方 `usageMetadata`；没有则用价签的 `per_image_yuan`。unknown 且无按次价签 → `points=null`（不是 0）。老师面只见积分，禁止 token / 公式。每一轮钉在该条回复末尾：有积分显示「实际」。
+价签按 **渠道×模型**（同一模型不同渠道必须各有一条），记的是真实成本，统一价不改它。无价签 → 该渠道锁死，不准调用（对话模型也一样，统一价不放行没价签的模型）。钱/钱包在 edu-core；edu 拉 export 的 `points` **禁止再乘**。Pico 不做充值/支付/余额。`pico-fast`/`pico-deep` 是档位不是计费型号。出图优先用提供方 `usageMetadata`；没有则用价签的 `per_image_yuan`。unknown 且无按次价签 → `points=null`（不是 0）。老师面只见积分，禁止 token / 公式。每一轮钉在该条回复末尾：有积分显示「实际」。
 
 ---
 

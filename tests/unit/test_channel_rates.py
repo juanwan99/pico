@@ -90,7 +90,7 @@ def test_unpriced_model_locks() -> None:
 def test_seed_card_thousand_input_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
     reset_rate_card()
-    # Live: 36.5 元/百万输入 × 1000 token = 0.0365 元成本 × 2.5 = 91.250 积分
+    # pico#1315 统一价：5 元/百万输入 × 1000 token = 0.005 元 × 100 = 0.500 积分（不看模型成本）
     assert (
         points_from_row(
             tokens_unknown=False,
@@ -100,14 +100,14 @@ def test_seed_card_thousand_input_tokens(monkeypatch: pytest.MonkeyPatch) -> Non
             kind="llm",
             model="gpt-5.6-sol",
         )
-        == "91.250"
+        == "0.500"
     )
 
 
 def test_seed_card_nano_banana_image_is_priced(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
     reset_rate_card()
-    # pico#1301：1K 图标价 $0.0336 × 7.3 ≈ 0.245 元 × 2.5 = 612.5 积分；没登记会报「这一档暂时用不了」
+    # pico#1301：1K 图标价 $0.0336 × 7.3 ≈ 0.245 元 × 2.5 × 100 = 61.25 积分；没登记会报「这一档暂时用不了」
     assert require_rate(kind="image", model="gemini-nano-banana-2.1").per_image_yuan > 0
     assert (
         points_from_row(
@@ -119,14 +119,14 @@ def test_seed_card_nano_banana_image_is_priced(monkeypatch: pytest.MonkeyPatch) 
             kind="image",
             model="gemini-nano-banana-2.1",
         )
-        == "612.500"
+        == "61.250"
     )
 
 
 def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
     reset_rate_card()
-    # Vertex 标价 $1.50/M × 7.3 = 10.95 元/百万输入 × 1000 token × 2.5 = 27.375 积分
+    # 成本表照旧要有这一行（没价签就锁），老师价统一：1000 输入 = 0.500 积分
     assert (
         points_from_row(
             tokens_unknown=False,
@@ -136,7 +136,7 @@ def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -
             kind="llm",
             model="gemini-3.8-flash",
         )
-        == "27.375"
+        == "0.500"
     )
     assert (
         points_from_row(
@@ -147,7 +147,7 @@ def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -
             kind="llm",
             model="grok-4.6",
         )
-        == "36.500"
+        == "0.500"
     )
     gemini_out = points_from_row(
         tokens_unknown=False,
@@ -157,8 +157,8 @@ def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -
         kind="llm",
         model="gemini-3.8-flash",
     )
-    # 54.75 元/百万输出 × 1000 × 2.5 = 136.875 积分
-    assert gemini_out == "136.875"
+    # 统一价 10 元/百万输出 × 1000 = 1.000 积分
+    assert gemini_out == "1.000"
     gemini_cached = points_from_row(
         tokens_unknown=False,
         prompt_tokens=1000,
@@ -168,8 +168,8 @@ def test_seed_card_gemini_and_grok_are_priced(monkeypatch: pytest.MonkeyPatch) -
         kind="llm",
         model="gemini-3.8-flash",
     )
-    # 缓存命中按 1.095 元/百万计，不再免费：1000 × 1.095 / 1e6 × 2.5 × 1000 ≈ 2.738 积分
-    assert gemini_cached == "2.738"
+    # 缓存命中统一 0.5 元/百万，不免费：1000 × 0.5 / 1e6 × 100 = 0.050 积分
+    assert gemini_cached == "0.050"
 
 
 def test_sell_markup_two_point_five() -> None:
@@ -187,3 +187,47 @@ def test_sell_markup_two_point_five() -> None:
     assert cost == 400_000  # 0.40 yuan
     assert sell_millipoints(cost) == 1_000_000  # 1000.000 points
     assert format_millipoints(1_000_000) == "1000.000"
+
+
+def test_seed_card_teacher_price_same_for_every_model_and_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    """pico#1315：老师价不分模型、不分快速深度；4 桶各按统一价，1 元 = 100 积分。"""
+    monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
+    reset_rate_card()
+    card = load_rate_card(force=True)
+    assert card.points_per_yuan == 100
+
+    def pts(model: str) -> str | None:
+        # 100 万新输入 + 100 万缓存读 + 100 万缓存写 + 100 万输出 = 5 + 0.5 + 5 + 10 = 20.5 元
+        return points_from_row(
+            tokens_unknown=False,
+            prompt_tokens=3_000_000,
+            completion_tokens=1_000_000,
+            total_tokens=4_000_000,
+            extra={"cached_tokens": 1_000_000, "cache_write_tokens": 1_000_000},
+            kind="llm",
+            model=model,
+        )
+
+    for model in ("gpt-5.6-sol", "gemini-3.8-flash", "grok-4.6", "gpt-4o", "pico-fast", "pico-deep"):
+        assert pts(model) == "2050.000", model
+    # 没价签的模型照旧锁死，不因为有统一价就放行
+    assert pts("unknown-model") is None
+
+
+def test_seed_card_image_and_search_keep_per_unit_price_on_new_points(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
+    reset_rate_card()
+
+    def per_unit(kind: str, model: str) -> str | None:
+        return points_from_row(
+            tokens_unknown=True,
+            prompt_tokens=None,
+            completion_tokens=None,
+            total_tokens=None,
+            extra={"ok": True},
+            kind=kind,
+            model=model,
+        )
+
+    assert per_unit("image", "imagen-4.0-fast-generate-001") == "36.500"  # 0.146 × 2.5 × 100
+    assert per_unit("search", "web_search") == "14.500"  # 0.058 × 2.5 × 100
