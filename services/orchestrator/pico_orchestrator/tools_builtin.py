@@ -1659,7 +1659,7 @@ def _workspace_handlers(
         image_model = billed_image_model()
         try:
             raw, ext, usage = await _run_bounded(
-                generate_image_with_usage(prompt),
+                generate_image_with_usage(prompt, run_id=current_run_id(principal, store)),
                 # F5: one Retry-After rest (≤ image timeout window) + one POST.
                 seconds=_IMAGE_TIMEOUT_S * 2,
                 code="image.timeout",

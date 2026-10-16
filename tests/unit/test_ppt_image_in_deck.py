@@ -123,7 +123,7 @@ def _media_names(raw: bytes) -> list[str]:
 async def test_teacher_image_then_pptx_has_real_picture(monkeypatch) -> None:
     """Complex: generate_image fixture → generate_pptx_document → zip + size."""
 
-    async def fake_image(prompt: str) -> tuple[bytes, str, None]:
+    async def fake_image(prompt: str, **_kw: object) -> tuple[bytes, str, None]:
         assert "图" in prompt or prompt
         return FIXTURE_PNG, "png", None
 

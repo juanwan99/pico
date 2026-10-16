@@ -327,7 +327,7 @@ async def test_complex_image_then_sandbox_deck_has_media() -> None:
     gw = build_default_gateway(store)
     owner = P()
 
-    async def fake_image(_prompt: str) -> tuple[bytes, str, None]:
+    async def fake_image(_prompt: str, **_kw: object) -> tuple[bytes, str, None]:
         return ONE_PNG, "png", None
 
     with patch(

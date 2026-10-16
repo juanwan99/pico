@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import time
+from collections import OrderedDict
 from datetime import UTC
 from email.utils import parsedate_to_datetime
 from io import BytesIO
@@ -48,6 +49,34 @@ IMAGE_TIMEOUT_S = 90.0
 _429_MAX_TRIES = upstream.CALL_BUDGET
 _429_RETRY_AFTER_CAP_S = IMAGE_TIMEOUT_S
 _429_NON_RETRYABLE_CODES = frozenset({"1113"})
+# New API answers these itself, before or instead of reaching the model: the
+# same request fails the same way however often it is sent or reworded
+# (relaykit/types/error.go). pico#1301: "only imagen models are supported"
+# came back as HTTP 500 convert_request_failed and was sent 8× in one run.
+_GATEWAY_FIXED_CODES = frozenset(
+    {
+        "invalid_request",
+        "count_token_failed",
+        "model_price_error",
+        "invalid_api_type",
+        "json_marshal_failed",
+        "convert_request_failed",
+        "access_denied",
+        "bad_request_body",
+        "channel:model_mapped_error",
+        "channel:param_override_invalid",
+        "channel:header_override_invalid",
+        "channel:invalid_key",
+    }
+)
+_GATEWAY_QUOTA_CODES = frozenset({"insufficient_user_quota", "pre_consume_token_quota_failed"})
+# A run's image door shuts after this many failed requests in a row (5xx,
+# transport, timeout), or at once on a fixed/quota answer. Later
+# generate_image calls in the run answer at once, New API is not reached.
+_RUN_FAILS_TO_SHUT = 2
+_RUN_FAILS: OrderedDict[str, int] = OrderedDict()
+_SHUT_RUNS: OrderedDict[str, ToolError] = OrderedDict()
+_RUNS_KEPT = 512
 _flight_lock = asyncio.Lock()
 _glm_lock = asyncio.Lock()
 _inflight: dict[str, asyncio.Future[tuple[bytes, str, dict[str, int] | None]]] = {}
@@ -62,6 +91,13 @@ NO_KEY_MESSAGE = "出图尚未接通，请告诉学校管理员。不能编造�
 REJECTED_PROVIDER_MESSAGE = "这次没能出图。请稍后重试，不能编造图片。"
 TIMEOUT_MESSAGE = "出图超时（90 秒）。请稍后重试，不能编造图片。"
 REJECT_MESSAGE = "出图服务拒绝了这次请求。请稍后重试或换一句描述，不能编造图片。"
+# 5xx / 429 / transport: the description is not the problem, rewording only resends.
+BUSY_MESSAGE = "出图服务这会儿出错了，和描述怎么写无关。请稍后重试，不能编造图片。"
+UNAVAILABLE_MESSAGE = (
+    "出图通道这会儿接不通，和描述怎么写无关；这一轮别再调用出图，"
+    "如实告诉老师稍后再试。不能编造图片。"
+)
+QUOTA_MESSAGE = "出图额度用完了；这一轮别再调用出图，请老师告诉学校管理员充值。不能编造图片。"
 INVALID_MESSAGE = "出图结果不是可打开的 png/jpg，未保存，不能编造图片。"
 
 
@@ -150,13 +186,13 @@ def billed_image_model() -> str:
 def gateway_uses_gemini_native() -> bool:
     """New API /v1/images/generations only maps imagen-*.
 
-    Live QuantumNous new-api (2026-08-28): gemini-*-image on that
-    path → "only imagen models are supported". Official Gemini
-    flash-image is generateContent. Pico still talks only to New API
+    Live QuantumNous new-api (2026-08-28): any other model on that
+    path → "only imagen models are supported". Every Gemini image
+    model is generateContent, whatever its name says (nano-banana has
+    no "image" in it, pico#1301). Pico still talks only to New API
     (Bearer gateway token), never Google directly.
     """
-    name = gateway_model().lower()
-    return name.startswith("gemini-") and "image" in name
+    return gateway_model().lower().startswith("gemini-")
 
 
 def gateway_generate_content_url() -> str:
@@ -306,6 +342,8 @@ def reset_image_generate_runtime() -> None:
     global _next_post_mono, _flight_lock, _glm_lock
     _next_post_mono = 0.0
     _inflight.clear()
+    _SHUT_RUNS.clear()
+    _RUN_FAILS.clear()
     _flight_lock = asyncio.Lock()
     _glm_lock = asyncio.Lock()
 
@@ -329,7 +367,9 @@ def _arm_rate_gate(delay: float) -> None:
 
 
 def _http_provider_error(response: Any) -> ToolError:
-    err = ToolError("image.provider", REJECT_MESSAGE)
+    status = _http_status(response)
+    rejected = isinstance(status, int) and 400 <= status < 500 and status != 429
+    err = ToolError("image.provider", REJECT_MESSAGE if rejected else BUSY_MESSAGE)
     err.http_status = _http_status(response)
     err.retry_after = _retry_after_header(response)
     err.zhipu_error_code = _zhipu_error_code(response)
@@ -383,7 +423,7 @@ async def _fetch_url(url: str, *, timeout: float) -> bytes:
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         response = await client.get(safe)
     if response.status_code >= 400:
-        raise ToolError("image.provider", REJECT_MESSAGE)
+        raise ToolError("image.provider", BUSY_MESSAGE)
     return response.content
 
 
@@ -479,8 +519,49 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
     return raw, ext
 
 
-async def generate_image_with_usage(prompt: str) -> tuple[bytes, str, dict[str, int] | None]:
+def _shut_error(run_id: str | None) -> ToolError | None:
+    return _SHUT_RUNS.get(run_id) if run_id else None
+
+
+def _keep(table: OrderedDict[str, Any], run_id: str, value: Any) -> None:
+    table[run_id] = value
+    table.move_to_end(run_id)
+    while len(table) > _RUNS_KEPT:
+        table.popitem(last=False)
+
+
+def _shut_run(run_id: str | None, err: ToolError) -> ToolError:
+    if run_id:
+        _keep(_SHUT_RUNS, run_id, err)
+    return err
+
+
+def _door_failed(exc: ToolError) -> bool:
+    """The request reached for the door and the door failed: 5xx, transport, timeout."""
+    if exc.code == "image.timeout":
+        return True
+    if exc.code != "image.provider":
+        return False
+    status = getattr(exc, "http_status", None)
+    return not isinstance(status, int) or status >= 500
+
+
+def _note_door_failure(run_id: str | None) -> bool:
+    """Count one failed request in the run; True once the run's door should shut."""
+    if not run_id:
+        return False
+    n = _RUN_FAILS.get(run_id, 0) + 1
+    _keep(_RUN_FAILS, run_id, n)
+    return n >= _RUN_FAILS_TO_SHUT
+
+
+async def generate_image_with_usage(
+    prompt: str, *, run_id: str | None = None
+) -> tuple[bytes, str, dict[str, int] | None]:
     """Return bytes, format, optional provider usage tokens."""
+    shut = _shut_error(run_id)
+    if shut is not None:
+        raise ToolError(shut.code, shut.message)
     text = (prompt or "").strip()
     if not text:
         raise ToolError("tool.invalid_arguments", "请写要画的内容。")
@@ -513,7 +594,7 @@ async def generate_image_with_usage(prompt: str) -> tuple[bytes, str, dict[str, 
         return await asyncio.shield(fut)
     try:
         async with _glm_lock:
-            result = await _generate_image_campaign(text)
+            result = await _generate_image_campaign(text, run_id=run_id)
         if not fut.done():
             fut.set_result(result)
         return result
@@ -528,20 +609,41 @@ async def generate_image_with_usage(prompt: str) -> tuple[bytes, str, dict[str, 
                 _inflight.pop(key, None)
 
 
-async def _generate_image_campaign(text: str) -> tuple[bytes, str, dict[str, int] | None]:
+async def _generate_image_campaign(
+    text: str, *, run_id: str | None = None
+) -> tuple[bytes, str, dict[str, int] | None]:
     await _respect_rate_gate()
     rate_tries = 0
     provider_retried = False
-    # 429 waits and the one provider retry share the door's budget (pico#1271).
-    call = upstream.Call("image")
+    # 429 waits and the one provider retry share the door's budget (pico#1271):
+    # a refused extra ends the campaign with the last answer.
+    call = upstream.Call("image", run_id=run_id)
+    last: ToolError | None = None
     while True:
+        if not call.allow() and last is not None:
+            raise last
         try:
-            call.allow()
-            return await _generate_image_call(text)
+            result = await _generate_image_call(text)
         except ToolError as exc:
+            last = exc
+            if exc.code == "image.unconfigured":
+                raise _shut_run(run_id, exc)
+            status = getattr(exc, "http_status", None)
+            error_code = str(getattr(exc, "zhipu_error_code", None) or "")
+            if exc.code == "image.provider" and error_code in _GATEWAY_QUOTA_CODES:
+                raise _shut_run(run_id, ToolError("image.unavailable", QUOTA_MESSAGE)) from exc
+            fixed = exc.code == "image.provider" and error_code in _GATEWAY_FIXED_CODES
+            if fixed or (_door_failed(exc) and _note_door_failure(run_id)):
+                logger.warning(
+                    "images gateway %s HTTP %s error_code=%s; run image door shut",
+                    exc.code,
+                    status,
+                    error_code or None,
+                )
+                shut = ToolError("image.unavailable", UNAVAILABLE_MESSAGE)
+                raise _shut_run(run_id, shut) from exc
             if exc.code != "image.provider":
                 raise
-            status = getattr(exc, "http_status", None)
             if status == 429:
                 retry_after = getattr(exc, "retry_after", None)
                 error_code = str(getattr(exc, "zhipu_error_code", None) or "").strip()
@@ -582,6 +684,10 @@ async def _generate_image_campaign(text: str) -> tuple[bytes, str, dict[str, int
                 raise
             logger.warning("images provider failed; retrying once")
             provider_retried = True
+            continue
+        if run_id:
+            _RUN_FAILS.pop(run_id, None)
+        return result
 
 
 async def _generate_image_call(text: str) -> tuple[bytes, str, dict[str, int] | None]:
@@ -621,7 +727,7 @@ async def _bytes_from_openai_image_body(body: Any) -> tuple[bytes, str]:
         except httpx.TimeoutException as exc:
             raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
         except httpx.HTTPError as exc:
-            raise ToolError("image.provider", REJECT_MESSAGE) from exc
+            raise ToolError("image.provider", BUSY_MESSAGE) from exc
     else:
         raise ToolError("image.invalid", INVALID_MESSAGE)
     return _as_png_or_jpeg(raw)
@@ -644,7 +750,7 @@ async def _generate_gateway_call(text: str) -> tuple[bytes, str, dict[str, int] 
             raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
         except httpx.HTTPError as exc:
             logger.warning("gateway generateContent transport failed: %s", type(exc).__name__)
-            raise ToolError("image.provider", REJECT_MESSAGE) from exc
+            raise ToolError("image.provider", BUSY_MESSAGE) from exc
         await _raise_http_response(response, log_name="gateway generateContent")
         try:
             body = response.json()
@@ -674,7 +780,7 @@ async def _generate_gateway_call(text: str) -> tuple[bytes, str, dict[str, int] 
         raise ToolError("image.timeout", TIMEOUT_MESSAGE) from exc
     except httpx.HTTPError as exc:
         logger.warning("gateway images transport failed: %s", type(exc).__name__)
-        raise ToolError("image.provider", REJECT_MESSAGE) from exc
+        raise ToolError("image.provider", BUSY_MESSAGE) from exc
     await _raise_http_response(response, log_name="gateway images")
     try:
         body = response.json()
