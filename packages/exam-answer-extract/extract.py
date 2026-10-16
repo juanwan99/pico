@@ -330,10 +330,15 @@ def _merge_sub(prev: dict[str, Any] | None, nxt: dict[str, Any]) -> dict[str, An
     }
 
 
-def merge_subs(a: list[dict[str, Any]], b: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def merge_subs(a: list[dict[str, Any]], b: list[dict[str, Any]], *, append: int = 0) -> list[dict[str, Any]]:
+    """append: the 小问 a continuation page carries on (its answer goes after the earlier part)."""
     by_sub = {s["sub"]: dict(s) for s in a}
     for s in b:
-        by_sub[s["sub"]] = _merge_sub(by_sub.get(s["sub"]), s)
+        prev = by_sub.get(s["sub"])
+        merged = _merge_sub(prev, s)
+        if append and s["sub"] == append and prev is not None and prev["answer"] and s["answer"]:
+            merged["answer"] = _merge_text(prev["answer"], s["answer"])
+        by_sub[s["sub"]] = merged
     return [by_sub[n] for n in sorted(by_sub)]
 
 
@@ -636,22 +641,116 @@ def items_from_model_text(
     return items
 
 
+def _gap_owner(
+    batches: list[list[dict[str, Any]]], idx: int, pos: int, last: int, order: list[int] | None
+) -> int:
+    """Whose page-top continuation this is when the page before it was not read.
+
+    The question it continues started before this page, and the next 题号 read after it starts
+    later; so it is the question just before that next one (roster order when edu sent the first
+    round's 题号, else next − 1). Never older than the last question read; 0 = unknown, dropped.
+    """
+    nxt = 0
+    for j in range(idx, len(batches)):
+        for item in batches[j][pos + 1 :] if j == idx else batches[j]:
+            if not is_material(item) and item["number"] > 0:
+                nxt = item["number"]
+                break
+        if nxt:
+            break
+    if order:
+        if nxt in order:
+            i = order.index(nxt)
+            owner = order[i - 1] if i > 0 else 0
+        else:
+            owner = 0 if nxt else order[-1]
+    else:
+        owner = nxt - 1 if nxt else 0
+    return owner if owner >= last and owner > 0 else 0
+
+
+def _split_new_marks(text: str, after: int) -> list[tuple[int, str]]:
+    """A continuation page's text cut at the （n）marks that open new 小问 (after+1, after+2, …);
+    the part before the first one carries on 小问 `after`."""
+    s = text or ""
+    marks: list[tuple[int, int, int]] = []
+    for m in _SUB_MARK_RE.finditer(s):
+        if int(m.group(1) or m.group(2)) == after + len(marks) + 1:
+            marks.append((after + len(marks) + 1, m.start(), m.end()))
+    trim = " \n；;。"
+    parts = [(after, s[: marks[0][1]] if marks else s)]
+    for k, (n, _, end) in enumerate(marks):
+        parts.append((n, s[end : marks[k + 1][1] if k + 1 < len(marks) else len(s)]))
+    # a new (n) is kept even with nothing after it (its place in the order still counts)
+    return [(n, t.strip(trim)) for n, t in parts if n != after or t.strip(trim)]
+
+
+def _renumber_continued(item: dict[str, Any], seen: int) -> dict[str, Any]:
+    """Put a continuation page's 小问 under the 卷面 (n) they belong to.
+
+    One page = one call, so the page after 17 (1) numbers its own 小问 from 1 again: 「（2）…」
+    came back as sub 1 and lost to the real (1) in the merge, and 17–21 of a 54-page 讲评 PDF
+    lost every printed answer after (1) that way (edu-core#3164). seen = the owner's last 小问 so
+    far; text before the page's first new (n) still belongs to it and is appended to it.
+    """
+    if not seen or item["type"] in ("single_choice", "multi_choice"):
+        return item
+    subs = item.get("subs") or []
+    # the page's own (n) marks say which 小问 it holds; the stem has them, an answer-only read has
+    # them in the answer
+    targets = [n for n, _ in _split_new_marks(item.get("stem") or item.get("answer") or "", seen)] or [seen]
+    if not subs:
+        parts = [(n, t) for n, t in _split_new_marks(item.get("answer") or "", seen) if t]
+        if parts and len(parts) == 1 and parts[0][0] == seen:
+            parts = [(targets[0], parts[0][1])]  # unmarked answer: the 小问 the stem opens
+            circled = re.match(r"\s*([①-⑳])", item.get("stem") or "")
+            if circled and targets[0] == seen and not re.match(r"\s*[①-⑳]", parts[0][1]):
+                # 「②图中的序列…」 page: its answer is the ② of that 小问
+                parts = [(seen, circled.group(1) + parts[0][1])]
+        if not parts:
+            return item
+        return {
+            **item,
+            "subs": [{"sub": n, "answer": t, "score": None} for n, t in parts],
+            "_tail_sub": seen if parts[0][0] == seen else 0,
+        }
+    nums = [s["sub"] for s in subs]
+    if all(n in targets or n > seen for n in nums):
+        return {**item, "_tail_sub": seen if seen in nums else 0}
+    # numbered from 1 again: map them onto the page's (n) in order
+    pick = {n: targets[min(i, len(targets) - 1)] for i, n in enumerate(nums)}
+    renum: dict[int, dict[str, Any]] = {}
+    for s in subs:
+        t = pick[s["sub"]]
+        prev = renum.get(t)
+        renum[t] = {**s, "sub": t} if prev is None else {**prev, "answer": _merge_text(prev["answer"], s["answer"])}
+    return {
+        **item,
+        "subs": [renum[t] for t in sorted(renum)],
+        "blanks": [{**b, "sub": pick.get(b["sub"], b["sub"])} for b in item.get("blanks") or []],
+        "_tail_sub": seen if seen in renum else 0,
+    }
+
+
 def attach_continued(
-    batches: list[list[dict[str, Any]]], ok: list[bool] | None = None
+    batches: list[list[dict[str, Any]]], ok: list[bool] | None = None, order: list[int] | None = None
 ) -> list[list[dict[str, Any]]]:
     """Page-top content with no new 题号 (number 0) belongs to the last question read so far.
 
     One page = one model call, so the model on page 3 cannot know that its leading
     (3)(4) continue 17 from page 2; it marks them continued and the merge order says whose.
-    Nothing read before it, or the page before it failed (its last question is unknown)
-    → dropped, never hung on a guessed number.
+    Its 小问 are renumbered under the owner's (see _renumber_continued). A page that was not
+    read only hides itself: a continuation after it goes to the question just before the next
+    题号 (_gap_owner), and is dropped only when that is unknown or nothing was read before it.
     """
     last = 0
+    gap = False
+    seen: dict[int, int] = {}
     last_mat: dict[str, Any] | None = None
     out: list[list[dict[str, Any]]] = []
     for idx, batch in enumerate(batches):
         kept: list[dict[str, Any]] = []
-        for item in batch:
+        for pos, item in enumerate(batch):
             if is_material(item):
                 if not item["continued"]:
                     last_mat = {**item, "figures": list(item["figures"])}
@@ -661,15 +760,25 @@ def attach_continued(
                     last_mat["figures"] += item["figures"]
                 continue
             if item["number"] == 0:
-                if last:
-                    kept.append({**item, "number": last})
-                continue
-            kept.append(item)
+                owner = _gap_owner(batches, idx, pos, last, order) if gap else last
+                if owner:
+                    item = _renumber_continued({**item, "number": owner}, seen.get(owner, 0))
+                    last = max(last, owner)
+                    kept.append(item)
+                else:
+                    continue
+            else:
+                kept.append(item)
+            n = item["number"]
+            subs_max = max((s["sub"] for s in item.get("subs") or []), default=0)
+            stem_marks = count_sub_marks(item.get("stem")) if item.get("stem") else 0
+            seen[n] = max(seen.get(n, 0), subs_max, stem_marks)
         numbers = [i["number"] for i in kept if not is_material(i)]
         if numbers:
             last = max(last, max(numbers))
+            gap = False
         if ok is not None and idx < len(ok) and not ok[idx]:
-            last = 0
+            gap = True
             last_mat = None
         out.append(kept)
     return out
@@ -738,7 +847,7 @@ def merge_items(batches: list[list[dict[str, Any]]], *, solve: bool = False) -> 
                 if adds or not prev.get(key):
                     merged[key] = _merge_text(prev.get(key, ""), item.get(key, ""))
             merged["figures"] = (prev.get("figures") or []) + (item.get("figures") or [])
-            subs = merge_subs(prev.get("subs") or [], item.get("subs") or [])
+            subs = merge_subs(prev.get("subs") or [], item.get("subs") or [], append=item.get("_tail_sub") or 0)
             merged["subs"] = subs
             if subs:
                 merged["answer"] = answer_from_subs(merged["answer"], subs)
@@ -751,6 +860,8 @@ def merge_items(batches: list[list[dict[str, Any]]], *, solve: bool = False) -> 
             merged["uncertain"] = bool(prev.get("uncertain") or item.get("uncertain"))
             merged["blanks"] = _merge_blanks(prev.get("blanks") or [], item.get("blanks") or [])
             by_no[item["number"]] = merged
+    for q in by_no.values():
+        q.pop("_tail_sub", None)
     return [by_no[n] for n in sorted(by_no)]
 
 
@@ -1656,13 +1767,28 @@ async def extract_pages(
         again = await asyncio.gather(*(one(p) for p in pages if int(p["page"]) in lost))
         redo = {r[0]: r for r in again}
         results = [redo.get(r[0], r) for r in results]
+    # A page whose text layer prints 【答案】/【解析】 but read back with nothing printed lost them
+    # (讲评 PDF 17–21, edu-core#3164): read it once more; still nothing → the teacher is told below.
+    unprinted: set[int] = set()
+    if task == "paper":
+        unprinted = {
+            r[0] for r in results
+            if r[3]["ok"] and _PRINTED_RE.search(by_page[r[0]].get("text") or "") and not any(map(_has_printed, r[1]))
+        }
+        if unprinted:
+            again = await asyncio.gather(*(one(by_page[n]) for n in sorted(unprinted)))
+            redo = {r[0]: r for r in again if r[3]["ok"] and any(map(_has_printed, r[1]))}
+            results = [redo.get(r[0], r) for r in results]
+            unprinted -= set(redo)
     results.sort(key=lambda r: r[0])
     batches = [items for _, items, _, _ in results]
     reports = [rep for _, _, _, rep in results]
     errors = [RuntimeError(rep["error"]) for rep in reports if not rep["ok"]]
     last_text = next((out for _, _, out, rep in reversed(results) if rep["ok"]), "")
     try:
-        result = _finish("pages", batches, reports, errors, last_text, usage, model_out, task)
+        result = _finish(
+            "pages", batches, reports, errors, last_text, usage, model_out, task, order=roster_numbers(roster) or None
+        )
     except ExtractError as exc:
         # every tagged question filtered off its wrong pages: an empty answer, not a failed read
         if not (on_page and exc.code == "extract.empty" and not errors):
@@ -1687,6 +1813,12 @@ async def extract_pages(
         if missing:
             nums = "、".join(str(n) for n in missing)
             result["warnings"].append(f"第 {nums} 题按所在页没做出答案，请老师核对或手动填")
+    if unprinted:
+        for n in sorted(unprinted):
+            nums = "、".join(str(q["number"]) for q in result["questions"] if n in (q.get("on_pages") or []))
+            result["warnings"].append(
+                f"第 {n} 页文字层里印着答案或解析，读回来没有" + (f"（第 {nums} 题）" if nums else "") + "，请老师按卷面核对"
+            )
     if unthought and task == "solve":
         # 不推理做的答案准头低（一模 5 题不推理答 B、推理答 D），老师得知道哪几页要重点核
         nums = "、".join(str(n) for n in sorted(unthought))
@@ -1707,6 +1839,18 @@ PAGE_TEXT_ONLY_HEAD = (
 )
 
 _ANALYSIS_PICK_RE = re.compile(r"(?:故选|故答案为|答案为|答案是|应选|所以选|因此选)\s*[：:]?\s*([A-H](?:\s*[、,，和与及]?\s*[A-H])*)")
+
+
+_PRINTED_RE = re.compile(r"【\s*(?:答案|解析|详解|分析|点睛)\s*】|(?:^|\n)\s*(?:答案|解析)\s*[:：]")
+
+
+def _has_printed(item: dict[str, Any]) -> bool:
+    """A question read back with something printed on it: answer, analysis, rubric or a 小问 answer."""
+    if is_material(item):
+        return False
+    return bool(item.get("answer") or item.get("analysis") or item.get("rubric")) or any(
+        s.get("answer") for s in item.get("subs") or []
+    )
 
 
 def analysis_pick(q: dict[str, Any]) -> str | None:
@@ -1734,9 +1878,10 @@ def _finish(
     usage: dict[str, Any],
     model_out: dict[str, Any],
     task: str = "answers",
+    order: list[int] | None = None,
 ) -> dict[str, Any]:
     ok = [rep["ok"] for rep in reports] if len(reports) == len(batches) else None
-    attached = attach_continued(batches, ok)
+    attached = attach_continued(batches, ok, order)
     questions = merge_items(attached, solve=task == "solve")
     materials = collect_materials(attached, questions)
     warnings: list[str] = []
