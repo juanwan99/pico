@@ -107,6 +107,11 @@ const { encodeAndFormat } = require('~/server/services/Files/images/encode');
 const { createContextHandlers } = require('~/app/clients/prompts');
 const { resolveConfigServers } = require('~/server/services/MCP');
 const { getMCPServerTools } = require('~/server/services/Config');
+const {
+  registerPicoSteer,
+  postPicoSteer,
+  deliverQueuedSteers,
+} = require('~/server/services/picoSteer');
 const BaseClient = require('~/app/clients/BaseClient');
 const { getMCPManager } = require('~/config');
 const db = require('~/models');
@@ -310,6 +315,27 @@ class AgentClient extends BaseClient {
       },
       { durable: true, expectedCreatedAt: this.jobCreatedAt },
     );
+  }
+
+  /**
+   * pico#1318: hand queued steers straight to the running pico turn (Pi takes
+   * each after its running step); the steer part lands inline as with the
+   * stock drain. Serialized so two quick steers keep their order.
+   *
+   * @param {string} streamId
+   */
+  forwardSteersToPico(streamId) {
+    const step = () =>
+      deliverQueuedSteers({
+        steering: GenerationJobManager.steering,
+        streamId,
+        jobCreatedAt: this.jobCreatedAt,
+        post: (text) =>
+          postPicoSteer({ req: this.options.req, conversationId: this.conversationId, text }),
+        apply: (item) => this.applySteerPart(streamId, item),
+      });
+    this.picoSteerChain = (this.picoSteerChain ?? Promise.resolve()).then(step, step);
+    return this.picoSteerChain;
   }
 
   /**
@@ -1912,11 +1938,21 @@ class AgentClient extends BaseClient {
         config.configurable.last_agent_id = agents[agents.length - 1].id;
 
         this.options.startupTelemetry?.mark('stream_processing_started');
-        await run.processStream({ messages }, config, {
-          callbacks: {
-            [Callback.TOOL_ERROR]: logToolError,
-          },
-        });
+        // The openAI endpoint is pico itself (OPENAI_REVERSE_PROXY → pico-api)
+        // and the only endpoint librechat.yaml turns on.
+        const unregisterPicoSteer =
+          streamId && this.options.agent?.provider === EModelEndpoint.openAI
+            ? registerPicoSteer(streamId, () => this.forwardSteersToPico(streamId))
+            : () => {};
+        try {
+          await run.processStream({ messages }, config, {
+            callbacks: {
+              [Callback.TOOL_ERROR]: logToolError,
+            },
+          });
+        } finally {
+          unregisterPicoSteer();
+        }
 
         // HITL: if the run paused for tool approval, mark the job
         // `requires_action` + emit the prompt and leave the turn unfinalized

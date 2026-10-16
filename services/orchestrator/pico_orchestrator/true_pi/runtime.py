@@ -22,6 +22,7 @@ from pico_orchestrator.pi_runtime import count_write_tool_successes
 from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.run_types import EventEmitter, RunCaps, RunResult
 from pico_orchestrator.tools_builtin import build_default_gateway
+from pico_orchestrator.true_pi import steer as teacher_steer
 from pico_orchestrator.true_pi.client import (
     FakeTransport,
     SubprocessTransport,
@@ -41,7 +42,7 @@ from pico_orchestrator.true_pi.config import (
     session_root,
     tool_hang_seconds,
 )
-from pico_orchestrator.true_pi.events import EventMapState, map_event
+from pico_orchestrator.true_pi.events import EventMapState, _text_from_message, map_event
 from pico_orchestrator.true_pi.runner import LOOK_CAP_STEER, LOOK_STEER
 from pico_orchestrator.true_pi.tool_server import ToolServer
 from pico_orchestrator.user_errors import enrich_fail_payload
@@ -400,6 +401,8 @@ async def _run_true_pi_once(
 
     tool_server: ToolServer | None = None
     client: TruePiRpcClient | None = None
+    live_key = None
+    live: teacher_steer.LiveTurn | None = None
     state = EventMapState()
     stop = asyncio.Event()
     timed_out = asyncio.Event()
@@ -690,6 +693,14 @@ async def _run_true_pi_once(
             if not start_task.done():
                 start_task.cancel()
         start_task.result()
+        if not shadow:
+            # pico#1318: the teacher's next message steers this turn instead of stopping it.
+            live_key = teacher_steer.turn_key(
+                getattr(principal, "school_id", ""),
+                getattr(principal, "membership_id", ""),
+                conversation_id,
+            )
+            live = teacher_steer.register(live_key, client)
         if queued:
             # Out of line: the strip stops saying 排队中. Time in line is not
             # the run's: wall cap and no-progress fuse start now.
@@ -793,6 +804,13 @@ async def _run_true_pi_once(
                     if stop.is_set() or timed_out.is_set() or await is_cancelled():
                         break
                     prev_tool_oks = state.tool_oks
+                    if live is not None and event.type == "message_start":
+                        msg = event.raw.get("message")
+                        if isinstance(msg, dict) and msg.get("role") == "user":
+                            said = _text_from_message(msg)
+                            if live.seen(said):
+                                state.event_kinds.append("run.steer")
+                                await emit("run.steer", {"text": said[:500], **tag})
                     # Leftovers of an aborted turn (dropped below until agent_start) open nothing.
                     if not state.awaiting_start or event.type == "agent_start":
                         track_open_tool(open_tools, event.type, event.raw, loop.time(), hang_limit)
@@ -851,9 +869,13 @@ async def _run_true_pi_once(
                         except Exception as exc:  # noqa: BLE001 — a missed reminder never fails a run
                             logger.warning("true_pi look cap steer failed: %s", type(exc).__name__)
                     if state.settled:
+                        if live is not None:
+                            live.open = False
                         break
 
             consumer = asyncio.create_task(_consume())
+            if live is not None:
+                live.open = True
             hung_at: float | None = None
             try:
                 # Consume must run while wait_response sits on prompt ack.
@@ -990,6 +1012,8 @@ async def _run_true_pi_once(
                             break
                     await asyncio.sleep(0.05)
             finally:
+                if live is not None:
+                    live.open = False
                 if not consumer.done():
                     consumer.cancel()
                     with suppress(asyncio.CancelledError):
@@ -1068,6 +1092,28 @@ async def _run_true_pi_once(
                 state.provider_error = f"resume produced no new turn after: {reason}"
                 state.settled = True
                 state.no_resume = True
+        # pico#1318: a message steered in as Pi was ending never got a turn of its
+        # own. Pi still holds it queued; clear that and say it as the next prompt.
+        while (
+            live is not None
+            and live.pending
+            and state.settled
+            and not state.provider_error
+            and not await is_cancelled()
+        ):
+            said = live.take_pending()
+            with suppress(TruePiClientError):
+                await client.clear_queue()
+            state.settled = False
+            if hasattr(transport, "plan_agent_ends"):
+                transport.plan_agent_ends = 0
+                transport.plan_first_held_at = None
+            for text in said:
+                state.event_kinds.append("run.steer")
+                await emit("run.steer", {"text": text[:500], "late": True, **tag})
+            early = await _drive("\n\n".join(said), [])
+            if early is not None:
+                return early
         if state.visual_output:
             logger.info(
                 "true_pi look run_id=%s steered=%s reads=%s",
@@ -1303,6 +1349,7 @@ async def _run_true_pi_once(
         from pico_orchestrator.llm_file_pass import forget_turn_files
 
         forget_turn_files(rid)
+        teacher_steer.unregister(live_key, live)
         stop.set()
         watcher.cancel()
         with suppress(asyncio.CancelledError):
