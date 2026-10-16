@@ -26,6 +26,7 @@ from pico_orchestrator.image_generate import (
     NO_KEY_MESSAGE,
     REJECTED_PROVIDER_MESSAGE,
     generate_image_bytes,
+    generate_image_with_usage,
     reset_image_generate_runtime,
     usage_from_gemini_body,
 )
@@ -306,6 +307,77 @@ async def test_generate_image_provider_retries_once_then_ok(
     assert calls["n"] == 2
     assert ext == "png"
     assert raw.startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_generate_image_gateway_fixed_error_no_retry_and_run_shut(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pico#1301 live: New API's own 500 convert_request_failed went out 8× in one run."""
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "http://127.0.0.1:3000")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEY", "test-gw-not-a-secret")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_MODEL", "imagen-4.0-generate-001")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout, url=None):
+        calls["n"] += 1
+        body = {
+            "error": {
+                "message": "only imagen models are supported",
+                "type": "new_api_error",
+                "code": "convert_request_failed",
+            }
+        }
+        return SimpleNamespace(status_code=500, headers={}, json=lambda: body)
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_post)
+    with pytest.raises(ToolError) as first:
+        await generate_image_with_usage("课堂插画", run_id="run-shut")
+    assert first.value.code == "image.unavailable"
+    assert "别再调用出图" in first.value.message
+    assert calls["n"] == 1
+    # Same run, reworded prompt: answered at once, New API not reached again.
+    with pytest.raises(ToolError) as again:
+        await generate_image_with_usage("换个说法的插画", run_id="run-shut")
+    assert again.value.code == "image.unavailable"
+    assert calls["n"] == 1
+    # Another run still tries (the door may be fixed by then).
+    with pytest.raises(ToolError):
+        await generate_image_with_usage("课堂插画", run_id="run-other")
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_generate_image_transient_500_does_not_shut_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "http://127.0.0.1:3000")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_KEY", "test-gw-not-a-secret")
+    monkeypatch.setenv("PICO_IMAGE_GATEWAY_MODEL", "imagen-4.0-generate-001")
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    calls = {"n": 0}
+
+    async def fake_post(payload, *, api_key, timeout, url=None):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            body = {"error": {"code": "bad_response_status_code"}}
+            return SimpleNamespace(status_code=500, headers={}, json=lambda: body)
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "data": [{"b64_json": base64.b64encode(ONE_PNG).decode("ascii")}]
+            },
+        )
+
+    monkeypatch.setattr("pico_orchestrator.image_generate._post_gateway", fake_post)
+    with pytest.raises(ToolError) as busy:
+        await generate_image_with_usage("课堂插画", run_id="run-busy")
+    assert busy.value.code == "image.provider"
+    assert calls["n"] == 2
+    raw, ext, _usage = await generate_image_with_usage("课堂插画", run_id="run-busy")
+    assert ext == "png" and raw.startswith(b"\x89PNG")
+    assert calls["n"] == 3
 
 
 def _429(retry_after: str | None = None, *, code: str | None = None) -> SimpleNamespace:

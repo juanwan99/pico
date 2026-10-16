@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import time
+from collections import OrderedDict
 from datetime import UTC
 from email.utils import parsedate_to_datetime
 from io import BytesIO
@@ -48,6 +49,34 @@ IMAGE_TIMEOUT_S = 90.0
 _429_MAX_TRIES = upstream.CALL_BUDGET
 _429_RETRY_AFTER_CAP_S = IMAGE_TIMEOUT_S
 _429_NON_RETRYABLE_CODES = frozenset({"1113"})
+# New API answers these itself before (or instead of) reaching the model: the
+# same request fails the same way however often it is sent or reworded
+# (relaykit/types/error.go). pico#1301: "only imagen models are supported"
+# came back as HTTP 500 convert_request_failed and was retried 8× in one run.
+_GATEWAY_FIXED_CODES = frozenset(
+    {
+        "invalid_request",
+        "count_token_failed",
+        "model_price_error",
+        "invalid_api_type",
+        "json_marshal_failed",
+        "read_request_body_failed",
+        "convert_request_failed",
+        "access_denied",
+        "bad_request_body",
+        "model_not_found",
+        "channel:model_mapped_error",
+        "channel:param_override_invalid",
+        "channel:header_override_invalid",
+        "channel:invalid_key",
+        "insufficient_user_quota",
+        "pre_consume_token_quota_failed",
+    }
+)
+# Runs whose image door is shut: later generate_image calls in the run answer
+# at once instead of reaching New API again.
+_SHUT_RUNS: OrderedDict[str, ToolError] = OrderedDict()
+_SHUT_RUNS_MAX = 512
 _flight_lock = asyncio.Lock()
 _glm_lock = asyncio.Lock()
 _inflight: dict[str, asyncio.Future[tuple[bytes, str, dict[str, int] | None]]] = {}
@@ -62,6 +91,10 @@ NO_KEY_MESSAGE = "出图尚未接通，请告诉学校管理员。不能编造�
 REJECTED_PROVIDER_MESSAGE = "这次没能出图。请稍后重试，不能编造图片。"
 TIMEOUT_MESSAGE = "出图超时（90 秒）。请稍后重试，不能编造图片。"
 REJECT_MESSAGE = "出图服务拒绝了这次请求。请稍后重试或换一句描述，不能编造图片。"
+UNAVAILABLE_MESSAGE = (
+    "出图通道这会儿接不通，和描述怎么写无关；这次对话别再调用出图，"
+    "如实告诉老师稍后再试。不能编造图片。"
+)
 INVALID_MESSAGE = "出图结果不是可打开的 png/jpg，未保存，不能编造图片。"
 
 
@@ -306,6 +339,7 @@ def reset_image_generate_runtime() -> None:
     global _next_post_mono, _flight_lock, _glm_lock
     _next_post_mono = 0.0
     _inflight.clear()
+    _SHUT_RUNS.clear()
     _flight_lock = asyncio.Lock()
     _glm_lock = asyncio.Lock()
 
@@ -479,8 +513,26 @@ async def generate_image_bytes(prompt: str) -> tuple[bytes, str]:
     return raw, ext
 
 
-async def generate_image_with_usage(prompt: str) -> tuple[bytes, str, dict[str, int] | None]:
+def _shut_error(run_id: str | None) -> ToolError | None:
+    return _SHUT_RUNS.get(run_id) if run_id else None
+
+
+def _shut_run(run_id: str | None, err: ToolError) -> None:
+    if not run_id:
+        return
+    _SHUT_RUNS[run_id] = err
+    _SHUT_RUNS.move_to_end(run_id)
+    while len(_SHUT_RUNS) > _SHUT_RUNS_MAX:
+        _SHUT_RUNS.popitem(last=False)
+
+
+async def generate_image_with_usage(
+    prompt: str, *, run_id: str | None = None
+) -> tuple[bytes, str, dict[str, int] | None]:
     """Return bytes, format, optional provider usage tokens."""
+    shut = _shut_error(run_id)
+    if shut is not None:
+        raise ToolError(shut.code, shut.message)
     text = (prompt or "").strip()
     if not text:
         raise ToolError("tool.invalid_arguments", "请写要画的内容。")
@@ -513,7 +565,7 @@ async def generate_image_with_usage(prompt: str) -> tuple[bytes, str, dict[str, 
         return await asyncio.shield(fut)
     try:
         async with _glm_lock:
-            result = await _generate_image_campaign(text)
+            result = await _generate_image_campaign(text, run_id=run_id)
         if not fut.done():
             fut.set_result(result)
         return result
@@ -528,20 +580,33 @@ async def generate_image_with_usage(prompt: str) -> tuple[bytes, str, dict[str, 
                 _inflight.pop(key, None)
 
 
-async def _generate_image_campaign(text: str) -> tuple[bytes, str, dict[str, int] | None]:
+async def _generate_image_campaign(
+    text: str, *, run_id: str | None = None
+) -> tuple[bytes, str, dict[str, int] | None]:
     await _respect_rate_gate()
     rate_tries = 0
     provider_retried = False
     # 429 waits and the one provider retry share the door's budget (pico#1271).
-    call = upstream.Call("image")
+    call = upstream.Call("image", run_id=run_id)
     while True:
         try:
             call.allow()
             return await _generate_image_call(text)
         except ToolError as exc:
+            if exc.code == "image.unconfigured":
+                _shut_run(run_id, exc)
             if exc.code != "image.provider":
                 raise
             status = getattr(exc, "http_status", None)
+            if str(getattr(exc, "zhipu_error_code", None) or "") in _GATEWAY_FIXED_CODES:
+                logger.warning(
+                    "images gateway HTTP %s error_code=%s; fixed, no retry, run shut",
+                    status,
+                    exc.zhipu_error_code,
+                )
+                err = ToolError("image.unavailable", UNAVAILABLE_MESSAGE)
+                _shut_run(run_id, err)
+                raise err from exc
             if status == 429:
                 retry_after = getattr(exc, "retry_after", None)
                 error_code = str(getattr(exc, "zhipu_error_code", None) or "").strip()
