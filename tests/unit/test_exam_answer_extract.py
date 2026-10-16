@@ -1853,3 +1853,64 @@ def test_thinking_adds_output_headroom(monkeypatch) -> None:
     assert ex.think_tokens() == 16_000
     monkeypatch.setenv("PICO_EXAM_EXTRACT_THINK_TOKENS", "24000")
     assert ex.think_tokens() == 24_000
+
+
+@pytest.mark.asyncio
+async def test_hedged_sends_a_copy_when_the_first_call_stalls_and_takes_the_first_answer():
+    """edu-core#3164: a 489-token page sat 236 s at the relay; the same page re-sent took 7 s."""
+    calls: list[int] = []
+
+    async def make() -> str:
+        calls.append(len(calls))
+        if len(calls) == 1:
+            await asyncio.sleep(5)
+            return "slow"
+        return "fast"
+
+    assert await ex.hedged(make, after=0.05) == "fast"
+    assert calls == [0, 1]
+
+    calls.clear()
+
+    async def quick() -> str:
+        calls.append(len(calls))
+        return "once"
+
+    assert await ex.hedged(quick, after=1) == "once"
+    assert calls == [0]
+
+
+@pytest.mark.asyncio
+async def test_hedged_copy_waits_for_its_slot_and_both_failing_raises_the_first_error():
+    slot = asyncio.Semaphore(1)
+    await slot.acquire()
+    n = [0]
+
+    async def make() -> str:
+        n[0] += 1
+        if n[0] == 1:
+            await asyncio.sleep(0.2)
+            raise RuntimeError("first")
+        raise RuntimeError("second")
+
+    with pytest.raises(RuntimeError, match="first"):
+        await ex.hedged(make, after=0.05, slot=slot)
+    assert n[0] == 1  # the copy never got a slot
+
+
+@pytest.mark.asyncio
+async def test_stalled_page_read_is_hedged_inside_extract_pages(monkeypatch):
+    monkeypatch.setenv("PICO_EXAM_EXTRACT_HEDGE_SECONDS", "0.05")
+    sent: dict[int, int] = {}
+
+    async def complete(messages, **_):
+        img = next(p for p in messages[-1]["content"] if p["type"] == "image")
+        page = int(base64.b64decode(img["data_b64"]).decode())
+        sent[page] = sent.get(page, 0) + 1
+        if page == 2 and sent[page] == 1:
+            await asyncio.sleep(30)
+        return json.dumps([{"number": page, "type": "single_choice", "answer": "A"}])
+
+    result = await asyncio.wait_for(ex.extract_pages([_page(1), _page(2)], complete=complete), timeout=5)
+    assert [q["number"] for q in result["questions"]] == [1, 2]
+    assert sent == {1: 1, 2: 2}

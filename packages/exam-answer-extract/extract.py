@@ -1125,6 +1125,55 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_seconds(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+async def hedged(
+    make: Callable[[], Awaitable[str]], *, after: float, slot: asyncio.Semaphore | None = None
+) -> str:
+    """Send once; no answer after `after` seconds → send the same once more, first answer wins.
+
+    The copy waits for a free `slot` (it never takes a page's place); the loser is cancelled.
+    Both failed → the first one's error.
+    """
+    first = asyncio.ensure_future(make())
+    done, _ = await asyncio.wait({first}, timeout=after)
+    if done:
+        return first.result()
+
+    logger.warning("exam extract call no answer after %ss, sending a copy", after)
+    started = asyncio.Event()
+
+    async def copy() -> str:
+        if slot is None:
+            started.set()
+            return await make()
+        async with slot:
+            started.set()
+            return await make()
+
+    second = asyncio.ensure_future(copy())
+    pending = {first, second}
+    try:
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                if task.exception() is None:
+                    return task.result()
+            if first in done and not started.is_set():
+                break  # the first failed and the copy never got a slot: nothing left to wait for
+        raise first.exception() if first.done() and first.exception() else second.exception()
+    finally:
+        for task in (first, second):
+            if not task.done():
+                task.cancel()
+
+
 def _preview(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip()[:80]
 
@@ -1257,6 +1306,14 @@ _DEFAULT_CONCURRENCY = 4
 _DEFAULT_PAGE_EFFORT = "low"
 _DEFAULT_SOLVE_EFFORT = "medium"
 _DEFAULT_THINK_TOKENS = 16_000
+# A page read that has not answered after this long gets the same request once more, and the
+# first answer wins. Live (edu-core#3164 probe, 66 page reads): 300–700-token reads normally take
+# 6–11 s, yet 7 of them sat 64–233 s (one 489-token page 236 s, the same page 7 s when re-sent):
+# the relay stalls, the page is not heavy. Raising the 240 s limit or cutting pages fixes neither.
+# Long legit reads (10k-token outputs, 70–100 s) may get a copy too; the first one still wins.
+_DEFAULT_HEDGE_S = 60
+# copies in flight per paper on top of its pages (the relay key's slot cap still bounds all)
+_DEFAULT_HEDGE_SLOTS = 2
 
 
 def think_tokens() -> int:
@@ -1572,6 +1629,16 @@ async def extract_pages(
 
     thinking = task_thinking(task, page_thinking())
     unthought: set[int] = set()  # 推爆了、不推理读成的页
+    hedge_after = _env_seconds("PICO_EXAM_EXTRACT_HEDGE_SECONDS", _DEFAULT_HEDGE_S)
+    hedge_slot = asyncio.Semaphore(_env_int("PICO_EXAM_EXTRACT_HEDGE_SLOTS", _DEFAULT_HEDGE_SLOTS))
+
+    async def plain(messages: list[dict[str, Any]]) -> str:
+        # a read without thinking is short; one that sits past hedge_after is a stalled relay call
+        return await hedged(
+            lambda: _complete_with_retry(complete, messages, thinking=False, usage=usage, model_out=model_out),
+            after=hedge_after,
+            slot=hedge_slot,
+        )
 
     async def read(image: dict[str, Any] | None, number: int, text: str = "") -> str:
         content: list[dict[str, Any]] = [
@@ -1592,7 +1659,7 @@ async def extract_pages(
             ]
         messages = [{"role": "system", "content": prompts["system"]}, {"role": "user", "content": content}]
         if not thinking:
-            return await _complete_with_retry(complete, messages, thinking=False, usage=usage, model_out=model_out)
+            return await plain(messages)
         # 推理不封顶：难页推满时限 / 输出上限，答案截断或整页超时（一模 21 题两条带那页推 23k、
         # 第 20、21 题整题没做出，edu-core#3164）。推一次，推爆了这页不推理再读，不丢页。
         try:
@@ -1607,7 +1674,7 @@ async def extract_pages(
             if not json_looks_truncated(out) and parse_json_array(out) is not None:
                 return out
             logger.warning("exam extract page %s thinking ran out, reading without", number)
-        out = await _complete_with_retry(complete, messages, thinking=False, usage=usage, model_out=model_out)
+        out = await plain(messages)
         unthought.add(number)
         return out
 
