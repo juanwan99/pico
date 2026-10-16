@@ -129,27 +129,23 @@ def test_catalog_is_one_line_not_deliverable_body():
 
 
 def test_system_md_slim_and_catalog_not_scene_weld():
+    """pico#1320: system.md shrank to a ~1.6k-char skeleton — tool usage paragraphs
+    moved into tool descriptions. The catalog stays a one-liner, not a scene weld."""
     body = pico_system_text()
-    assert "This block is **SYSTEM**" in body
-    assert "Default is a chat answer" in body
-    assert "Being listed does **not** mean you must call them" in body
-    assert "School library search is in scope this turn" in body
-    assert "generate_diagram" in body
-    assert "`publish_html_page` is not a Pico capability" in body
-    assert "school-admin approval" in body
-    assert "If `publish_html_page` is listed this turn" not in body
-    assert "parks until the teacher confirms this exact page" not in body
+    assert "You are **Pico**" in body
+    assert "pick a sensible default and go" in body
+    assert "ask only when you cannot go on without it" in body
+    assert "Say something is done only when a tool result shows it" in body
     assert "`skill-deliverable`:" in body
     assert "本轮交付真实文件" not in body
     assert "Engineering delivery" not in body
     assert "Open a public website" not in body
-    assert "sandbox_office_lib" in body
-    assert "siblings" in body
+    assert "`docx`:" in body
     assert "课件" not in body
     assert "通知" not in body
     assert "这是什么" not in body
     assert "Landing requirement" not in body
-    assert "A tool returning ok is not finished" in body
+    assert len(body) < 2500  # slim skeleton, not the old long tool-usage weld
 
 
 def test_hung_skill_body_only_when_mounted():

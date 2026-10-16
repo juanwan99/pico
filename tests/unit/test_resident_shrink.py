@@ -97,7 +97,7 @@ def test_no_tool_picker_copy() -> None:
         encoding="utf-8"
     )
     assert "请选工具" not in ts
-    assert "sandbox_office_lib" in body
+    assert "sandbox_office_lib" in build_default_gateway().tools
     assert "generate_pptx_document" not in CORE_VISIBLE_TOOLS
 
 

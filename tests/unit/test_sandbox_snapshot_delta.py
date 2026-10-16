@@ -137,8 +137,7 @@ async def test_real_chromium_delta_and_old_ref_still_hits_the_right_box(tmp_path
 
 @pytest.mark.asyncio
 async def test_real_chromium_sees_and_types_into_iframes_and_types_slowly(tmp_path) -> None:
-    from pico_orchestrator.gateway import ToolError
-    from sandbox_worker.browser import HUMAN_REQUIRED_CODE, PlaywrightPage
+    from sandbox_worker.browser import PlaywrightPage
 
     pw, browser = await _chromium()
     try:
@@ -168,15 +167,14 @@ async def test_real_chromium_sees_and_types_into_iframes_and_types_slowly(tmp_pa
         assert "你好，这是测试邮件" in frame_text
         assert "你好，这是测试邮件" in await surface.snapshot()
 
-        # A password box focused inside an iframe still stops press_key.
+        # pico#1320: keys go into a password box too (inside an iframe as well).
         await page.set_content(
             "<iframe srcdoc=\"<input id=p type=password>\"></iframe>"
         )
         await page.wait_for_timeout(200)
         await page.frames[1].focus("#p")
-        with pytest.raises(ToolError) as exc:
-            await surface.press_key("a")
-        assert exc.value.code == HUMAN_REQUIRED_CODE
+        await surface.press_key("a")
+        assert await page.frames[1].evaluate("document.getElementById('p').value") == "a"
     finally:
         await browser.close()
         await pw.stop()

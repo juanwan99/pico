@@ -28,7 +28,7 @@ from pico_orchestrator.tools_builtin import build_default_gateway
 from pico_orchestrator.web_guard import parse_public_http_url
 from sandbox_worker.browser import ENGINE_NAME, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 from sandbox_worker.ports import SANDBOX_DEFAULT_PORT, assert_listen_port
-from sandbox_worker.runtime import HUMAN_LOGIN_COPY, RUNTIME, automation_hostile_reason
+from sandbox_worker.runtime import HUMAN_LOGIN_COPY, RUNTIME
 
 
 @dataclass
@@ -198,7 +198,7 @@ async def test_browser_open_public_page_and_view_copy(embedded_runtime) -> None:
     assert opened["title"] == "Example Domain"
     assert opened["engine"] == ENGINE_NAME
     assert HUMAN_LOGIN_COPY in opened["human_copy"]
-    assert "不要在聊天里发送密码" in opened["message"]
+    assert "可以直接在画面里操作" in opened["message"]
     assert opened["view_path"].startswith("/v1/sandbox/sessions/")
     shot = await gw.invoke(
         owner, "sandbox_browser_screenshot", {"session_id": opened["session_id"]}
@@ -218,7 +218,7 @@ async def test_browser_open_public_page_and_view_copy(embedded_runtime) -> None:
         input_path="/input",
     )
     assert LOGIN_COPY in html
-    assert "不要在聊天里发送密码" in html
+    assert "可以直接在画面里操作" in html
 
 
 @pytest.mark.asyncio
@@ -266,30 +266,6 @@ async def test_browser_cross_account_denied(embedded_runtime) -> None:
         )
     # AI tools always use the caller's own desk (#1233): the outsider has none.
     assert denied.value.code == "sandbox.session_not_found"
-
-
-@pytest.mark.asyncio
-async def test_wechat_jiaowu_fail_honestly_not_required(embedded_runtime) -> None:
-    gw = build_default_gateway(MemoryArtifactStore(run_id="run-b2"))
-    owner = P("school-a", "member-a", ["ai:run"])
-    with pytest.raises(ToolError) as wechat:
-        await gw.invoke(
-            owner,
-            "sandbox_browser_open",
-            {"url": "https://open.weixin.qq.com/connect/qrconnect"},
-        )
-    assert wechat.value.code == "sandbox.site_blocks_automation"
-    assert "微信" in wechat.value.message
-    assert "不要在聊天里发送密码" in wechat.value.message
-    with pytest.raises(ToolError) as jiaowu:
-        await gw.invoke(
-            owner,
-            "sandbox_browser_open",
-            {"url": "https://jwxt.example.edu.cn/login"},
-        )
-    assert jiaowu.value.code == "sandbox.site_blocks_automation"
-    assert "教务" in jiaowu.value.message
-    assert automation_hostile_reason("https://example.com/") is None
 
 
 @pytest.mark.asyncio
@@ -490,7 +466,7 @@ def test_s2_raster_of_banner_is_not_b2_viewport() -> None:
 
     fake = raster_html_to_png(
         "<!DOCTYPE html><html><body>"
-        "<div id='pico-b2-banner'>请在此画面自行登录，不要在聊天里发送密码</div>"
+        "<div id='pico-b2-banner'>这是你的隔离浏览器，可以直接在画面里操作</div>"
         "<p>url: https://example.com/</p><h1>Example Domain</h1></body></html>"
     )
     assert fake.startswith(PNG_MAGIC)

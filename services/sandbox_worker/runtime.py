@@ -21,7 +21,6 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.sandbox_persist import (
@@ -54,7 +53,7 @@ from sandbox_worker.office import (
 
 logger = logging.getLogger(__name__)
 
-HUMAN_LOGIN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
+HUMAN_LOGIN_COPY = "这是你的隔离浏览器，可以直接在画面里操作"
 HUMAN_OFFICE_COPY = "沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF，也不是下载。"
 SESSION_TTL_S = int(os.environ.get("PICO_SANDBOX_TTL_S") or str(30 * 60))
 MAX_SESSIONS = int(os.environ.get("PICO_SANDBOX_MAX_SESSIONS") or "8")
@@ -95,22 +94,6 @@ HANDS_COPY = {
     "press_key": "已按键。",
     "wait_for": "已等到。",
 }
-
-_WECHAT_HOST_MARKERS = (
-    "wx.qq.com",
-    "weixin.qq.com",
-    "wechat.com",
-    "work.weixin.qq.com",
-    "open.weixin.qq.com",
-    "mp.weixin.qq.com",
-)
-_JIAOWU_HOST_MARKERS = (
-    "jwxt",
-    "jiaowu",
-    "jwglxt",
-    "urp.school",
-    "eas.admin",
-)
 
 OpenBrowser = Callable[..., Awaitable[BrowserPage]]
 
@@ -215,29 +198,6 @@ def isolation_tuple(school_id: str, membership_id: str, run_id: str | None) -> t
         (run_id or "").strip() or "_norun",
     )
 
-
-def _host_of(url: str) -> str:
-    return (urlparse(url).hostname or "").strip().lower().rstrip(".")
-
-
-def automation_hostile_reason(url: str) -> str | None:
-    """Honest fail for sites that commonly block automation. Not a success path."""
-    host = _host_of(url)
-    if not host:
-        return None
-    if any(marker in host for marker in _WECHAT_HOST_MARKERS):
-        return (
-            "该站点（微信）通常禁止自动化登录，本卡不要求登录成功。"
-            "请改用公开页演示，或在隔离画面里自行操作。"
-            f"{HUMAN_LOGIN_COPY}"
-        )
-    if any(marker in host for marker in _JIAOWU_HOST_MARKERS):
-        return (
-            "该站点（教务）通常禁止自动化登录，本卡不要求登录成功。"
-            "请改用公开页（例如 example.com）演示人在环画面。"
-            f"{HUMAN_LOGIN_COPY}"
-        )
-    return None
 
 
 def redact_secrets(payload: dict[str, Any], secret_fields: set[str] | None = None) -> dict[str, Any]:
@@ -435,9 +395,6 @@ class SandboxRuntime:
             )
         await self._purge()
         parse_public_http_url(url)
-        hostile = automation_hostile_reason(url)
-        if hostile:
-            raise ToolError("sandbox.site_blocks_automation", hostile)
         school, member, run = isolation_tuple(school_id, membership_id, run_id)
         existing = self._find_desk(school, member)
         if existing is not None:
@@ -448,9 +405,6 @@ class SandboxRuntime:
         stored = False
         try:
             parse_public_http_url(page.url)
-            hostile = automation_hostile_reason(page.url)
-            if hostile:
-                raise ToolError("sandbox.site_blocks_automation", hostile)
             session_id = "sbox_" + secrets.token_hex(12)
             ws = workspace_id_for(school, member, run)
             win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="browser", surface=page)
@@ -774,8 +728,8 @@ class SandboxRuntime:
         """AI hands (#1207): one Playwright action, then the page snapshot — after
         an action only what changed (#1222); `snapshot` itself is always full.
 
-        Password / captcha typing and payment clicks are refused inside the
-        browser adapter (sandbox.human_required). Never logs `text`.
+        Payment clicks are refused inside the browser adapter
+        (sandbox.human_required). Never logs `text`.
         """
         await self._purge()
         if session.human_hold:
@@ -786,14 +740,10 @@ class SandboxRuntime:
         session.ai_acted_at = time.time()
         window = self._hands(session)
         hands: BrowserHands = window.surface  # type: ignore[assignment]
-        left: list[str] = []
         page_result: Any = None
         page_file_meta: dict[str, Any] = {}
         if verb == "navigate":
             parse_public_http_url(url)
-            hostile = automation_hostile_reason(url)
-            if hostile:
-                raise ToolError("sandbox.site_blocks_automation", hostile)
             await hands.navigate(url)
         elif verb == "navigate_back":
             await hands.navigate_back()
@@ -804,7 +754,7 @@ class SandboxRuntime:
         elif verb == "tabs":
             await hands.tabs(tab_action or "list", int(index or 0))
         elif verb == "fill_form":
-            left = await hands.fill_form(list(fields or []))
+            await hands.fill_form(list(fields or []))
         elif verb == "file_upload":
             await hands.upload_files(ref, self._upload_payload(session, filenames, files))
         elif verb == "page_file":
@@ -826,8 +776,6 @@ class SandboxRuntime:
         await self._sync(session)
         await self._save_login(session)
         message = HANDS_COPY.get(verb, APPLIED_COPY)
-        if verb == "fill_form" and left:
-            message += "、".join(dict.fromkeys(left)) + "格留给老师在画面里填。"
         dialogs = hands.take_dialogs()
         if dialogs:
             message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)

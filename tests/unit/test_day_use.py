@@ -47,14 +47,13 @@ def test_build_day_use_has_name_and_titles() -> None:
         display_name="孙骏博",
         recent_titles=["教案.docx", "校历.md"],
     )
+    assert "## Teacher" in block
     assert "孙骏博" in block
     assert "教案.docx" in block
     assert "校历.md" in block
-    assert "not a memory store" in block
-    assert "Pi official compaction" in block
 
 
 def test_pico_system_text_appends_day_use() -> None:
     body = pico_system_text(day_use=build_day_use_block(display_name="Alice"))
     assert "Alice" in body
-    assert "Day-use context" in body
+    assert "## Teacher" in body

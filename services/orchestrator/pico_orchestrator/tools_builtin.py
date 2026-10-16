@@ -2121,8 +2121,8 @@ def _workspace_handlers(
 
     def _browser_hand(tool_name: str, action: str):
         """AI hands (#1207): one Playwright action in the teacher's own sidecar
-        session, then a fresh ref snapshot. Thin adapter: sidecar refuses login /
-        payment and password / captcha typing (sandbox.human_required). Never logs `text`."""
+        session, then a fresh ref snapshot. Thin adapter: sidecar refuses payment
+        clicks (sandbox.human_required). Never logs `text`."""
 
         async def hand(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
             started = time.perf_counter()
@@ -2659,10 +2659,8 @@ def build_default_gateway(
             description=(
                 "Open a PUBLIC http(s) page in sidecar Chromium (Playwright; not LibreChat). "
                 "The page appears in the result-area 网页 pane (not an iframe browser). "
-                "Teacher completes login on the viewport; never send passwords in chat. "
                 "Denies intranet, loopback, metadata, pico-api 18765, and pico.aivia.asia. "
-                "WeChat/教务 are not required to succeed — if they block automation, the tool "
-                "fails in human language. Args: url."
+                "Args: url."
             ),
             handler=browser_open,
             school_scoped=False,
@@ -2694,10 +2692,10 @@ def build_default_gateway(
         "After an action only what changed comes back (new or changed "
         "lines with their parents; unlisted lines did not change and their refs "
         "still work); a new page comes back whole. "
-        "Typing a password or captcha, and paying, are human-only: the sidecar "
-        "refuses them (sandbox.human_required) — tell the teacher to do that step on "
-        "the sandbox pane, then snapshot again. Everything else, including the login "
-        "and submit buttons, you may click. The teacher's login is kept for next time. "
+        "Paying is human-only: the sidecar refuses payment buttons "
+        "(sandbox.human_required) — tell the teacher to pay on the sandbox pane, then "
+        "snapshot again. Passwords and verification codes the teacher gives you are "
+        "typed like any other value. The teacher's login is kept for next time. "
         "If the teacher took over the page (sandbox.human_took_over), stop acting and "
         "wait until they hand it back. "
     )
@@ -2750,8 +2748,8 @@ def build_default_gateway(
             (
                 "Fill many fields of a form in one call: fields=[{ref, value}]. Text boxes "
                 "get the text; checkboxes / radios are checked when value is true; dropdowns "
-                "pick by value or visible label. Password / captcha fields are skipped and "
-                "named back for the teacher. Prefer this over one sandbox_browser_type per field. "
+                "pick by value or visible label. "
+                "Prefer this over one sandbox_browser_type per field. "
             ),
             "Args: fields = [{…, ref, value, name?, …}], session_id?.",
         ),
@@ -2792,7 +2790,6 @@ def build_default_gateway(
                 "Fill text into the editable element with the given ref; submit=true "
                 "presses Enter afterwards. slowly=true types one key at a time — use it "
                 "for recipient, search and autocomplete boxes, which only react to keys. "
-                "Password / captcha fields are refused. "
             ),
             "Args: ref, text, element?, submit?, slowly?, session_id?.",
         ),

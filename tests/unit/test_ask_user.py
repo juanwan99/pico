@@ -25,12 +25,13 @@ def test_ask_user_is_core_visible() -> None:
 
 
 def test_pi_ask_user_does_not_quiz_collect_backend() -> None:
+    """pico#1320: ask_user's description was slimmed to a one-liner — the
+    'do not quiz about a topic' posture now lives in system.md's default-and-go
+    rule. Scene / backend words must still never leak into the tool surface."""
     ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
-    assert "Do not use this to quiz about a third-party form backend" in ts
-    assert "already named what to make" in ts
-    assert "missing topic" in ts
+    assert "cannot go on without their choice" in ts
     assert "试卷" not in ts
     assert "示意图" not in ts
     assert "Supabase" not in ts
@@ -71,9 +72,9 @@ def test_system_identity_is_pico_never_backend_model() -> None:
         encoding="utf-8"
     )
     assert "You are **Pico**" in system
-    assert "Never identify as any other model" in system
-    assert "say Pico" in system
-    assert "missing topic, style, or caption is not ambiguity" in system
+    assert "Do not name the underlying model, provider or service" in system
+    assert "pick a sensible default and go" in system
+    assert "ask only when you cannot go on without it" in system
     assert "示意图" not in system
 
 

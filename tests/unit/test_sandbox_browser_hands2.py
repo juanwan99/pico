@@ -152,8 +152,10 @@ FORM = """<form id=f>
 
 @pytest.mark.asyncio
 async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path) -> None:
-    """#1219: one call fills text / checkbox / radio / select / aria checkbox; password
-    is left for the teacher; files go into a file input or through the chooser."""
+    """#1219: one call fills text / checkbox / radio / select / aria checkbox.
+    pico#1320: a password the teacher gave goes in like any other value — it is
+    no longer skipped and named back; fill_form returns None. Files go into a
+    file input or through the chooser."""
     pytest.importorskip("playwright.async_api")
     from playwright.async_api import async_playwright
     from sandbox_worker.browser import CHROMIUM_ARGS, PlaywrightPage
@@ -172,7 +174,7 @@ async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path) -> None
         await page.goto(SITE + "/form")
         surface = PlaywrightPage(context, page, tmp_path / "profile")
         snap = await surface.snapshot()
-        left = await surface.fill_form(
+        result = await surface.fill_form(
             [
                 {"ref": _ref(snap, "textbox", "姓名"), "value": "张三"},
                 {"ref": _ref(snap, "textbox", "密码"), "value": "hunter2"},
@@ -183,7 +185,7 @@ async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path) -> None
                 {"ref": _ref(snap, "checkbox", "提醒"), "value": "是"},
             ]
         )
-        assert left == ["密码"]
+        assert result is None
         got = await page.evaluate(
             """() => { const f = new FormData(document.getElementById('f'));
                 return {who: f.get('who'), pw: f.get('pw'), agree: f.get('agree'),
@@ -191,7 +193,7 @@ async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path) -> None
                         remind: document.querySelector('[role=checkbox]').getAttribute('aria-checked')}; }"""
         )
         assert got == {
-            "who": "张三", "pw": "", "agree": "on", "size": "l",
+            "who": "张三", "pw": "hunter2", "agree": "on", "size": "l",
             "grade": "g2", "note": "第二行", "remind": "true",
         }
         with pytest.raises(ToolError):

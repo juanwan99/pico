@@ -13,7 +13,7 @@ def test_sandbox_session_payload_drops_secrets_and_requires_sbox_id() -> None:
             "title": "Example Domain",
             "password": "must-not-appear",
             "secret": "must-not-appear",
-            "human_copy": "请在此画面自行登录，不要在聊天里发送密码",
+            "human_copy": "这是你的隔离浏览器，可以直接在画面里操作",
         }
     )
     assert out is not None
@@ -21,7 +21,7 @@ def test_sandbox_session_payload_drops_secrets_and_requires_sbox_id() -> None:
     assert out["url"] == "https://example.com/"
     assert "password" not in out
     assert "secret" not in out
-    assert "不要在聊天里发送密码" in out["human_copy"]
+    assert "可以直接在画面里操作" in out["human_copy"]
     assert out["has_text_input"] is False
     assert out["has_password_input"] is False
 

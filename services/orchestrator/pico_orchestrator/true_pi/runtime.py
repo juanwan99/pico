@@ -8,7 +8,6 @@ Never changes production default_runtime. Call only when:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 import uuid
@@ -43,7 +42,7 @@ from pico_orchestrator.true_pi.config import (
     tool_hang_seconds,
 )
 from pico_orchestrator.true_pi.events import EventMapState, _text_from_message, map_event
-from pico_orchestrator.true_pi.runner import LOOK_CAP_STEER, LOOK_STEER
+from pico_orchestrator.true_pi.runner import LOOK_CAP_STEER
 from pico_orchestrator.true_pi.tool_server import ToolServer
 from pico_orchestrator.user_errors import enrich_fail_payload
 from pico_orchestrator.workbench_progress import failed_write_user_message
@@ -299,8 +298,8 @@ def pi_wire(
     primary brain is Gemini: a PICO_BRAIN_DEEP_MODEL or failover to
     gpt-5.6-sol got chat/completions, whose reply New API passes through in
     Responses shape Pi cannot parse (#1090). Gemini stays chat/completions.
-    Caps thinking_on=False (edu sidebar / pico-fast) spawns --thinking off so
-    the first visible character is not waiting on reasoning (#1005 首字).
+    Caps thinking_on=False (edu sidebar / pico-fast) spawns --thinking low;
+    the deep lane spawns --thinking high (pico#1320).
     """
     from pico_orchestrator.provider import is_gemini_model, is_openai_responses_model
 
@@ -312,7 +311,8 @@ def pi_wire(
         api = "openai-responses"
     else:
         api = ""
-    level = ("medium" if thinking_on else "off") if (api or is_gemini_model(backend_model)) else ""
+    # pico#1320 (owner 10-16): fast lane thinks lightly, deep lane thinks hard.
+    level = ("high" if thinking_on else "low") if (api or is_gemini_model(backend_model)) else ""
     return api, level
 
 
@@ -850,15 +850,6 @@ async def _run_true_pi_once(
                         fuse_from = max(fuse_from, last_progress_wall)
                     if state.tool_oks > prev_tool_oks:
                         last_tool_ok_wall = loop.time()
-                    if ws_on and state.visual_output and not state.look_steered and not state.settled:
-                        # pico#1296: once per run, before the final answer.
-                        state.look_steered = True
-                        try:
-                            await client.steer(LOOK_STEER)
-                            state.event_kinds.append("run.look_check")
-                            await emit("run.look_check", {"steered": True, **tag})
-                        except Exception as exc:  # noqa: BLE001 — a missed reminder never fails a run
-                            logger.warning("true_pi look steer failed: %s", type(exc).__name__)
                     if ws_on and state.look_capped and not state.look_cap_steered and not state.settled:
                         # pico#1296 hard cap: the box stopped returning pictures.
                         state.look_cap_steered = True
@@ -1067,15 +1058,18 @@ async def _run_true_pi_once(
             state.provider_error = None
             state.settled = False
             state.event_kinds.append("run.resume")
-            await emit(
-                "run.resume",
-                {"attempt": state.resumes, "max": budget, "reason": reason, **tag},
-            )
             hung = state.tool_hung
             state.tool_hung = ""
+            # A status line in the step box, not words in the reply (pico#1320).
             await emit(
-                "message.delta",
-                {"text": resume_teacher_note(state.resumes, tool_hang=bool(hung)), **tag},
+                "run.resume",
+                {
+                    "attempt": state.resumes,
+                    "max": budget,
+                    "reason": reason,
+                    "text": resume_teacher_note(state.resumes, tool_hang=bool(hung)),
+                    **tag,
+                },
             )
             state.awaiting_start = True
             if hasattr(transport, "plan_agent_ends"):
@@ -1257,10 +1251,7 @@ async def _run_true_pi_once(
                 tag=tag,
             )
 
-        # Human package
         from pico_orchestrator.human_package import (
-            note_unlooked,
-            note_unread_basis,
             sanitize_user_facing_text,
             titles_from_tool_results,
         )
@@ -1269,23 +1260,6 @@ async def _run_true_pi_once(
         titles = titles_from_tool_results(state.tool_results)
         base = (state.final_parts[-1] if state.final_parts else "") or ""
         human = sanitize_user_facing_text(base, artifact_titles=titles)
-        landed_file = any(
-            name == "workspace_output" and not res.get("error") for name, res in state.tool_results
-        )
-        owned = note_unlooked(
-            human, made_file=state.visual_output and landed_file, looked=state.look_reads
-        )
-        opened = "\n".join(
-            [
-                full_prompt,
-                *state.read_paths,
-                json.dumps(state.tool_results, ensure_ascii=False, default=str),
-            ]
-        )
-        owned = note_unread_basis(owned, opened=opened)
-        # The live bubble already streamed the model's words: stream the notes too.
-        note_tail = owned[len(human) :] if owned.startswith(human) else ""
-        human = owned
         from pico_orchestrator.web_tools import attach_teacher_sources
 
         human = attach_teacher_sources(human, state.tool_results)
@@ -1305,8 +1279,6 @@ async def _run_true_pi_once(
             )
         if final_text:
             payload = {"text": final_text, **tag}
-            if state.text_streamed and note_tail:
-                await emit("message.stream", {"text": note_tail, **tag})
             if state.text_streamed:
                 # Live SSE already got token deltas. Ledger the cleaned
                 # answer once; do not dump the whole bubble again.
@@ -1480,8 +1452,8 @@ def turn_label(turn_no: int) -> str:
 
 def resume_teacher_note(attempt: int, *, tool_hang: bool = False) -> str:
     if tool_hang:
-        return f"（有一条命令跑太久没结束，已中断，换个办法接着做，第 {attempt} 次）\n"
-    return f"（稍等，正在重试，第 {attempt} 次）\n"
+        return f"有一条命令跑太久没结束，已中断，换个办法接着做（第 {attempt} 次）"
+    return f"正在重试（第 {attempt} 次）"
 
 
 def resume_prompt(reason: str) -> str:

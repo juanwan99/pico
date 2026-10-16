@@ -14,7 +14,6 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from app.openai_compat import _sidebar_chat_only, _workbench_tool_step_line
-from pico_orchestrator.human_package import sanitize_user_facing_text
 from pico_orchestrator.image_generate import NO_KEY_MESSAGE
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import FakeTransport, RpcEvent
@@ -96,12 +95,6 @@ def test_failed_write_ignored_when_a_write_succeeded() -> None:
         )
         is None
     )
-
-
-def test_human_package_strips_in_flight_progress() -> None:
-    out = sanitize_user_facing_text("正在写 Word\n教案已写好。")
-    assert "正在写" not in out
-    assert "教案已写好" in out
 
 
 @pytest.mark.asyncio

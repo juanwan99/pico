@@ -35,7 +35,11 @@ import {
   type ResultPaneView,
 } from '~/utils/picoOpenInPane';
 import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
-import { collectPicoOfficeContentBox, collectPicoSandboxSession } from '~/utils/picoSandboxSession';
+import {
+  collectPicoOfficeContentBox,
+  collectPicoSandboxSession,
+  type PicoSandboxSession,
+} from '~/utils/picoSandboxSession';
 import { isAskUserWaiting } from '~/utils/picoAskPrompt';
 import RunLoadingIndicator from './RunLoadingIndicator';
 import RunTimeline from './RunTimeline';
@@ -328,13 +332,23 @@ export default function ResultPanel({
   const paneWidthRef = useRef(paneWidth);
   paneWidthRef.current = paneWidth;
   const paneZoom = usePaneZoom();
-  const ledgerSandbox = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
+  const runSandbox = useMemo(() => collectPicoSandboxSession(runEvents), [runEvents]);
+  // Each sentence is its own run: a sentence that opened no page (e.g. a failed
+  // fill) must not blank the pane — keep the conversation's last page (pico#1320).
+  const [lastRunSandbox, setLastRunSandbox] = useState<PicoSandboxSession | null>(null);
+  useEffect(() => {
+    if (runSandbox) {
+      setLastRunSandbox(runSandbox);
+    }
+  }, [runSandbox]);
+  const ledgerSandbox = runSandbox || lastRunSandbox;
   const officeBox = useMemo(() => collectPicoOfficeContentBox(runEvents), [runEvents]);
   const sandboxSession = localSandbox || ledgerSandbox;
   const openedOfficeRef = useRef<string | null>(null);
 
   useEffect(() => {
     setLocalSandbox(null);
+    setLastRunSandbox(null);
     openedWebsiteRef.current = null;
     openedOfficeRef.current = null;
     setWebsiteError(null);
@@ -481,7 +495,7 @@ export default function ResultPanel({
         sessionId,
         url: String(meta.url || url),
         title: String(meta.title || ''),
-        humanCopy: String(meta.human_copy || '请在此画面自行登录，不要在聊天里发送密码'),
+        humanCopy: String(meta.human_copy || '这是你的隔离浏览器，可以直接在画面里操作'),
         kind: String(meta.kind || 'browser'),
       });
     } catch (err) {

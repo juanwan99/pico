@@ -69,18 +69,19 @@ def test_html_cdn_still_fail_closed() -> None:
 
 
 def test_system_does_not_steer_canvas_downgrade() -> None:
+    """pico#1320: system.md no longer spells out the HTML/office craft — the
+    'do not dumb it down' posture now lives on the tool description (ts)."""
     system = (
         ROOT / "services" / "orchestrator" / "pico_orchestrator" / "agent_assets" / "system.md"
     ).read_text(encoding="utf-8")
     assert "rewrite the page with canvas drawing" not in system
-    assert "dumb the page down" in system
-    assert "read_office_skill" in system
     ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
     assert "pico-office" in ts
     assert "Do not import os" not in ts
     assert "is a stub" not in ts
+    assert "do not dumb it down on purpose" in ts
 
 
 def test_gateway_html_tool_does_not_require_canvas_only() -> None:

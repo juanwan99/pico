@@ -252,9 +252,9 @@ async def test_stream_chat_reports_upstream_finish(monkeypatch: pytest.MonkeyPat
     chunks = [p async for p in stream_chat("hi", model="pico-fast", thinking=False, finish_out=finish)]
     assert chunks == ['{"items": [']
     assert finish == {"finish_reason": "length"}
-    assert captured["extra_body"] == {
-        "extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}
-    }
+    # pico#1320: fast lane now thinks lightly via reasoning_effort, not the
+    # flash thinking-budget-0 override.
+    assert captured["extra_body"] == {"reasoning_effort": "low"}
 
 
 @pytest.mark.asyncio

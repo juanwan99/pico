@@ -99,23 +99,6 @@ def parse_search_field_ids_json(raw: str | None) -> list[str]:
     return sanitize_search_field_ids([str(x) for x in parsed])
 
 
-def kb_scope_system_block(*, search_school: bool, search_field_ids: list[str] | None = None) -> str:
-    """SYSTEM addendum. Search scope ≠ dumping unread file bodies."""
-    fields = sanitize_search_field_ids(search_field_ids)
-    if search_school:
-        scope = "本轮可检索全校有权材料。"
-    elif fields:
-        scope = "本轮检索限制在老师勾选的场。"
-    else:
-        scope = "本轮默认可检索你有权看的学校材料（含你的个人工作台）。"
-    return (
-        "## 学校材料范围（本轮）\n"
-        f"{scope}答案可能在学校材料里时先 kb_search。"
-        "命中要引标题。未命中就说没找到，禁止编造校规或材料内容。"
-        "未勾选的文件不算已读全文。"
-    )
-
-
 def classify_land_kind(filename: str, kind: str = "") -> str | None:
     ext = ""
     name = str(filename or "").strip().lower()

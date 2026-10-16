@@ -64,25 +64,31 @@ def test_pi_and_hosted_office_ceiling_descriptions() -> None:
 
 
 def test_system_names_office_ceiling_without_scene_words() -> None:
+    """pico#1320: system.md keeps only the one-line office catalog; the craft
+    detail (isolated container, OUTPUT_PATH, unmatched brackets, publish
+    posture) moved onto the tool descriptions themselves."""
     body = pico_system_text()
-    assert "sandbox_office_lib" in body
-    assert "read_office_skill" in body
     assert "`docx`:" in body
     assert "from docx import Document" not in body
-    assert "siblings" in body
-    assert "isolated container" in body
-    assert "OUTPUT_PATH" in body
     assert "is a stub" not in body
     assert "课件" not in body
     assert "精美" not in body
     assert "通知" not in body
     assert "家长会" not in body
     assert "分数练习" not in body
-    assert "unmatched brackets" in body
-    assert "`publish_html_page` is not a Pico capability" in body
-    assert "school-admin approval" in body
-    assert "If `publish_html_page` is listed this turn" not in body
-    assert "same title replaces the file the teacher opens" in body.lower()
+
+    gw = build_default_gateway()
+    office = gw.tools["sandbox_office_lib"].description
+    publish = gw.tools["publish_html_page"].description
+    assert "isolated" in office
+    assert "OUTPUT_PATH" in office
+    assert "Not a Pico capability" in publish
+    assert "school-admin approval" in publish
+
+    ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "unmatched brackets" in ts
 
 
 def test_xlsx_values_is_placeholder_fill_on_pi_surfaces() -> None:

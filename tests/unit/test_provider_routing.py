@@ -116,7 +116,7 @@ def test_runtime_policy_dual_mode_contract() -> None:
     # Flash thinking-off is a DeepSeek empty-200 quirk, not a 12-step/128k cap.
     assert fast["thinking"] is False
     assert deep["thinking"] is True
-    assert fast["max_steps"] == deep["max_steps"] == 24
+    assert fast["max_steps"] == deep["max_steps"] == 60
     assert fast["max_tokens"] == deep["max_tokens"] == 32000
     assert fast["max_context"] == deep["max_context"] == 256000
     assert fast["fallback"] == "deepseek-v4-flash"
@@ -128,20 +128,21 @@ def test_runtime_policy_dual_mode_contract() -> None:
     }
 
 
-def test_thinking_extra_body_gemini_omits_deepseek_thinking(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Gemini empty-200 if we send DeepSeek thinking.disabled (#1005 首字)."""
+def test_thinking_extra_body_gemini_reasoning_effort_low_high(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pico#1320: both lanes think via reasoning_effort now — fast = low, deep =
+    high — same for flash and pro; no more DeepSeek thinking.disabled payload."""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.8-flash")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
-    off = {"extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}}
-    assert thinking_extra_body("pico-fast") == off
-    assert thinking_extra_body("pico-deep") == {"reasoning_effort": "medium"}
-    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == off
-    # pro may not turn thinking off; leave it alone.
+    assert thinking_extra_body("pico-fast") == {"reasoning_effort": "low"}
+    assert thinking_extra_body("pico-deep") == {"reasoning_effort": "high"}
+    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == {"reasoning_effort": "low"}
     monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.1-pro")
-    assert thinking_extra_body("pico-fast") == {}
+    assert thinking_extra_body("pico-fast") == {"reasoning_effort": "low"}
 
 
 def test_circuit_breaker_only_in_thinking_on_lane() -> None:

@@ -24,7 +24,7 @@ class RunCaps:
     # Model context window (history+system+tools). Not the output cap.
     max_context: int = 256_000
     max_retries: int = 2
-    max_steps: int = 24
+    max_steps: int = 60
     allowed_tools: list[str] | None = None
     skill_instruction: str = ""
     # Edu sidebar (and similar clients) may replace the default Pico workbench

@@ -40,7 +40,6 @@ from sandbox_worker.browser import (
     VIEWPORT_HEIGHT,
     VIEWPORT_WIDTH,
     is_handoff_control,
-    is_human_only_field,
     mask_secret_values,
     read_login_state,
 )
@@ -192,16 +191,10 @@ class FakeFormPage:
             rows.append({"index": 1, "url": self.second_tab, "title": "", "current": False})
         return rows
 
-    async def fill_form(self, fields: list[dict[str, Any]]) -> list[str]:
-        left = []
+    async def fill_form(self, fields: list[dict[str, Any]]) -> None:
         for field in fields:
-            info = self._info(field["ref"])
-            step = is_human_only_field(info)
-            if step:
-                left.append(step)
-                continue
+            self._info(field["ref"])
             self.fields[field["ref"]] = str(field["value"])
-        return left
 
     async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None:
         self._info(ref)
@@ -256,12 +249,7 @@ class FakeFormPage:
         path.write_text(json.dumps({"cookies": cookies, "origins": []}), encoding="utf-8")
 
     async def type_ref(self, ref: str, text: str, *, submit: bool, slowly: bool = False) -> None:
-        info = self._info(ref)
-        step = is_human_only_field(info)
-        if step:
-            from sandbox_worker.browser import human_required
-
-            raise human_required(step)
+        self._info(ref)
         self.fields[ref] = text
         if submit:
             self.keys.append("Enter")
@@ -316,14 +304,6 @@ def test_handoff_latch_is_payment_only() -> None:
     assert is_handoff_control({"aria_label": "Submit"}) is None
     assert is_handoff_control({"type": "submit", "text": "登录"}) is None
     assert is_handoff_control({"text": "下一步"}) is None
-
-
-def test_human_only_fields_password_and_captcha() -> None:
-    assert is_human_only_field({"type": "password"}) == "密码"
-    assert is_human_only_field({"type": "text", "placeholder": "请输入验证码"}) == "验证码"
-    assert is_human_only_field({"type": "text", "name": "captcha"}) == "验证码"
-    assert is_human_only_field({"type": "text", "autocomplete": "one-time-code"}) == "验证码"
-    assert is_human_only_field({"type": "text", "name": "phone"}) is None
 
 
 def test_mask_secret_values_hides_password_text() -> None:
@@ -440,9 +420,10 @@ async def test_fill_form_and_upload_from_disk_and_ledger(hands_runtime) -> None:
         ]},
     )
     assert pages[0].fields["e1"] == "张三"
-    assert pages[0].fields["e2"] == "hunter2"  # password untouched
-    assert pages[0].fields["e3"] == ""
-    assert "密码、验证码格留给老师" in filled["message"]
+    # pico#1320: what the teacher gave in chat goes in, password and code too.
+    assert pages[0].fields["e2"] == "pw"
+    assert pages[0].fields["e3"] == "1234"
+    assert "留给老师" not in filled["message"]
     assert filled["action"] == "fill_form"
     with pytest.raises(ToolError):
         await gw.invoke(owner, "sandbox_browser_fill_form", {"fields": []})
@@ -523,22 +504,20 @@ async def test_open_on_an_open_desk_goes_to_the_new_address(hands_runtime) -> No
 
 
 @pytest.mark.asyncio
-async def test_password_captcha_pay_stay_with_human_login_submit_are_ai(hands_runtime) -> None:
+async def test_pay_stays_with_human_password_code_login_submit_are_ai(hands_runtime) -> None:
     _, pages = hands_runtime
     gw = _gw()
     owner = P("school-a", "member-a", ["ai:run"])
     await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
-    for args in (
-        ("sandbox_browser_click", {"ref": "e8"}),  # 立即支付
-        ("sandbox_browser_type", {"ref": "e2", "text": "pw"}),  # password box
-        ("sandbox_browser_type", {"ref": "e3", "text": "1234"}),  # captcha box
-    ):
-        with pytest.raises(ToolError) as exc:
-            await gw.invoke(owner, *args)
-        assert exc.value.code == HUMAN_REQUIRED_CODE
-        assert "自己" in exc.value.message
-    assert pages[0].fields["e2"] == "hunter2"  # untouched
-    assert pages[0].fields["e3"] == ""
+    with pytest.raises(ToolError) as exc:
+        await gw.invoke(owner, "sandbox_browser_click", {"ref": "e8"})  # 立即支付
+    assert exc.value.code == HUMAN_REQUIRED_CODE
+    assert "自己" in exc.value.message
+    # pico#1320 (owner 10-16): a password or code the teacher gave is typed.
+    await gw.invoke(owner, "sandbox_browser_type", {"ref": "e2", "text": "pw"})
+    await gw.invoke(owner, "sandbox_browser_type", {"ref": "e3", "text": "677294"})
+    assert pages[0].fields["e2"] == "pw"
+    assert pages[0].fields["e3"] == "677294"
     await gw.invoke(owner, "sandbox_browser_click", {"ref": "e5"})  # 登录
     assert pages[0].logged_in is True
     done = await gw.invoke(owner, "sandbox_browser_click", {"ref": "e7"})  # 提交报名
@@ -716,11 +695,11 @@ async def test_real_chromium_snapshot_refs_fill_select_and_handoff() -> None:
         assert await page.locator("select").input_value() == "medium"
         await hands.click_ref(ref_of("下一步"))
         assert await hands.h1() == "第二步"
-        for label in ("密码", "验证码"):
-            with pytest.raises(ToolError) as exc:
-                await hands.type_ref(ref_of(label), "x", submit=False)
-            assert exc.value.code == HUMAN_REQUIRED_CODE
-        assert await page.locator("input[name=pwd]").input_value() == "secret123"
+        # pico#1320: a password or code the teacher gave goes in like any value.
+        await hands.type_ref(ref_of("密码"), "pw-from-chat", submit=False)
+        await hands.type_ref(ref_of("验证码"), "677294", submit=False)
+        assert await page.locator("input[name=pwd]").input_value() == "pw-from-chat"
+        assert await page.locator("input[name=code]").input_value() == "677294"
         await hands.click_ref(ref_of("提交报名"))  # AI may submit (owner 09:17)
         with pytest.raises(ToolError) as exc:
             await hands.click_ref(ref_of("立即支付"))

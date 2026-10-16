@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     # Delivery / pico-agent multi-step (HTML 课件等): default 900s, not 120s freeze.
     pico_run_max_seconds: int = 14_400
     pico_run_max_tokens: int = 32_000
-    pico_run_max_steps: int = 24
+    pico_run_max_steps: int = 60
     pico_run_max_retries: int = 2
     # Short / direct-model chat: keep snappy day-use turns.
     pico_run_short_max_seconds: int = 1_800

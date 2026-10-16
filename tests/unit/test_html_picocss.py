@@ -75,9 +75,9 @@ def test_system_and_gateway_say_semantic_base_not_library_identity() -> None:
     ts = (
         ROOT / "services/true_pi_bridge/pico-gateway-tools.ts"
     ).read_text(encoding="utf-8")
-    assert "semantic classless visual base" in system
+    # pico#1320: system.md no longer describes generate_html_document in
+    # detail — this lives on the tool description (ts) only now.
     assert "semantic classless visual base" in ts
-    assert "Do not name the stylesheet" in system
     assert "Do not name the stylesheet" in ts
     assert "picocss.com" not in system
     assert "picocss.com" not in ts

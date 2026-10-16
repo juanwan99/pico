@@ -185,6 +185,31 @@ describe('workbench Chinese progress (T-AGENT-FACE-V1)', () => {
     ).toBe('在等你选');
   });
 
+  it('labels run.resume with its own text, not a generic 正在重试 (pico#1320)', () => {
+    expect(
+      lastProcessStep([
+        {
+          id: 'e1',
+          run_id: 'r1',
+          seq: 1,
+          type: 'run.resume',
+          payload: { attempt: 1, text: '正在重试（第 1 次）', source: 'true-pi' },
+        },
+      ]),
+    ).toBe('正在重试（第 1 次）');
+    expect(
+      lastProcessStep([
+        {
+          id: 'e2',
+          run_id: 'r1',
+          seq: 1,
+          type: 'run.resume',
+          payload: { attempt: 1, source: 'true-pi' },
+        },
+      ]),
+    ).toBe('正在重试');
+  });
+
   it('does not paint cancel_requested succeeded as 成功', () => {
     const hint = composeProcessHint(
       { id: 'r1', task_id: 't1', status: 'succeeded', cancel_requested: true },
