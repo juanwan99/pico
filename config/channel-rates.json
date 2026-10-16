@@ -1,9 +1,16 @@
 {
   "version": 1,
   "sell_markup": 2.5,
-  "points_per_yuan": 1000,
+  "points_per_yuan": 100,
   "usd_cny": 7.3,
-  "note": "Cost from New API live billing 2026-09-03. Sell = cost x 2.5. 1 yuan = 1000 points.",
+  "note": "Cost from New API live billing 2026-09-03. Chat tokens sell at teacher_rate; images/searches sell = cost x 2.5. 1 yuan = 100 points (pico#1315).",
+  "teacher_rate": {
+    "input_yuan_per_million": 5,
+    "output_yuan_per_million": 10,
+    "cache_read_yuan_per_million": 0.5,
+    "cache_write_yuan_per_million": 5,
+    "note": "Teacher price for chat-model tokens, any model, fast or deep alike (owner 2026-10-16 pico#1315). Thinking counts as output. Channel rows below stay real cost and still lock unpriced pipes."
+  },
   "channels": [
     {
       "id": "new-api:aiproxy-openai:gpt-5.6-sol",

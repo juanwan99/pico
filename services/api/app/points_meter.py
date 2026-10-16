@@ -4,12 +4,14 @@ Scale lives here only. Never import from LibreChat client code.
 Never persist quote guesses onto usage_events token columns.
 Never store a wallet or balance.
 
-Token columns stay provider-accurate. 积分 = 成本人民币 × 2.5 × 1000
-(1 元 = 1000 积分). Rate card is config/channel-rates.json.
+Token columns stay provider-accurate. Chat-model tokens: 积分 = 统一价人民币 × 100,
+same price for every model and fast/deep (pico#1315). Images / searches: 积分 =
+成本 × 2.5 × 100. 1 元 = 100 积分. Rate card is config/channel-rates.json.
 """
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from app.channel_rates import (
@@ -155,8 +157,10 @@ def milli_from_row(
     cached = _extra_int(extra, "cached_tokens", "cache_read", "cacheRead")
     write = _extra_int(extra, "cache_write_tokens", "cache_write", "cacheWrite")
     ok = extra.get("ok")
+    # The model's own tag still gates the pipe; its tokens sell at the one teacher price.
+    teacher = card.teacher_rate if rate.kind == "llm" else None
     cost = cost_micro_yuan(
-        rate,
+        teacher or rate,
         kind=kind_n,
         tokens_unknown=bool(tokens_unknown),
         prompt_tokens=prompt_tokens,
@@ -170,6 +174,8 @@ def milli_from_row(
     )
     if cost is None:
         return None
+    if teacher is not None:
+        return sell_millipoints(cost, markup=Decimal(1))
     return sell_millipoints(cost)
 
 

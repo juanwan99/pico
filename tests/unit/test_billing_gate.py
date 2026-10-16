@@ -191,15 +191,15 @@ def test_rate_card_prices_rerank_and_ingest_per_file() -> None:
         tokens_unknown=False, prompt_tokens=6000, completion_tokens=0, total_tokens=6000,
         kind="search", model="rerank-pro",
     )
-    # 6000 tokens × ¥0.8/M = ¥0.0048 cost → ×2.5 → 12 points
-    assert milli == 12000
+    # 6000 tokens × ¥0.8/M = ¥0.0048 cost → ×2.5 × 100 → 1.2 points
+    assert milli == 1200
     ingest = card.find(kind="api", model="kb-ingest-file")
     assert ingest is not None and ingest.per_call_yuan > 0
     per_file = milli_from_row(
         tokens_unknown=True, prompt_tokens=None, completion_tokens=None, total_tokens=None,
         kind="api", model="kb-ingest-file", extra={"query_count": 1, "ok": True},
     )
-    assert per_file == 50000  # ¥0.02 × 2.5 × 1000
+    assert per_file == 5000  # ¥0.02 × 2.5 × 100
     failed = milli_from_row(
         tokens_unknown=True, prompt_tokens=None, completion_tokens=None, total_tokens=None,
         kind="api", model="kb-ingest-file", extra={"query_count": 1, "ok": False},

@@ -1,7 +1,8 @@
 """New API channel price tags. No wallet. Missing tag → lock that pipe.
 
-Rates are cost in yuan. Sell = cost × sell_markup. Points = sell × points_per_yuan.
-Owner fills real New API channel prices; seeds in config/channel-rates.json.
+Rates are cost in yuan. Chat-model tokens sell at the one teacher_rate whatever
+the model (pico#1315); images / searches / per-call sell = cost × sell_markup.
+Points = sell × points_per_yuan. Seeds in config/channel-rates.json.
 """
 
 from __future__ import annotations
@@ -59,6 +60,9 @@ class RateCard:
     sell_markup: Decimal
     points_per_yuan: Decimal
     channels: tuple[ChannelRate, ...]
+    # Teacher price for chat-model tokens, same for every model and fast/deep.
+    # None = legacy cost × sell_markup.
+    teacher_rate: ChannelRate | None = None
 
     def find(
         self,
@@ -114,6 +118,20 @@ def default_rates_path() -> Path:
     return Path(__file__).resolve().parents[3] / "config" / "channel-rates.json"
 
 
+def _rate_from(item: dict[str, Any], *, cid: str, kind: str, model: str) -> ChannelRate:
+    return ChannelRate(
+        id=cid,
+        kind=kind,
+        model=model,
+        input_yuan_per_million=_dec(item.get("input_yuan_per_million")),
+        output_yuan_per_million=_dec(item.get("output_yuan_per_million")),
+        cache_read_yuan_per_million=_dec(item.get("cache_read_yuan_per_million")),
+        cache_write_yuan_per_million=_dec(item.get("cache_write_yuan_per_million")),
+        per_image_yuan=_dec(item.get("per_image_yuan")),
+        per_call_yuan=_dec(item.get("per_call_yuan")),
+    )
+
+
 def _parse_card(blob: dict[str, Any]) -> RateCard:
     channels: list[ChannelRate] = []
     raw_channels = blob.get("channels")
@@ -126,26 +144,22 @@ def _parse_card(blob: dict[str, Any]) -> RateCard:
             model = str(item.get("model") or "").strip()
             if not cid or not kind or not model:
                 continue
-            channels.append(
-                ChannelRate(
-                    id=cid,
-                    kind=kind,
-                    model=model,
-                    input_yuan_per_million=_dec(item.get("input_yuan_per_million")),
-                    output_yuan_per_million=_dec(item.get("output_yuan_per_million")),
-                    cache_read_yuan_per_million=_dec(item.get("cache_read_yuan_per_million")),
-                    cache_write_yuan_per_million=_dec(item.get("cache_write_yuan_per_million")),
-                    per_image_yuan=_dec(item.get("per_image_yuan")),
-                    per_call_yuan=_dec(item.get("per_call_yuan")),
-                )
-            )
+            channels.append(_rate_from(item, cid=cid, kind=kind, model=model))
+    teacher = None
+    raw_teacher = blob.get("teacher_rate")
+    if isinstance(raw_teacher, dict):
+        teacher = _rate_from(raw_teacher, cid="teacher", kind="llm", model="*")
+        if not teacher.priced():
+            teacher = None
     markup = _dec(blob.get("sell_markup"), "2.5")
     if markup <= 0:
         markup = Decimal("2.5")  # 2.5 is exact in decimal; avoid float 2.5
     ppy = _dec(blob.get("points_per_yuan"), "1000")
     if ppy <= 0:
         ppy = Decimal(1000)
-    return RateCard(sell_markup=markup, points_per_yuan=ppy, channels=tuple(channels))
+    return RateCard(
+        sell_markup=markup, points_per_yuan=ppy, channels=tuple(channels), teacher_rate=teacher
+    )
 
 
 def load_rate_card(*, force: bool = False) -> RateCard:
