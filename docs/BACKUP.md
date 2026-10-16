@@ -15,6 +15,7 @@
 | `SHA256SUMS` | 以上校验 | |
 
 - 大于 128 MB 的文件切成 `名字.part-000…` 分段上传：代理会在单个上传约 10 分钟后断开，分段后断了只重传那一段。`SHA256SUMS` 记的是整文件，演练时先拼回再校验。
+- 三个 tar 打的都是在用的目录：tar 读到一半有文件变了会退出 1，这时包是完整的，记一行日志照常往下走；退出 2 及以上才算失败（pico#1313）。包好不好由 sha256 和每周演练把关。
 - 上传后用 `rclone check --size-only` 对一遍远端；本地临时目录随即删掉（不占盘）。
 - 失败：写 `~/logs/pico-backup-status.json`（state=FAIL），并用 `~/scripts/edu-backup-alert.py` 发信。日志 `~/logs/pico-backup.log`。
 - 没跑起来（定时器停了、机器宕了）不会写 FAIL：`pico-backup-watch.timer` 每小时看一次，上次成功超过 26 小时就发信（12 小时内只发一封）。
