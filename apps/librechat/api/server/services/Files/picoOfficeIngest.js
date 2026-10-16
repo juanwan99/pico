@@ -175,6 +175,8 @@ async function ingestOfficeToPico({ req, filename, filepath, buffer, filePath })
 
 module.exports = {
   ingestOfficeToPico,
+  picoBase,
+  picoKey,
   membershipFromReq,
   conversationHeader,
   decodeUploadName,

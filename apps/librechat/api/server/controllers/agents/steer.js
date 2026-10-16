@@ -9,6 +9,7 @@ const {
   isEphemeralAgentId,
 } = require('librechat-data-provider');
 const { checkPermission } = require('~/server/services/PermissionService');
+const { forwardPicoSteers } = require('~/server/services/picoSteer');
 const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const db = require('~/models');
 
@@ -82,7 +83,12 @@ const SteerController = async (req, res) => {
       updateFilesUsage: db.updateFilesUsage,
       checkAgentAccess: createAgentAccessCheck(req),
     });
-    return res.status(status).json(body);
+    res.status(status).json(body);
+    if (status === 202) {
+      // pico#1318: a running pico turn takes it now, not after the turn.
+      void forwardPicoSteers(req.body.conversationId);
+    }
+    return;
   } catch (error) {
     logger.error('[SteerController] Failed to queue steer', error);
     return res.status(500).json({ code: 'STEER_FAILED' });

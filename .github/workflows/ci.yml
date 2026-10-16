@@ -142,5 +142,5 @@ jobs:
         working-directory: apps/librechat/api
         env:
           NODE_ENV: test
-        run: npx jest --ci --coverage=false --testPathPatterns='server/routes/pico.test'
+        run: npx jest --ci --coverage=false --testPathPatterns='server/routes/pico.test|server/services/picoSteer.test'
 

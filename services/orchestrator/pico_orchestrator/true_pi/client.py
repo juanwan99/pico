@@ -794,6 +794,12 @@ class TruePiRpcClient:
         if not resp.get("success"):
             raise TruePiClientError(f"steer rejected: {resp}")
 
+    async def clear_queue(self) -> None:
+        """Drop steers Pi still holds (pico#1318 re-says them as a prompt)."""
+        rid = f"q-{uuid.uuid4().hex[:8]}"
+        await self.transport.send({"id": rid, "type": "clear_queue"})
+        await self.transport.wait_response("clear_queue", req_id=rid, timeout=10.0)
+
     async def get_last_assistant_text(self) -> str:
         rid = f"t-{uuid.uuid4().hex[:8]}"
         await self.transport.send({"id": rid, "type": "get_last_assistant_text"})

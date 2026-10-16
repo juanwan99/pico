@@ -1527,6 +1527,37 @@ async def list_models(
     }
 
 
+class ChatSteerRequest(BaseModel):
+    text: str
+    conversation_id: str | None = None
+
+
+@router.post("/v1/chat/steer")
+async def chat_steer(
+    body: ChatSteerRequest,
+    authorization: str | None = Header(default=None),
+    x_conversation_id: str | None = Header(default=None, alias="X-Conversation-Id"),
+    x_pico_membership_id: str | None = Header(default=None, alias="X-Pico-Membership-Id"),
+    settings: Settings = Depends(get_settings),
+):
+    """Teacher speaks while this conversation's turn still runs (pico#1318).
+
+    202: Pi takes it after the running step and changes course; nothing done is
+    thrown away. 409: no live turn here — send it as a normal new message.
+    """
+    from pico_orchestrator.true_pi.steer import steer, turn_key
+
+    principal = scope_proxy_principal(
+        _principal_from_auth(authorization, settings), x_pico_membership_id
+    )
+    enforce_scope(principal, "ai:run")
+    conversation_id = (x_conversation_id or body.conversation_id or "").strip()[:128]
+    key = turn_key(principal.school_id, principal.membership_id, conversation_id)
+    if not await steer(key, body.text[:4000]):
+        return JSONResponse({"steered": False, "code": "steer.no_live_run"}, status_code=409)
+    return JSONResponse({"steered": True}, status_code=202)
+
+
 @router.post("/v1/chat/completions")
 async def chat_completions(
     body: ChatCompletionRequest,
@@ -2352,6 +2383,10 @@ async def chat_completions(
                 text = str(payload.get("text") or "")
                 if text and not payload.get("ledger_only"):
                     await q.put(("delta", text))
+            elif event_type == "run.steer":
+                # pico#1318: a thought marks the turn; the workbench then opens a
+                # fresh text part below the teacher's interjection.
+                await q.put(("think", f"\n收到插话：{payload.get('text') or ''}\n"))
             elif event_type in {
                 "compaction.begin",
                 "compaction.end",
