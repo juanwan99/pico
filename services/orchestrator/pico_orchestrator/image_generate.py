@@ -150,13 +150,13 @@ def billed_image_model() -> str:
 def gateway_uses_gemini_native() -> bool:
     """New API /v1/images/generations only maps imagen-*.
 
-    Live QuantumNous new-api (2026-08-28): gemini-*-image on that
-    path → "only imagen models are supported". Official Gemini
-    flash-image is generateContent. Pico still talks only to New API
+    Live QuantumNous new-api (2026-08-28): any other model on that
+    path → "only imagen models are supported". Every Gemini image
+    model is generateContent, whatever its name says (nano-banana has
+    no "image" in it, pico#1301). Pico still talks only to New API
     (Bearer gateway token), never Google directly.
     """
-    name = gateway_model().lower()
-    return name.startswith("gemini-") and "image" in name
+    return gateway_model().lower().startswith("gemini-")
 
 
 def gateway_generate_content_url() -> str:
