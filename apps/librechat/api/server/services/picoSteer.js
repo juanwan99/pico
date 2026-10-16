@@ -73,7 +73,8 @@ async function postPicoSteer({ req, conversationId, text, fetchImpl = fetch }) {
  * Drain the run's steer queue and offer each steer to pico in order. Taken →
  * `apply` (inline steer part + on_steer_applied). The first refusal (or a steer
  * with files — pico steers are text only) and everything after it go back on
- * the queue in order for the stock run-end path.
+ * the queue in order (ahead of steers that arrived meanwhile) for the stock
+ * run-end path.
  */
 async function deliverQueuedSteers({ steering, streamId, jobCreatedAt, post, apply }) {
   const steers = await steering.drain(streamId, jobCreatedAt);
@@ -86,7 +87,13 @@ async function deliverQueuedSteers({ steering, streamId, jobCreatedAt, post, app
       missed.push(item);
     }
   }
-  for (const item of missed) {
+  if (missed.length === 0) {
+    return;
+  }
+  // The store only appends: steers sent while we were posting sit in the
+  // queue already, so take them back out and put everything back in order.
+  const later = await steering.drain(streamId, jobCreatedAt);
+  for (const item of [...missed, ...later]) {
     const depth = await steering.enqueue(streamId, item);
     if (typeof depth !== 'number' || depth < 1) {
       logger.warn(`[picoSteer] steer not requeued for ${streamId}: ${depth}`);

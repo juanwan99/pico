@@ -128,6 +128,46 @@ async def test_steer_changes_course_and_keeps_what_was_done() -> None:
     assert KEY not in teacher_steer._LIVE
 
 
+@dataclass
+class InjectBeforeAckPi(SteerablePi):
+    """Pi injects the steer and the consumer sees it before the steer ack lands."""
+
+    after_ack: list[dict[str, Any]] = field(default_factory=list)
+
+    async def wait_response(
+        self, command_type: str, *, req_id: str | None = None, timeout: float = 30.0
+    ) -> dict[str, Any]:
+        if command_type == "steer":
+            while not self._event_q.empty():
+                await asyncio.sleep(0.01)
+            await asyncio.sleep(0.05)
+        resp = await super().wait_response(command_type, req_id=req_id, timeout=timeout)
+        if command_type == "steer":
+            for item in self.after_ack:
+                await self._event_q.put(RpcEvent(item))
+            self.after_ack = []
+        return resp
+
+
+@pytest.mark.asyncio
+async def test_steer_injected_before_its_ack_runs_once() -> None:
+    said = "改成表格"
+    transport = InjectBeforeAckPi(
+        scripted=[{"type": "agent_start"}, {"type": "turn_start"}, *TOOL],
+        after_steer=[*_done("先写了一段。"), {"type": "turn_start"}, *_user(said), *_done("已改成表格。")],
+        after_ack=END,
+    )
+    events: list[tuple[str, dict[str, Any]]] = []
+    run = asyncio.create_task(_run(transport, events))
+    assert await _steer_when_live(said) is True
+    result = await run
+
+    sent = [c.get("type") for c in transport.sent]
+    assert sent.count("prompt") == 1 and "clear_queue" not in sent
+    assert ("run.steer", {"text": said, "runtime": "pi-true"}) in events
+    assert result.status == "succeeded" and result.final_text == "已改成表格。"
+
+
 @pytest.mark.asyncio
 async def test_steer_that_missed_the_end_is_said_as_the_next_prompt() -> None:
     said = "再加一行签名"

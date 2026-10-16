@@ -53,6 +53,16 @@ describe('pico steer (pico#1318)', () => {
     expect(refused.queue.map((i) => i.steerId)).toEqual(['c']);
   });
 
+  it('keeps refused steers ahead of ones sent while pico was asked', async () => {
+    const steering = fakeSteering([{ steerId: 'a', text: 'x' }]);
+    const post = jest.fn(async () => {
+      steering.queue.push({ steerId: 'late', text: 'y' });
+      return false;
+    });
+    await deliverQueuedSteers({ steering, streamId: 'c1', post, apply: jest.fn() });
+    expect(steering.queue.map((i) => i.steerId)).toEqual(['a', 'late']);
+  });
+
   it('forwards only while a pico call is registered', async () => {
     const forward = jest.fn().mockResolvedValue(undefined);
     const unregister = registerPicoSteer('c1', forward);

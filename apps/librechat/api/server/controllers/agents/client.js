@@ -1938,6 +1938,8 @@ class AgentClient extends BaseClient {
         config.configurable.last_agent_id = agents[agents.length - 1].id;
 
         this.options.startupTelemetry?.mark('stream_processing_started');
+        // The openAI endpoint is pico itself (OPENAI_REVERSE_PROXY → pico-api)
+        // and the only endpoint librechat.yaml turns on.
         const unregisterPicoSteer =
           streamId && this.options.agent?.provider === EModelEndpoint.openAI
             ? registerPicoSteer(streamId, () => this.forwardSteersToPico(streamId))

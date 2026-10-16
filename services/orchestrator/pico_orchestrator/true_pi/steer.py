@@ -72,10 +72,15 @@ async def steer(key: Key | None, text: str) -> bool:
     async with live.lock:
         if not live.open:
             return False
+        # Pending before the RPC: Pi may inject it (message_start role=user)
+        # before its steer ack reaches us. Recorded only after the ack, it would
+        # stay pending and be said again as a late prompt — run twice.
+        live.pending.append(text)
         try:
             await live.client.steer(text)
         except Exception as exc:  # noqa: BLE001 — a refused steer falls back to takeover
             logger.warning("true_pi teacher steer failed: %s", type(exc).__name__)
+            if text in live.pending:
+                live.pending.remove(text)
             return False
-        live.pending.append(text)
     return True
