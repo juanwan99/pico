@@ -232,7 +232,10 @@ async def test_generate_image_zhipu_mock_https_png(
 )
 def test_gateway_route_by_model_family(monkeypatch: pytest.MonkeyPatch, model: str, native: bool) -> None:
     """New API /v1/images/generations takes imagen-* only; every gemini-* goes generateContent."""
-    from pico_orchestrator.image_generate import gateway_generate_content_url, gateway_uses_gemini_native
+    from pico_orchestrator.image_generate import (
+        gateway_generate_content_url,
+        gateway_uses_gemini_native,
+    )
 
     monkeypatch.setenv("PICO_IMAGE_GATEWAY_URL", "http://127.0.0.1:3000")
     monkeypatch.setenv("PICO_IMAGE_GATEWAY_MODEL", model)
