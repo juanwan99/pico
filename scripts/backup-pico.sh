@@ -70,6 +70,19 @@ fail() {
   exit 1
 }
 
+# pico#1313: GNU tar exits 1 when a file changed while it was read. These are live
+# trees, so that is normal and the archive is whole (sha256 after upload and the
+# weekly drill still check it). 2 and up is a broken archive.
+live_tar() {
+  local rc=0
+  "$@" || rc=$?
+  if [[ "$rc" -eq 1 ]]; then
+    log "tar: a file changed while read (archive is complete)"
+    return 0
+  fi
+  return "$rc"
+}
+
 rclone_cmd() {
   local n=0
   export https_proxy="$PROXY" http_proxy="$PROXY" HTTPS_PROXY="$PROXY" HTTP_PROXY="$PROXY"
@@ -144,10 +157,10 @@ raise SystemExit(0 if ok == "ok" else "quick_check: " + ok)
   nonempty "$dir/pico.db.gz"
 
   log "pico-data / teacher-disks / librechat files"
-  docker exec "$API" tar -C /app/data --exclude='./pico.db' --exclude='./pico.db-*' \
+  live_tar docker exec "$API" tar -C /app/data --exclude='./pico.db' --exclude='./pico.db-*' \
     --exclude='./*.bak*' -czf - . >"$dir/pico-data.tgz" || fail "pico-data tar"
-  docker exec "$API" tar -C /var/lib/pico/teacher-disks -czf - . >"$dir/teacher-disks.tgz" || fail "teacher-disks tar"
-  docker exec "$LIBRECHAT" tar -C /app -czf - uploads client/public/images >"$dir/librechat-files.tgz" || fail "librechat tar"
+  live_tar docker exec "$API" tar -C /var/lib/pico/teacher-disks -czf - . >"$dir/teacher-disks.tgz" || fail "teacher-disks tar"
+  live_tar docker exec "$LIBRECHAT" tar -C /app -czf - uploads client/public/images >"$dir/librechat-files.tgz" || fail "librechat tar"
   for f in pico-data.tgz teacher-disks.tgz librechat-files.tgz; do nonempty "$dir/$f"; done
 
   log "meili"
