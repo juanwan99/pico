@@ -577,6 +577,21 @@ def test_route_pages_ok(client: TestClient, monkeypatch):
     assert len(body["questions"]) == 21
 
 
+def test_route_passes_concurrency_and_bounds_it(client: TestClient, monkeypatch):
+    seen: dict = {}
+
+    async def fake(pages, **kw):
+        seen.update(kw)
+        return {"ok": True, "questions": [], "materials": [], "pages": [], "warnings": [], "usage": None}
+
+    monkeypatch.setattr(ex, "extract_pages", fake)
+    body = {"pages": [_page_in(1)], "concurrency": 3}
+    assert client.post("/v1/exam/answer-extract", json=body, headers=_headers()).status_code == 200
+    assert seen["concurrency"] == 3
+    body["concurrency"] = 9
+    assert client.post("/v1/exam/answer-extract", json=body, headers=_headers()).status_code == 422
+
+
 def test_route_page_validation(client: TestClient):
     res = client.post(
         "/v1/exam/answer-extract",
