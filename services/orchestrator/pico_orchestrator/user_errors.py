@@ -12,6 +12,49 @@ from pico_orchestrator.upstream import BUSY_TEXT
 
 FILE_IN_RESULTS = "已经生成的文件还在结果里，可以直接打开。"
 
+# pico#1331「我的接口」: a raw error from the teacher's own OpenAI-compatible
+# endpoint is tagged with this prefix at the call site (provider.py / true_pi
+# runtime). It never falls back to a school model and never goes through the
+# generic school-branded copy below — the teacher is told it is *their*
+# interface, with a short classified reason, no vendor/model names leaked.
+PERSONAL_ENDPOINT_ERROR_TAG = "PICO_PERSONAL_ENDPOINT_ERROR::"
+
+
+def personal_endpoint_reason(raw: str) -> str:
+    low = (raw or "").lower()
+    if "endpoint_config_incomplete" in low or "endpoint_key_undecryptable" in low:
+        # The saved row itself is unusable (empty field / secret rotated) —
+        # distinct from a live vendor error; point the teacher at the fix.
+        return "密钥读不出来，请在『我的接口』里重新保存"
+    if "401" in low or "unauthorized" in low or "invalid_api_key" in low or "invalid api key" in low or "incorrect api key" in low:
+        return "密钥不对，请检查密钥是否填错或已过期"
+    if (
+        "402" in low
+        or "insufficient" in low
+        or "quota" in low
+        or "余额" in raw
+        or "balance" in low
+    ):
+        return "余额不足，请到服务商那边充值后再试"
+    if "404" in low or "model_not_found" in low or "does not exist" in low or "not found" in low:
+        return "填的名字不对，或这把密钥还没开通它，请确认一下"
+    if "429" in low or "rate limit" in low or "too many requests" in low:
+        return "请求太频繁了，请稍后再试"
+    if "timeout" in low or "timed out" in low or "超时" in raw:
+        return "等待太久没有回应，请稍后再试"
+    if (
+        "connect" in low
+        or "connection" in low
+        or "resolve" in low
+        or "refused" in low
+        or "dns" in low
+        or "ssrf" in low
+        or "web.denied" in low
+        or "拒绝访问" in raw
+    ):
+        return "连不上这个地址，请检查接口地址是否填对"
+    return "连不上或返回出错，请检查接口地址、密钥和填的名字"
+
 
 def _with_deliverable_hint(msg: str, has_deliverable: bool) -> str:
     """When tools already landed, never leave the teacher with busy-only copy."""
@@ -67,6 +110,11 @@ def is_wall_timeout_code(code: str | None, raw: str | None = None) -> bool:
 def user_message_for_error(
     raw: str | None, *, code: str | None = None, has_deliverable: bool = False
 ) -> str:
+    if raw and raw.startswith(PERSONAL_ENDPOINT_ERROR_TAG):
+        # Never through teacher_safe(): the classified reason is already
+        # vendor-free, and teacher_safe's generic leak list (「模型」…) would
+        # otherwise swallow a legitimately specific personal-endpoint reason.
+        return f"你的接口出错了：{personal_endpoint_reason(raw[len(PERSONAL_ENDPOINT_ERROR_TAG):])}"
     if is_wall_timeout_code(code, raw):
         # Prefer the pause copy. Budget in the reason if present.
         m = re.search(r"timeout after (\d+)s", (raw or ""), re.IGNORECASE)

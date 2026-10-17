@@ -458,3 +458,44 @@ def test_provider_kimi_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = resolve_provider()
     assert cfg is not None
     assert cfg.name == "kimi"
+
+
+@pytest.mark.asyncio
+async def test_pi_personal_provider_model_error_tagged_not_generic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pico#1331 coordinator review: this rollback-kernel loop
+    (PICO_HOSTED_LOOP=1 / true Pi binary missing) must tag a live model-call
+    failure on the teacher's own endpoint the same way true_pi/runtime.py
+    already does — never the generic 「Pico 这会儿用不了」 copy, which would
+    hide that it is the teacher's own interface, not Pico, that broke."""
+
+    class _FakeCompletions:
+        async def create(self, **_kwargs: Any) -> Any:
+            raise RuntimeError("401 Unauthorized: invalid api key")
+
+    class _FakeClient:
+        def __init__(self, **_kwargs: Any) -> None:
+            self.chat = SimpleNamespace(completions=_FakeCompletions())
+
+    personal = ProviderConfig(
+        name="personal",
+        api_key="sk-teacher-bad",
+        base_url="https://teacher.example/v1",
+        model="gpt-4o-mini",
+    )
+    monkeypatch.setattr("pico_orchestrator.pi_runtime.resolve_provider", lambda: personal)
+    monkeypatch.setattr("pico_orchestrator.provider.AsyncOpenAI", _FakeClient)
+
+    from pico_orchestrator.pi_runtime import run_pi_agent
+    from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG
+
+    result = await run_pi_agent(
+        prompt="打个招呼",
+        principal=Principal(),
+        emit=_noop_emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(max_steps=2, max_seconds=30, max_tokens=8000),
+    )
+    assert result.status == "failed"
+    assert (result.error or "").startswith(PERSONAL_ENDPOINT_ERROR_TAG)

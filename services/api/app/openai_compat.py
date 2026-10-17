@@ -23,6 +23,7 @@ from pico_orchestrator.edu_sidebar import (
     shape_web_hits,
 )
 from pico_orchestrator.gateway import ToolError as ChannelToolError
+from pico_orchestrator.provider import personal_provider_scope
 from pico_orchestrator.sse_keepalive import (
     SSE_COMMENT_KEEPALIVE,
     SSE_KEEPALIVE_SECONDS,
@@ -299,9 +300,16 @@ def _normalized_model(model: str) -> str:
     return normalized.split("/")[-1] if "/" in normalized else normalized
 
 
-async def _gate_allowance_for_turn(principal: Principal, prompt_text: str) -> None:
+async def _gate_allowance_for_turn(
+    principal: Principal, prompt_text: str, *, personal_active: bool = False
+) -> None:
     """#1042: refuse a new turn when today's priced usage + this turn's quote
-    exceeds the JWT allowance. No claim → no gate. Ledger read only, no wallet."""
+    exceeds the JWT allowance. No claim → no gate. Ledger read only, no wallet.
+
+    pico#1331「我的接口」: personal pays the model to the teacher's own
+    provider, not Pico points — the turn's own quote must not count against
+    the allowance. Per-use features still gate normally when invoked.
+    """
     from pico_orchestrator.features import allowance_millipoints
 
     if allowance_millipoints(principal) is None:
@@ -309,13 +317,14 @@ async def _gate_allowance_for_turn(principal: Principal, prompt_text: str) -> No
     from app.points_meter import quote_millipoints_from_input_len
     from app.usage_ledger import enforce_allowance
 
+    quote_milli = (
+        0
+        if personal_active
+        else quote_millipoints_from_input_len(len(prompt_text or ""))
+    )
     factory = session_factory()
     async with factory() as session:
-        await enforce_allowance(
-            session,
-            principal,
-            quote_milli=quote_millipoints_from_input_len(len(prompt_text or "")),
-        )
+        await enforce_allowance(session, principal, quote_milli=quote_milli)
 
 
 def _assert_model_allowed(model: str, settings: Settings) -> None:
@@ -817,6 +826,30 @@ def _caps_with_images(caps: Any, images: list[dict[str, Any]] | None) -> Any:
     from pico_orchestrator.vision import apply_images_to_caps
 
     return apply_images_to_caps(caps, images or [])
+
+
+def _personal_cfg_for_images(cfg: Any, images: list[dict[str, Any]] | None) -> Any:
+    """pico#1331 vision: never forward a school vision model id to a
+    teacher's own endpoint.
+
+    ``apply_images_to_caps``/``true_pi.runtime`` swap ``caps.backend_model``
+    to ``DEFAULT_DEEPSEEK_VISION`` (a *school* model id) whenever the current
+    backend can't read images — that swap happens regardless of which
+    provider is in scope. If a personal provider stayed in scope, the swapped
+    id would be sent straight to the teacher's own base_url, which almost
+    never serves that model: a guaranteed, confusing error. So when the
+    turn carries images and the teacher's own model can't read them
+    (``model_accepts_image`` false), drop personal scope for this one turn —
+    it then runs on the school provider + school vision model, billed
+    normally (``bill_to`` is never "personal" for a turn that never touched
+    the teacher's key). When the teacher's own model *can* read images,
+    nothing changes: stay personal.
+    """
+    if cfg is None or not images:
+        return cfg
+    from pico_orchestrator.vision import model_accepts_image
+
+    return cfg if model_accepts_image(getattr(cfg, "model", None)) else None
 
 
 def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
@@ -1601,11 +1634,44 @@ async def chat_completions(
             status_code=403,
             detail={"code": exc.code, "message": str(exc.message)},
         ) from exc
+    # pico#1331「我的接口」: looked up once, right after the Principal is
+    # final. None = school model, exactly like before this feature existed.
+    from app.auth import is_steward_public
+    from app.model_endpoint import personal_provider_config_for
+
+    if is_steward_public(principal):
+        personal_cfg = None
+    else:
+        try:
+            personal_cfg = await personal_provider_config_for(principal)
+        except Exception as exc:
+            # user_message_for_error is already a module-level import (top of
+            # file) — re-importing it here would shadow that name as local
+            # for this *entire* function (Python scoping), breaking the
+            # other call sites below that expect the module-level one.
+            # The teacher's saved row exists but is unusable (incomplete /
+            # unsafe base_url / can't decrypt) — refuse the turn before any
+            # model call, the same pre-flight shape as the allowance gate
+            # below. No usage_events row is written, so there is nothing to
+            # bill on either the school model or a personal 0-point row.
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "personal_endpoint.broken",
+                    "message": user_message_for_error(str(exc)),
+                },
+            ) from exc
+
+    def _bill_to_for_turn(p: Principal) -> str:
+        return "personal" if personal_cfg is not None else payer_for(p)
+
     # #1042: teacher switches + today's allowance, both read from the JWT.
     # Gate only at turn start; a running turn is never cut.
     if _normalized_model(body.model) == "pico-deep":
         enforce_feature(principal, "deep")
-    await _gate_allowance_for_turn(principal, raw_for_user)
+    await _gate_allowance_for_turn(
+        principal, raw_for_user, personal_active=personal_cfg is not None
+    )
     client_system = _client_system_from_messages(body.messages)
     edu_sidebar = _is_edu_sidebar_system(client_system)
     # AI 权 = 人权 on this page: the edu sidebar must not see this teacher's
@@ -1712,6 +1778,14 @@ async def chat_completions(
         logger.exception("named school materials inject failed")
     teacher_extra = day_use_block or ""
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
+    # pico#1331「我的接口」看图: turn_images is fully merged by this point
+    # (user message, native PDF pages, conversation memory, this turn's
+    # uploads) — the exact set that will reach the model. personal_cfg may
+    # drop back to None here (see _personal_cfg_for_images); every later use
+    # of it (_bill_to_for_turn, personal_provider_scope(personal_cfg)) reads
+    # this same closure variable, so the school fallback + normal billing
+    # happen automatically with no extra branch in true_pi / pi_runtime.
+    personal_cfg = _personal_cfg_for_images(personal_cfg, turn_images)
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 100000) or 100000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
     # marker is explicit so this must not 400 a legal affordance table.
@@ -1832,7 +1906,7 @@ async def chat_completions(
                     _search_tok = bind_usage_context(
                         school_id=principal.school_id,
                         membership_id=principal.membership_id,
-                        bill_to=payer_for(principal),
+                        bill_to=_bill_to_for_turn(principal),
                         scopes=principal.scopes,
                     )
                     try:
@@ -1883,7 +1957,12 @@ async def chat_completions(
     )
     if native_files and not json_only:
         use_direct = False
-    if use_direct and turn_images:
+    if use_direct and turn_images and personal_cfg is None:
+        # pico#1331: when personal_cfg is still set here, turn_images is
+        # already known-compatible with it (the vision check right after
+        # turn_images was finalized above nulls personal_cfg back to school
+        # otherwise) — direct_accepts_images() only knows about the school
+        # model id and must not 400 a personal model it never resolves.
         from pico_orchestrator.provider import direct_accepts_images
 
         if not direct_accepts_images(model):
@@ -2028,7 +2107,7 @@ async def chat_completions(
                         error="client disconnected",
                         task_id=task_id,
                         token_usage=direct_usage or None,
-                        bill_to=payer_for(principal),
+                        bill_to=_bill_to_for_turn(principal),
                     )
                     raise
                 except Exception as e:  # noqa: BLE001
@@ -2037,7 +2116,7 @@ async def chat_completions(
                         status="failed",
                         error=str(e),
                         task_id=task_id,
-                        bill_to=payer_for(principal),
+                        bill_to=_bill_to_for_turn(principal),
                     )
                     return _failure_response(str(e), status="failed", run_id=run_id)
                 if not text.strip():
@@ -2047,7 +2126,7 @@ async def chat_completions(
                         error="empty model output",
                         task_id=task_id,
                         token_usage=direct_usage or None,
-                        bill_to=payer_for(principal),
+                        bill_to=_bill_to_for_turn(principal),
                     )
                     return _failure_response(None, status="failed", run_id=run_id, empty=True)
                 await _finalize_run(
@@ -2057,39 +2136,45 @@ async def chat_completions(
                     task_id=task_id,
                     user_prompt=prompt,
                     token_usage=direct_usage or None,
-                    bill_to=payer_for(principal),
+                    bill_to=_bill_to_for_turn(principal),
                     backend_model=direct_finish.get("model"),
                 )
                 return _reply(text, direct_finish.get("finish_reason"), direct_usage, None)
 
-            work = asyncio.create_task(_direct_reply())
+            # pico#1331: the task copies the contextvar at creation time, so
+            # the scope only needs to wrap this call, not the later await.
+            with personal_provider_scope(personal_cfg):
+                work = asyncio.create_task(_direct_reply())
             if replay_key is not None:
                 json_only_replay.track(replay_key, work)
             if await _client_gone_first(request, work, run_id, keep=replay_key is not None):
                 return Response(status_code=499)
             return work.result()
         else:
-            work = asyncio.create_task(_run_and_collect(
-                prompt,
-                principal,
-                settings,
-                run_id=run_id,
-                model=model,
-                history=history,
-                skill_snapshot=skill_snapshot,
-                delivery_plan=delivery_plan,
-                allowed_tools=request_tools,
-                system_prompt=client_system if edu_sidebar else "",
-                conversation_id=conversation_id,
-                images=turn_images,
-                day_use=teacher_extra,
-                plan_on=plan_on,
-                native_files=native_files,
-                edu_sidebar=edu_sidebar,
-                page_affordances=page_affordances,
-                page_title=page_title,
-                thinking_override=thinking_override,
-            ))
+            # pico#1331: the task copies the contextvar at creation time, so
+            # the scope only needs to wrap this call, not the later await.
+            with personal_provider_scope(personal_cfg):
+                work = asyncio.create_task(_run_and_collect(
+                    prompt,
+                    principal,
+                    settings,
+                    run_id=run_id,
+                    model=model,
+                    history=history,
+                    skill_snapshot=skill_snapshot,
+                    delivery_plan=delivery_plan,
+                    allowed_tools=request_tools,
+                    system_prompt=client_system if edu_sidebar else "",
+                    conversation_id=conversation_id,
+                    images=turn_images,
+                    day_use=teacher_extra,
+                    plan_on=plan_on,
+                    native_files=native_files,
+                    edu_sidebar=edu_sidebar,
+                    page_affordances=page_affordances,
+                    page_title=page_title,
+                    thinking_override=thinking_override,
+                ))
             if await _client_gone_first(request, work, run_id, grace=_CLIENT_GONE_GRACE_S):
                 gone = None
                 if work.done() and not work.cancelled() and work.exception() is None:
@@ -2100,7 +2185,7 @@ async def chat_completions(
                     error="client disconnected",
                     task_id=task_id,
                     token_usage=getattr(gone, "token_usage", None),
-                    bill_to=payer_for(principal),
+                    bill_to=_bill_to_for_turn(principal),
                 )
                 return Response(status_code=499)
             try:
@@ -2111,7 +2196,7 @@ async def chat_completions(
                     status="failed",
                     error=str(e),
                     task_id=task_id,
-                    bill_to=payer_for(principal),
+                    bill_to=_bill_to_for_turn(principal),
                 )
                 return _failure_response(str(e), status="failed", run_id=run_id)
             text = result.final_text or ""
@@ -2124,7 +2209,7 @@ async def chat_completions(
                 user_prompt=prompt,
                 change_proposal=getattr(result, "change_proposal", None),
                 token_usage=getattr(result, "token_usage", None),
-                bill_to=payer_for(principal),
+                bill_to=_bill_to_for_turn(principal),
             )
             if result.status != "succeeded" or not text.strip():
                 return _failure_response(
@@ -2212,25 +2297,31 @@ async def chat_completions(
             stream_finish: dict[str, Any] = {}
             finalized = False
             try:
-                async for piece in iter_with_idle_ticks(
-                    stream_chat(
-                        prompt,
-                        max_tokens=effective_max_tokens,
-                        history=history,
-                        system=system,
-                        model=model,
-                        thinking=_direct_thinking(json_only=json_only, override=thinking_override),
-                        usage_out=stream_usage,
-                        finish_out=stream_finish,
-                        images=turn_images,
-                    )
-                ):
-                    if piece is None:
-                        yield SSE_COMMENT_KEEPALIVE
-                        continue
-                    if piece:
-                        parts.append(piece)
-                        yield chunk({"content": piece})
+                # pico#1331: this loop runs inline (no asyncio.create_task),
+                # so the scope must stay open for the whole iteration — a
+                # generator's body only runs during __anext__, not at
+                # creation, and contextvars follow the current task's live
+                # scope, not the generator object.
+                with personal_provider_scope(personal_cfg):
+                    async for piece in iter_with_idle_ticks(
+                        stream_chat(
+                            prompt,
+                            max_tokens=effective_max_tokens,
+                            history=history,
+                            system=system,
+                            model=model,
+                            thinking=_direct_thinking(json_only=json_only, override=thinking_override),
+                            usage_out=stream_usage,
+                            finish_out=stream_finish,
+                            images=turn_images,
+                        )
+                    ):
+                        if piece is None:
+                            yield SSE_COMMENT_KEEPALIVE
+                            continue
+                        if piece:
+                            parts.append(piece)
+                            yield chunk({"content": piece})
                 await _finalize_run(
                     run_id,
                     status="succeeded",
@@ -2238,7 +2329,7 @@ async def chat_completions(
                     task_id=task_id,
                     user_prompt=prompt,
                     token_usage=stream_usage or None,
-                    bill_to=payer_for(principal),
+                    bill_to=_bill_to_for_turn(principal),
                     backend_model=stream_finish.get("model"),
                 )
                 finalized = True
@@ -2249,7 +2340,7 @@ async def chat_completions(
                         status="cancelled",
                         error="stream disconnected",
                         task_id=task_id,
-                        bill_to=payer_for(principal),
+                        bill_to=_bill_to_for_turn(principal),
                     )
                 )
                 finalized = True
@@ -2261,7 +2352,7 @@ async def chat_completions(
                     status="failed",
                     error=str(e),
                     task_id=task_id,
-                    bill_to=payer_for(principal),
+                    bill_to=_bill_to_for_turn(principal),
                 )
                 finalized = True
             finally:
@@ -2272,7 +2363,7 @@ async def chat_completions(
                             status="cancelled",
                             error="stream disconnected",
                             task_id=task_id,
-                            bill_to=payer_for(principal),
+                            bill_to=_bill_to_for_turn(principal),
                         )
                     )
             yield chunk(
@@ -2554,7 +2645,7 @@ async def chat_completions(
                     user_prompt=prompt,
                     change_proposal=getattr(result, "change_proposal", None),
                     token_usage=getattr(result, "token_usage", None),
-                    bill_to=payer_for(principal),
+                    bill_to=_bill_to_for_turn(principal),
                 )
                 await q.put(("done", result))
             except asyncio.CancelledError:
@@ -2569,7 +2660,7 @@ async def chat_completions(
                         status="cancelled",
                         error="run cancelled",
                         task_id=task_id,
-                        bill_to=payer_for(principal),
+                        bill_to=_bill_to_for_turn(principal),
                     )
                 )
                 raise
@@ -2586,7 +2677,7 @@ async def chat_completions(
                         status="cancelled",
                         error=None,
                         task_id=task_id,
-                        bill_to=payer_for(principal),
+                        bill_to=_bill_to_for_turn(principal),
                     )
                     await q.put(
                         (
@@ -2604,11 +2695,14 @@ async def chat_completions(
                         status="failed",
                         error=str(e),
                         task_id=task_id,
-                        bill_to=payer_for(principal),
+                        bill_to=_bill_to_for_turn(principal),
                     )
                     await q.put(("error", e))
 
-        bg_task = asyncio.create_task(run())
+        # pico#1331: the task copies the contextvar at creation time, so
+        # the scope only needs to wrap this call, not the later await.
+        with personal_provider_scope(personal_cfg):
+            bg_task = asyncio.create_task(run())
         # Share drain set with run_service so deploy SIGTERM can soft-wait.
         from app.run_service import _track_inflight
 

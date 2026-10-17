@@ -311,6 +311,25 @@ class PersonalFolderRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class UserModelEndpointRow(Base):
+    """Teacher's own OpenAI-compatible model endpoint (pico#1331 「我的接口」).
+
+    One row per membership; only that membership's turns ever read it. The
+    key is Fernet-encrypted (``PICO_ENDPOINT_SECRET``); this table never
+    holds a plaintext key.
+    """
+
+    __tablename__ = "user_model_endpoint"
+
+    school_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    membership_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    base_url: Mapped[str] = mapped_column(String(512), default="")
+    model: Mapped[str] = mapped_column(String(128), default="")
+    api_key_enc: Mapped[str] = mapped_column(Text, default="")
+    enabled: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
 _engine = None
 _Session: async_sessionmaker[AsyncSession] | None = None
 

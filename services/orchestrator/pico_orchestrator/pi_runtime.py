@@ -16,7 +16,12 @@ from string import Template
 from typing import Any
 
 from pico_orchestrator.gateway import ArtifactStore, Principal, ToolError
-from pico_orchestrator.provider import _llm_client, call_once, resolve_provider
+from pico_orchestrator.provider import (
+    PERSONAL_PROVIDER_NAME,
+    _llm_client,
+    call_once,
+    resolve_provider,
+)
 from pico_orchestrator.run_types import EventEmitter, RunCaps, RunResult
 from pico_orchestrator.sandbox_session_event import (
     SANDBOX_BROWSER_TOOLS,
@@ -25,7 +30,7 @@ from pico_orchestrator.sandbox_session_event import (
 )
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
 from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
-from pico_orchestrator.user_errors import enrich_fail_payload
+from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG, enrich_fail_payload
 
 RUNTIME_LABEL = "pi-agent"
 _CANCEL_POLL_SECONDS = 0.05
@@ -284,10 +289,13 @@ async def run_pi_agent(
                 )
             except TimeoutError:
                 timed_out.set()
+                timeout_reason = f"Pi agent timeout after {caps.max_seconds}s"
+                if provider.name == PERSONAL_PROVIDER_NAME:
+                    timeout_reason = f"{PERSONAL_ENDPOINT_ERROR_TAG}{timeout_reason}"
                 return await _failed_result(
                     emit,
                     code="timeout",
-                    reason=f"Pi agent timeout after {caps.max_seconds}s",
+                    reason=timeout_reason,
                     final_parts=final_parts,
                     token_usage=token_usage,
                     tool_results=tool_context_results,
@@ -296,10 +304,18 @@ async def run_pi_agent(
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
             if response is None:
+                reason = f"Pi agent model error ({type(last_exc).__name__})"
+                if provider.name == PERSONAL_PROVIDER_NAME:
+                    # pico#1331: same tag true_pi/runtime.py already applies —
+                    # this rollback-kernel loop (PICO_HOSTED_LOOP=1 / true Pi
+                    # binary missing) must not show the school-branded generic
+                    # 「Pico 这会儿用不了」 copy for the teacher's own endpoint
+                    # erroring; user_errors.py only recognizes the tagged form.
+                    reason = f"{PERSONAL_ENDPOINT_ERROR_TAG}{last_exc}"
                 return await _failed_result(
                     emit,
                     code="pi.runtime_error",
-                    reason=f"Pi agent model error ({type(last_exc).__name__})",
+                    reason=reason,
                     final_parts=final_parts,
                     token_usage=token_usage,
                     tool_results=tool_context_results,

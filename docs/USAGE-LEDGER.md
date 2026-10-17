@@ -12,7 +12,7 @@ EDU: docs/contracts/usage-export.md（edu-core 拉干净行；钱在 edu）
 > **一本用量账，不是账单。** Pico 按账号记「谁、哪校、哪次任务、哪个**后端模型**、多少 token（或诚实缺）。  
 > 老师看见的**积分**是同一本账的派生（服务端换算，三位小数），不是第二套账、不是点池。  
 > **禁止** 定价、人民币、套餐、扣款、支付、发票、点池/余额列。本表与 API **不得** 出现 `price` / `currency` / `cost` / `charge` / `billing` 列。  
-> **edu-core：** 只拉 [`docs/contracts/usage-export.md`](./contracts/usage-export.md) 上的 `points` 数字扣点；禁止再乘。`extra.bill_to=school` 扣学校额度，否则扣该 `membership_id`。钱包仍在 edu。本仓不写 edu。
+> **edu-core：** 只拉 [`docs/contracts/usage-export.md`](./contracts/usage-export.md) 上的 `points` 数字扣点；禁止再乘。`extra.bill_to=school` 扣学校额度，`extra.bill_to=personal`（pico#1331「我的接口」：走老师自带的 OpenAI 兼容接口）不扣任何额度（`points` 恒 0），否则扣该 `membership_id`。钱包仍在 edu。本仓不写 edu。
 
 ## 0. 统一上游 = New API（防偏）
 
@@ -64,7 +64,7 @@ schema 与 JSON 合同禁止 money 字段
 | `task_id` | string \| null | 关联 Task（运行账本） |
 | `run_id` | string \| null | 关联 Run |
 | `source` | string | 写入点：`openai_compat` / `run_service` / 后续卡 |
-| `extra_json` | object | 非钱元数据（时长、查询次数、`bill_to`=`member`\|`school`） |
+| `extra_json` | object | 非钱元数据（时长、查询次数、`bill_to`=`member`\|`school`\|`personal`） |
 | `idempotency_key` | string unique | 失败重试不重复记账 |
 | `created_at` | datetime UTC | 记账时间 |
 
@@ -93,6 +93,8 @@ Token 规则：
 ```
 
 价签按 **渠道×模型**（同一模型不同渠道必须各有一条），记的是真实成本，统一价不改它。无价签 → 该渠道锁死，不准调用（对话模型也一样，统一价不放行没价签的模型）。钱/钱包在 edu-core；edu 拉 export 的 `points` **禁止再乘**。Pico 不做充值/支付/余额。`pico-fast`/`pico-deep` 是档位不是计费型号。出图优先用提供方 `usageMetadata`；没有则用价签的 `per_image_yuan`。unknown 且无按次价签 → `points=null`（不是 0）。老师面只见积分，禁止 token / 公式。每一轮钉在该条回复末尾：有积分显示「实际」。
+
+**个人接口零积分（pico#1331「我的接口」）：** 老师在「设置 → 我的接口」填自己的 OpenAI 兼容地址/密钥后，该轮 `kind=llm` 仍按正常规则记 token（诚实账），但 `extra.bill_to="personal"` 时 `milli_from_row` 直接短路返回 `0`——不进统一价公式、不扣积分，因为这轮模型调用的钱已经由老师自己的服务商收了。这个 tag **只在 `openai_compat.py` 明确拿到 `personal_provider_scope` 配置时写**，从不由别处推断；按次功能（`search`/`kb`/`image`/`sandbox`）永远不带这个 tag，继续正常扣积分——「我的接口」只换模型调用那一刀，不是免费额度。
 
 ---
 
