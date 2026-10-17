@@ -1615,11 +1615,28 @@ async def chat_completions(
     from app.auth import is_steward_public
     from app.model_endpoint import personal_provider_config_for
 
-    personal_cfg = (
-        None
-        if is_steward_public(principal)
-        else await personal_provider_config_for(principal)
-    )
+    if is_steward_public(principal):
+        personal_cfg = None
+    else:
+        try:
+            personal_cfg = await personal_provider_config_for(principal)
+        except Exception as exc:  # noqa: BLE001 — tagged: never fall back to school model
+            # user_message_for_error is already a module-level import (top of
+            # file) — re-importing it here would shadow that name as local
+            # for this *entire* function (Python scoping), breaking the
+            # other call sites below that expect the module-level one.
+            # The teacher's saved row exists but is unusable (incomplete /
+            # unsafe base_url / can't decrypt) — refuse the turn before any
+            # model call, the same pre-flight shape as the allowance gate
+            # below. No usage_events row is written, so there is nothing to
+            # bill on either the school model or a personal 0-point row.
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "personal_endpoint.broken",
+                    "message": user_message_for_error(str(exc)),
+                },
+            ) from exc
 
     def _bill_to_for_turn(p: Principal) -> str:
         return "personal" if personal_cfg is not None else payer_for(p)

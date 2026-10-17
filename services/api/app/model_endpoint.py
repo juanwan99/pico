@@ -121,21 +121,34 @@ def _row_payload(row: UserModelEndpointRow | None) -> dict[str, Any]:
 async def personal_provider_config_for(principal: Principal) -> Any | None:
     """``ProviderConfig`` for this membership's own endpoint, or None.
 
-    None when there is no row, it is disabled, the DB is not reachable
-    (e.g. not yet initialized — some unit tests call chat_completions
-    directly without the app lifespan), or the key cannot be decrypted
-    (secret rotated/missing) — the turn then uses the school model exactly
-    as if nothing were ever saved.
+    None (→ school model, exactly as if nothing were ever saved) **only**
+    when there is no row, it is disabled, or the DB/session itself is not
+    reachable (e.g. not yet initialized — some unit tests call
+    chat_completions directly without the app lifespan). That last branch
+    is deliberately narrow: it is a lookup/environment failure, not a
+    judgement about the saved row's content.
+
+    An **enabled** row that cannot actually be used — incomplete fields,
+    a base_url that is no longer safe (DNS can change after save; this
+    re-checks the SSRF guard every turn, not only at PUT time), or a key
+    that fails to decrypt (secret rotated) — raises a tagged
+    ``RuntimeError`` instead (``user_errors.PERSONAL_ENDPOINT_ERROR_TAG``).
+    The card forbids a silent fall back to the school model (and the Pico
+    points that would imply) just because the teacher's own config broke;
+    the turn must fail with a teacher-facing 「你的接口出错了：…」 instead.
     """
+    from pico_orchestrator.gateway import ToolError
     from pico_orchestrator.provider import PERSONAL_PROVIDER_NAME, ProviderConfig
+    from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG
+    from pico_orchestrator.web_guard import assert_public_http_url
 
     try:
         factory = session_factory()
         async with factory() as session:
             row = await _get_row(session, principal)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — DB/session only; narrow on purpose
         logger.warning(
-            "model_endpoint: lookup failed for %s/%s — turn falls back to school model",
+            "model_endpoint: lookup failed for %s/%s (DB not reachable) — turn falls back to school model",
             principal.school_id,
             principal.membership_id,
         )
@@ -143,16 +156,32 @@ async def personal_provider_config_for(principal: Principal) -> Any | None:
     if row is None or not row.enabled:
         return None
     if not row.base_url or not row.model or not row.api_key_enc:
-        return None
-    try:
-        api_key = decrypt_api_key(row.api_key_enc)
-    except Exception:  # noqa: BLE001
         logger.warning(
-            "model_endpoint: decrypt failed for %s/%s — turn falls back to school model",
+            "model_endpoint: enabled row for %s/%s is incomplete — failing the turn, not falling back",
             principal.school_id,
             principal.membership_id,
         )
-        return None
+        raise RuntimeError(f"{PERSONAL_ENDPOINT_ERROR_TAG}endpoint_config_incomplete")
+    try:
+        await assert_public_http_url(row.base_url)
+    except ToolError as exc:
+        logger.warning(
+            "model_endpoint: base_url no longer safe at use time for %s/%s — failing the turn",
+            principal.school_id,
+            principal.membership_id,
+        )
+        raise RuntimeError(f"{PERSONAL_ENDPOINT_ERROR_TAG}{exc.message}") from exc
+    try:
+        api_key = decrypt_api_key(row.api_key_enc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "model_endpoint: decrypt failed for %s/%s — failing the turn, not falling back",
+            principal.school_id,
+            principal.membership_id,
+        )
+        raise RuntimeError(
+            f"{PERSONAL_ENDPOINT_ERROR_TAG}endpoint_key_undecryptable"
+        ) from exc
     return ProviderConfig(
         name=PERSONAL_PROVIDER_NAME,
         api_key=api_key,

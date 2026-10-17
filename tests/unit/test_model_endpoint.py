@@ -261,6 +261,176 @@ async def test_personal_provider_config_for_db_down_fails_open_to_school(
     assert await personal_provider_config_for(principal) is None
 
 
+_PERSONAL_PRINCIPAL = Principal(
+    school_id="school-a",
+    membership_id="m-teacher",
+    scopes=["ai:run"],
+    iss="pico-test-issuer",
+    aud="pico-api",
+    exp=9999999999,
+    raw={},
+)
+
+
+@pytest.mark.asyncio
+async def test_personal_provider_config_for_incomplete_row_raises_never_none(
+    client,
+) -> None:
+    """Coordinator review of a66c0078 (1): an *enabled* row that is broken must
+    fail the turn, never silently return None (= fall back to the school
+    model and bill it as if nothing were saved)."""
+    client.put(
+        "/v1/me/model-endpoint",
+        json={
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-4o-mini",
+            "api_key": "sk-teacher-live",
+            "enabled": True,
+        },
+        headers=_headers(),
+    )
+    # Blank the saved base_url directly (PUT's own validation can never save
+    # this; simulates a row gone bad some other way — migration, manual fix).
+    from app.db import UserModelEndpointRow, session_factory
+
+    factory = session_factory()
+    async with factory() as session:
+        row = await session.get(UserModelEndpointRow, ("school-a", "m-teacher"))
+        row.base_url = ""
+        await session.commit()
+
+    from app.model_endpoint import personal_provider_config_for
+    from pico_orchestrator.user_errors import (
+        PERSONAL_ENDPOINT_ERROR_TAG,
+        personal_endpoint_reason,
+        user_message_for_error,
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await personal_provider_config_for(_PERSONAL_PRINCIPAL)
+    raw = str(excinfo.value)
+    assert raw.startswith(PERSONAL_ENDPOINT_ERROR_TAG)
+    assert personal_endpoint_reason(raw[len(PERSONAL_ENDPOINT_ERROR_TAG) :]) == (
+        "密钥读不出来，请在『我的接口』里重新保存"
+    )
+    assert user_message_for_error(raw) == "你的接口出错了：密钥读不出来，请在『我的接口』里重新保存"
+
+
+@pytest.mark.asyncio
+async def test_personal_provider_config_for_decrypt_failure_raises_never_none(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Secret rotated after the row was saved: decrypt fails — must still
+    refuse the turn, never fall back to the school model."""
+    client.put(
+        "/v1/me/model-endpoint",
+        json={
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-4o-mini",
+            "api_key": "sk-teacher-live",
+            "enabled": True,
+        },
+        headers=_headers(),
+    )
+    monkeypatch.setenv("PICO_ENDPOINT_SECRET", "a-totally-different-rotated-secret!!")
+
+    from app.model_endpoint import personal_provider_config_for
+    from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await personal_provider_config_for(_PERSONAL_PRINCIPAL)
+    raw = str(excinfo.value)
+    assert raw.startswith(PERSONAL_ENDPOINT_ERROR_TAG)
+    assert "endpoint_key_undecryptable" in raw
+
+
+@pytest.mark.asyncio
+async def test_personal_provider_config_for_unsafe_url_at_use_time_raises(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Coordinator review of a66c0078 (2): base_url is re-checked for SSRF at
+    use time (every turn), not only at PUT — a DNS change after saving (e.g.
+    now resolving into a private/metadata/Tailscale range) must refuse the
+    turn rather than silently dialing an internal address."""
+    client.put(
+        "/v1/me/model-endpoint",
+        json={
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-4o-mini",
+            "api_key": "sk-teacher-live",
+            "enabled": True,
+        },
+        headers=_headers(),
+    )
+    # DNS for api.example.com "changed" to a Tailscale-range address.
+    monkeypatch.setattr(
+        "pico_orchestrator.web_guard._resolve_ips",
+        lambda host: [ipaddress.ip_address("100.64.1.1")],
+    )
+
+    from app.model_endpoint import personal_provider_config_for
+    from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await personal_provider_config_for(_PERSONAL_PRINCIPAL)
+    raw = str(excinfo.value)
+    assert raw.startswith(PERSONAL_ENDPOINT_ERROR_TAG)
+    assert "拒绝访问" in raw or "内网" in raw
+
+
+def test_chat_completions_with_broken_personal_row_refuses_no_fallback_billing(
+    client, tmp_path
+) -> None:
+    """End-to-end: a broken enabled row must make /v1/chat/completions refuse
+    the turn with a teacher-facing 「你的接口出错了」message, 502, and record
+    *no* usage_events row at all — not a school-billed fallback row."""
+    headers = _headers()
+    client.put(
+        "/v1/me/model-endpoint",
+        json={
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-4o-mini",
+            "api_key": "sk-teacher-live",
+            "enabled": True,
+        },
+        headers=headers,
+    )
+    monkeypatch_secret = "a-totally-different-rotated-secret-for-e2e!!"
+    import os
+
+    old = os.environ.get("PICO_ENDPOINT_SECRET")
+    os.environ["PICO_ENDPOINT_SECRET"] = monkeypatch_secret
+    try:
+        resp = client.post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "pico-fast",
+                "messages": [{"role": "user", "content": "你好"}],
+                "stream": False,
+            },
+        )
+    finally:
+        if old is not None:
+            os.environ["PICO_ENDPOINT_SECRET"] = old
+        else:
+            os.environ.pop("PICO_ENDPOINT_SECRET", None)
+
+    assert resp.status_code == 502, resp.text
+    assert "你的接口出错了" in resp.text
+    assert "重新保存" in resp.text
+
+    import sqlite3
+
+    database = tmp_path / "model-endpoint.db"
+    con = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+    rows = con.execute(
+        "SELECT COUNT(*) FROM usage_events WHERE school_id='school-a' AND membership_id='m-teacher' AND kind='llm'"
+    ).fetchone()
+    con.close()
+    assert rows[0] == 0
+
+
 # ---------------------------------------------------------------------------
 # Model switch: resolve_provider()/resolve_provider_for_model() prefer personal
 # ---------------------------------------------------------------------------

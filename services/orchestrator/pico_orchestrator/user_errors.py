@@ -22,6 +22,10 @@ PERSONAL_ENDPOINT_ERROR_TAG = "PICO_PERSONAL_ENDPOINT_ERROR::"
 
 def personal_endpoint_reason(raw: str) -> str:
     low = (raw or "").lower()
+    if "endpoint_config_incomplete" in low or "endpoint_key_undecryptable" in low:
+        # The saved row itself is unusable (empty field / secret rotated) —
+        # distinct from a live vendor error; point the teacher at the fix.
+        return "密钥读不出来，请在『我的接口』里重新保存"
     if "401" in low or "unauthorized" in low or "invalid_api_key" in low or "invalid api key" in low or "incorrect api key" in low:
         return "密钥不对，请检查密钥是否填错或已过期"
     if (
