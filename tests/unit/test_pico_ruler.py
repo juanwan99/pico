@@ -84,6 +84,21 @@ def test_docx_numbered_questions_and_answers_after():
     assert got == {"编号题≥10": True, "答案在题目之后": True, "含 答案": True}
 
 
+def test_docx_answer_heading_inside_line_and_inline_answers():
+    def paper(lines):
+        doc = docx.Document()
+        for line in lines:
+            doc.add_paragraph(line)
+        buf = io.BytesIO()
+        doc.save(buf)
+        return ruler.docx_checks(buf.getvalue(), {"docx_answer_after_questions": True})[0][1]
+
+    qs = [f"{i}．一次函数第 {i} 题" for i in range(1, 13)]
+    assert paper(["一次函数周测试卷及答案解析", *qs, "八年级《一次函数》周测试卷 · 参考答案与详细解析", "1.C"])
+    inline = [x for i, q in enumerate(qs) for x in (q, f"答案：{'ABCD'[i % 4]}")]
+    assert not paper(["一次函数周测卷", *inline])
+
+
 def test_docx_text_absent_and_tables():
     doc = docx.Document()
     doc.add_paragraph("地点：学校报告厅。李老师")

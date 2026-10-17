@@ -251,8 +251,12 @@ def docx_checks(raw: bytes, sub: dict[str, Any]) -> list[tuple[str, bool]]:
         elif key == "docx_answer_after_questions":
             lines = [p.text for p in paras]
             nums = [i for i, line in enumerate(lines) if NUMBERED.match(line)]
-            ans = [i for i, line in enumerate(lines) if re.match(r"^\s*[一二三四五六七八九十]?[、.．]?\s*(参考)?答案", line) or (line.strip().startswith(("答案", "参考答案")))]
-            ok = bool(nums) and bool(ans) and len(nums) >= 5 and ans[0] > nums[4]
+            # An answer heading is any short unnumbered line with 答案 (「…周测试卷 · 参考答案与详细解析」).
+            # The first one after question 1 must come after question 5: answers inline under
+            # each question, or a title「…及答案」above question 1, don't count.
+            ans = [i for i, line in enumerate(lines) if "答案" in line and len(line.strip()) <= 60 and not NUMBERED.match(line)]
+            after = [i for i in ans if nums and i > nums[0]]
+            ok = len(nums) >= 5 and bool(after) and after[0] > nums[4]
             out.append(("答案在题目之后", ok))
         else:
             out.append((f"未知检查 {key}", False))
