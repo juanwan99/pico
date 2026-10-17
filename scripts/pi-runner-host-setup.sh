@@ -14,14 +14,19 @@
 #   3. /var/lib/pico/workspaces (root 0711).
 #   4. iptables chains PICO-WS-FWD (from DOCKER-USER) and PICO-WS-IN (from
 #      INPUT), only for traffic whose source is pico-ws, persisted by the
-#      systemd unit pico-ws-firewall.service. Same unit: PICO-SB-FWD /
+#      systemd unit pico-ws-firewall.service. PICO-EGRESS (mangle PREROUTING)
+#      repeats the deny list for pico-ws and pico-sb before routing: Tailscale's
+#      ts-forward sits above DOCKER-USER in FORWARD and ACCEPTs anything leaving
+#      via tailscale0, so the filter chains alone let boxes reach tailnet peers
+#      (pico#1324). Same unit: PICO-SB-FWD /
 #      PICO-SB-IN for the browser sandbox network pico-sb (172.30.251.0/24,
 #      created by docker-compose.host.yml): public internet yes; private /
 #      Tailscale / cloud metadata / this host no (pico#1324). pico-api reaches
 #      the sandbox through its published port; the sandbox calls no pico service.
 #   5. systemd slices pico.slice / pico-ws.slice: every box runs under
 #      pico-ws.slice (runner --cgroup-parent), so all boxes share one budget.
-#      CPU yields to production (low weight, quota leaves cores to the host);
+#      CPU yields to production (low weight, quota 5 cores: owner 10-17
+#      "隔离箱 5核可以了", pico#1324);
 #      memory has one ceiling for all boxes together (card #1135). Override
 #      with PICO_WS_CPU_WEIGHT / PICO_WS_CPU_QUOTA / PICO_WS_MEM_HIGH /
 #      PICO_WS_MEM_MAX / PICO_WS_TASKS_MAX. Applies to running boxes at once.
@@ -38,7 +43,7 @@ FW_UNIT="/etc/systemd/system/pico-ws-firewall.service"
 SLICE_TOP="/etc/systemd/system/pico.slice"
 SLICE_WS="/etc/systemd/system/pico-ws.slice"
 CPU_WEIGHT="${PICO_WS_CPU_WEIGHT:-50}"
-CPU_QUOTA="${PICO_WS_CPU_QUOTA:-$(( $(nproc) > 2 ? ($(nproc) - 2) * 100 : 100 ))%}"
+CPU_QUOTA="${PICO_WS_CPU_QUOTA:-500%}"
 MEM_HIGH="${PICO_WS_MEM_HIGH:-10G}"
 MEM_MAX="${PICO_WS_MEM_MAX:-12G}"
 TASKS_MAX="${PICO_WS_TASKS_MAX:-8192}"
@@ -62,7 +67,9 @@ remove() {
   ipt -D INPUT -s "\$SUB" -j PICO-WS-IN 2>/dev/null || true
   ipt -D DOCKER-USER -s "\$SB" -j PICO-SB-FWD 2>/dev/null || true
   ipt -D INPUT -s "\$SB" -j PICO-SB-IN 2>/dev/null || true
+  for s in "\$SUB" "\$SB"; do ipt -t mangle -D PREROUTING -s "\$s" -j PICO-EGRESS 2>/dev/null || true; done
   for c in PICO-WS-FWD PICO-WS-IN PICO-SB-FWD PICO-SB-IN; do ipt -F "\$c" 2>/dev/null || true; ipt -X "\$c" 2>/dev/null || true; done
+  ipt -t mangle -F PICO-EGRESS 2>/dev/null || true; ipt -t mangle -X PICO-EGRESS 2>/dev/null || true
 }
 NO_NETS="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 169.254.0.0/16 127.0.0.0/8 0.0.0.0/8 224.0.0.0/4 240.0.0.0/4"
 if [ "\${1:-apply}" = "remove" ]; then remove; exit 0; fi
@@ -99,6 +106,22 @@ ipt -F PICO-SB-IN
 ipt -A PICO-SB-IN -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 ipt -A PICO-SB-IN -j DROP
 ipt -C INPUT -s "\$SB" -j PICO-SB-IN 2>/dev/null || ipt -I INPUT 1 -s "\$SB" -j PICO-SB-IN
+# Same deny list for both subnets before routing (pico#1324): Tailscale's
+# ts-forward ACCEPTs tailscale0-bound traffic ahead of DOCKER-USER, and a
+# tailscaled restart puts it back on top. mangle PREROUTING sees every packet
+# first, whether it is then forwarded or delivered to this host.
+ipt -t mangle -N PICO-EGRESS 2>/dev/null || true
+ipt -t mangle -F PICO-EGRESS
+ipt -t mangle -A PICO-EGRESS -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+ipt -t mangle -A PICO-EGRESS -s "\$SUB" -d "\$GW" -p tcp --dport "\$PORT" -j RETURN
+for net in \$NO_NETS; do
+  ipt -t mangle -A PICO-EGRESS -d "\$net" -j DROP
+done
+ipt -t mangle -A PICO-EGRESS -p tcp --dport 25 -j DROP
+ipt -t mangle -A PICO-EGRESS -j RETURN
+for s in "\$SUB" "\$SB"; do
+  ipt -t mangle -C PREROUTING -s "\$s" -j PICO-EGRESS 2>/dev/null || ipt -t mangle -I PREROUTING 1 -s "\$s" -j PICO-EGRESS
+done
 FW
   chmod 0755 "$FW_BIN"
   cat >"$FW_UNIT" <<UNIT
@@ -149,6 +172,7 @@ check() {
   echo "DOCKER-USER:  $(iptables -w -S DOCKER-USER 2>/dev/null | grep -c PICO-WS-FWD || true) jump(s)"
   echo "INPUT:        $(iptables -w -S INPUT 2>/dev/null | grep -c PICO-WS-IN || true) jump(s)"
   echo "sandbox net:  $(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' pico-sb 2>/dev/null || echo missing) (want $SB_SUBNET)"
+  echo "egress fw:    mangle PREROUTING $(iptables -w -t mangle -S PREROUTING 2>/dev/null | grep -c PICO-EGRESS || true) jump(s) (want 2)"
   echo "sandbox fw:   DOCKER-USER $(iptables -w -S DOCKER-USER 2>/dev/null | grep -c PICO-SB-FWD || true) jump(s), INPUT $(iptables -w -S INPUT 2>/dev/null | grep -c PICO-SB-IN || true) jump(s)"
   echo "pico.slice:   $(systemctl show pico.slice -p CPUWeight --value 2>/dev/null || echo missing) cpu weight"
   echo "pico-ws.slice: quota $(systemctl show pico-ws.slice -p CPUQuotaPerSecUSec --value 2>/dev/null) mem high $(systemctl show pico-ws.slice -p MemoryHigh --value 2>/dev/null) max $(systemctl show pico-ws.slice -p MemoryMax --value 2>/dev/null)"
