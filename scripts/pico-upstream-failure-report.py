@@ -16,7 +16,7 @@ import json
 import sqlite3
 import sys
 from collections import Counter
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 TEST_SCHOOLS = ("smoke-school", "regress-school")
 
@@ -41,7 +41,8 @@ def main() -> int:
     ap.add_argument("--db", default="/app/data/pico.db")
     ap.add_argument("--days", type=float, default=3.0)
     args = ap.parse_args()
-    since = (datetime.now(UTC) - timedelta(days=args.days)).strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now(timezone.utc)  # noqa: UP017 — also runs on the host (python 3.10)
+    since = (now - timedelta(days=args.days)).strftime("%Y-%m-%d %H:%M:%S")
     con = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
     rows = con.execute(
         "select r.id, e.payload_json, t.school_id, t.conversation_id is not null "
