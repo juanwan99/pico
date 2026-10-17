@@ -1,0 +1,36 @@
+{
+  "id": "R20",
+  "title": "组合：表格 + 图 + 文档",
+  "timeout_s": 1500,
+  "turns": [
+    {
+      "prompt": "根据附件成绩表写一份班级期中成绩分析报告（Word）：要有三科平均分柱状图（插在文档里），和总分前 10 名的表格，再写几段分析。做好后把文件交给我。",
+      "attachments": [
+        {
+          "name": "r08_scores.xlsx",
+          "file": "fixtures/r08_scores.xlsx"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "file",
+      "kind": "docx",
+      "sub": [
+        {
+          "docx_min_images": 1
+        },
+        {
+          "docx_min_table_rows": 11
+        },
+        {
+          "text_any": [
+            "平均"
+          ]
+        }
+      ]
+    }
+  ],
+  "how": "有 docx；里面有图；有 ≥11 行表格；有分析文字"
+}

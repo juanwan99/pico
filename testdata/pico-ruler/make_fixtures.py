@@ -5,7 +5,7 @@ except docx/pptx/xlsx zip timestamps, which the grader never reads.
   python3 testdata/pico-ruler/make_fixtures.py          # writes fixtures/
   python3 testdata/pico-ruler/make_fixtures.py --check  # prints expected numbers
 
-The PDF (r10_notice.pdf) is converted from r10_notice.docx with LibreOffice on a
+The PDF (r11_notice.pdf) is converted from r11_notice.docx with LibreOffice on a
 host that has it (the pico-sandbox image), see README.md.
 """
 
@@ -53,6 +53,37 @@ def scores_xlsx(path: Path) -> None:
     ws.title = "期中成绩"
     ws.append(["姓名", "语文", "数学", "英语"])
     for row in students():
+        ws.append(list(row))
+    wb.save(path)
+
+
+ROSTER = [
+    ("陈思琪", "高一（3）班", "13912345601", "物理、化学、生物"),
+    ("李浩然", "高一（3）班", "13912345602", "物理、化学、地理"),
+    ("王雨桐", "高一（3）班", "13912345603", "历史、政治、地理"),
+    ("张宇航", "高一（3）班", "13912345604", "物理、化学、生物"),
+    ("刘佳怡", "高一（3）班", "13912345605", "历史、政治、生物"),
+    ("赵俊杰", "高一（3）班", "13912345606", "物理、生物、地理"),
+    ("周诗涵", "高一（3）班", "13912345607", "历史、化学、生物"),
+    ("吴博文", "高一（3）班", "13912345608", "物理、化学、政治"),
+    ("孙紫萱", "高一（3）班", "13912345609", "历史、政治、地理"),
+    ("黄明轩", "高一（3）班", "13912345610", "物理、化学、生物"),
+    ("林雅静", "高一（3）班", "13912345611", "历史、地理、生物"),
+    ("何晨曦", "高一（3）班", "13912345612", "物理、化学、地理"),
+    ("郭天佑", "高一（3）班", "13912345613", "物理、政治、地理"),
+    ("马若曦", "高一（3）班", "13912345614", "历史、政治、化学"),
+    ("罗嘉怡", "高一（3）班", "13912345615", "物理、化学、生物"),
+]
+
+
+def roster_xlsx(path: Path) -> None:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "选科名单"
+    ws.append(["姓名", "班级", "家长电话", "选考科目"])
+    for row in ROSTER:
         ws.append(list(row))
     wb.save(path)
 
@@ -168,8 +199,9 @@ def main() -> int:
     scores_xlsx(OUT / "r08_scores.xlsx")
     letter_docx(OUT / "r05_letter.docx")
     deck_pptx(OUT / "r07_deck.pptx")
-    notice_docx(OUT / "r10_notice.docx")
-    questions_png(OUT / "r11_questions.png")
+    roster_xlsx(OUT / "r10_roster.xlsx")
+    notice_docx(OUT / "r11_notice.docx")
+    questions_png(OUT / "r12_questions.png")
     long_paste(OUT / "r17_meeting.txt")
     print(json.dumps({"averages": averages(), "files": sorted(p.name for p in OUT.iterdir())}, ensure_ascii=False))
     return 0

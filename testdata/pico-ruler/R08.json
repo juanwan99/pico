@@ -1,0 +1,39 @@
+{
+  "id": "R08",
+  "title": "成绩表统计 + 柱状图",
+  "timeout_s": 900,
+  "turns": [
+    {
+      "prompt": "附件是期中成绩表。帮我算出语文、数学、英语三科的平均分，并插入一个三科平均分的柱状图，交回 Excel。",
+      "attachments": [
+        {
+          "name": "r08_scores.xlsx",
+          "file": "fixtures/r08_scores.xlsx"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "file",
+      "kind": "xlsx",
+      "sub": [
+        {
+          "xlsx_chart": "bar"
+        },
+        {
+          "xlsx_values_or_formula": {
+            "values": [
+              103.82,
+              99.49,
+              101.71
+            ],
+            "tol": 0.06,
+            "formula": "AVERAGE"
+          }
+        }
+      ]
+    }
+  ],
+  "how": "有 xlsx；里面有柱状图；三科平均分数值对（±0.06）或用了 AVERAGE 公式"
+}

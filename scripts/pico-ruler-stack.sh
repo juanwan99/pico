@@ -26,6 +26,7 @@
 #   runner starts no box under 8 GB MemAvailable; `up` refuses under 8 GB too.
 set -euo pipefail
 
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT_DIR="${PICO_RULER_ROOT:-$HOME/pico-ruler}"
 LIVE_API="${PICO_RULER_LIVE_API:-pico-pico-api-1}"
 LIVE_REPO="${PICO_RULER_LIVE_REPO:-/opt/pico}"
@@ -114,7 +115,10 @@ up() {
   fetch_src
   patch_runner
   api_env
-  cp "$D/src/testdata/pico-ruler/www/"* "$D/www/" 2>/dev/null || true
+  # The test page ships with this script (the stack's <src> may predate it).
+  cp "$HERE/testdata/pico-ruler/www/"* "$D/www/"
+  # Containers run as uid 65532; this host's umask (027) would hide the source.
+  chmod -R a+rX "$D/src" "$D/pi_runner" "$D/www"
   local sbtok rtok s="$D/src/services"
   sbtok=$(envval PICO_SANDBOX_TOKEN); rtok=$(envval PICO_RUNNER_TOKEN)
 
