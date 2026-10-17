@@ -485,7 +485,7 @@ function useCreateConversationAtom(key: string | number) {
 function useClearConvoState() {
   /** Clears all active conversations. Pass `true` to skip the first or root conversation */
   const clearAllConversations = useRecoilCallback(
-    ({ reset, snapshot }) =>
+    ({ reset, set, snapshot }) =>
       async (skipFirst?: boolean) => {
         const conversationKeys = await snapshot.getPromise(conversationKeysAtom);
 
@@ -497,7 +497,16 @@ function useClearConvoState() {
           reset(conversationByIndex(conversationKey));
         }
 
-        reset(conversationKeysAtom);
+        // The kept root chat stays registered: its key is only added on mount, so dropping it
+        // here left anySubmittingSelector false for every later run (pico#1328).
+        if (skipFirst === true) {
+          set(
+            conversationKeysAtom,
+            conversationKeys.filter((conversationKey) => conversationKey == 0),
+          );
+        } else {
+          reset(conversationKeysAtom);
+        }
       },
     [],
   );

@@ -77,8 +77,10 @@ const mockPicoTaskState = {
   refresh: jest.fn(),
 };
 
+const mockStatusMapHook = jest.fn((..._args: unknown[]) => mockPicoTaskState);
+
 jest.mock('~/hooks/Pico/usePicoConversationStatusMap', () => ({
-  usePicoConversationStatusMap: () => mockPicoTaskState,
+  usePicoConversationStatusMap: (...args: unknown[]) => mockStatusMapHook(...args),
 }));
 
 jest.mock('~/hooks', () => ({
@@ -288,14 +290,14 @@ describe('Conversations – pinned header', () => {
   });
 });
 
-describe('Conversations – sidebar status refresh when a stream ends (pico#1328)', () => {
-  it('refreshes the Pico status map once when submitting goes true → false', () => {
+describe('Conversations – sidebar status follows a stream in this window (pico#1328)', () => {
+  it('hands the submitting flag to the Pico status map as it flips', () => {
     let setSubmitting: (v: boolean) => void = () => undefined;
     const Setter = () => {
       setSubmitting = useSetRecoilState(store.anySubmittingSelector);
       return null;
     };
-    mockPicoTaskState.refresh.mockClear();
+    mockStatusMapHook.mockClear();
     render(
       <RecoilRoot>
         <Setter />
@@ -312,9 +314,10 @@ describe('Conversations – sidebar status refresh when a stream ends (pico#1328
         />
       </RecoilRoot>,
     );
+    expect(mockStatusMapHook).toHaveBeenLastCalledWith(true, false);
     act(() => setSubmitting(true));
-    expect(mockPicoTaskState.refresh).not.toHaveBeenCalled();
+    expect(mockStatusMapHook).toHaveBeenLastCalledWith(true, true);
     act(() => setSubmitting(false));
-    expect(mockPicoTaskState.refresh).toHaveBeenCalledTimes(1);
+    expect(mockStatusMapHook).toHaveBeenLastCalledWith(true, false);
   });
 });

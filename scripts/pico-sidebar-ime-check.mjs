@@ -69,22 +69,22 @@ if (process.env.CHECK_DEBUG) {
   });
 }
 // The jump lands on an SSO hop first; the workbench is ready once its composer shows.
-// Now and then the hop lands on Pico's own login page; one more jump gets through.
+// Now and then the popup stays on Pico's login page (edu sets its location after the ticket
+// arrives, which the browser may refuse); then finish the hop with that same ticket.
 const composer = (page) => page.locator('#prompt-textarea, textarea:not([data-testid="sandbox-web-type"])').first();
-let pico = null;
-for (let attempt = 1; attempt <= 2 && !pico; attempt++) {
-  const [page] = await Promise.all([ctx.waitForEvent('page'), edu.click('[data-testid="nav-pico-jump"]')]);
-  try {
-    await composer(page).waitFor({ timeout: 45000 });
-    pico = page;
-  } catch (err) {
-    await page.screenshot({ path: path.join(OUT, `jump-failed-${attempt}.png`) });
-    console.error(`Pico 工作台没打开（第 ${attempt} 次）：${page.url().replace(/ticket=[^&]+/, 'ticket=…')}`);
-    await page.close();
-    if (attempt === 2) {
-      throw err;
-    }
+let ticket = '';
+edu.on('response', async (r) => {
+  if (/\/pico\/web-ticket$/.test(new URL(r.url()).pathname)) {
+    ticket = (await r.json().catch(() => ({}))).ticket || ticket;
   }
+});
+const [pico] = await Promise.all([ctx.waitForEvent('page'), edu.click('[data-testid="nav-pico-jump"]')]);
+try {
+  await composer(pico).waitFor({ timeout: 30000 });
+} catch {
+  console.log(`  跳转停在 ${new URL(pico.url()).pathname}，用同一张票补跳`);
+  await pico.goto(`${new URL(pico.url()).origin}/api/auth/edu-sso?ticket=${encodeURIComponent(ticket)}`);
+  await composer(pico).waitFor({ timeout: 60000 });
 }
 const picoOrigin = new URL(pico.url()).origin;
 
@@ -112,8 +112,8 @@ pico.on('request', (req) => {
 });
 
 const prompt = () => composer(pico);
-const stopButton = () =>
-  pico.locator('[data-testid="stop-generation-button"], button[aria-label*="Stop"], button[aria-label*="停止"]');
+// The composer's own stop button marks the stream; 停止云端任务 (task-stop-button) is the cloud run.
+const stopButton = () => pico.locator('[data-testid="stop-generation-button"]');
 async function ask(text, timeoutMs = 300000) {
   await prompt().waitFor({ timeout: 60000 });
   await prompt().fill(text);
@@ -127,6 +127,7 @@ async function ask(text, timeoutMs = 300000) {
   }
   return Date.now();
 }
+// The new chat's title is its first message, so the needle finds its row (null = not listed yet).
 async function rowStatus(needle) {
   const rows = pico.locator('[data-testid="convo-item"]');
   const n = await rows.count();
@@ -137,8 +138,7 @@ async function rowStatus(needle) {
       return (await s.count()) ? (await s.innerText()).trim() : '';
     }
   }
-  const s = rows.first().locator('[data-testid="convo-ledger-status"]');
-  return (await s.count()) ? (await s.innerText()).trim() : '';
+  return null;
 }
 
 // ① stream end → 已完成 in the sidebar
@@ -149,6 +149,10 @@ if (ONLY.has('1')) {
     await pico.waitForTimeout(3000);
     const needle = `对账${tag}${i}`;
     const ended = await ask(`只回一个字：好（${needle}）`, 120000);
+    const atEnd = await rowStatus(needle);
+    if (process.env.CHECK_DEBUG) {
+      console.log(`  run ${i} 流结束时这一行：${atEnd === null ? '不在侧栏' : `「${atEnd}」`}`);
+    }
     let gap = null;
     while (Date.now() - ended < 30000) {
       if ((await rowStatus(needle)) === '已完成') {

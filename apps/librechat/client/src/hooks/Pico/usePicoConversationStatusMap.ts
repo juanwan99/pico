@@ -39,13 +39,23 @@ const POLL_MS = 20_000;
 const LIVE_POLL_MS = 1_500;
 const LIVE_STATUSES = new Set(['queued', 'preparing', 'running']);
 
-/** Pure: next poll delay — fast only while some run is live and the page is visible. */
-export function nextPollMs(tasks: PicoTask[] | null | undefined, hidden: boolean): number {
-  const live = (tasks || []).some((t) => LIVE_STATUSES.has(t.latest_run?.status ?? ''));
+/** Pure: next poll delay — fast only while some run is live (or a chat in this window is
+ * sending, before its task shows in the list) and the page is visible. */
+export function nextPollMs(
+  tasks: PicoTask[] | null | undefined,
+  hidden: boolean,
+  submitting = false,
+): number {
+  const live =
+    submitting || (tasks || []).some((t) => LIVE_STATUSES.has(t.latest_run?.status ?? ''));
   return live && !hidden ? LIVE_POLL_MS : POLL_MS;
 }
 
-export function usePicoConversationStatusMap(enabled = true): {
+/** `submitting`: a chat in this window is streaming. Its start and end each load at once. */
+export function usePicoConversationStatusMap(
+  enabled = true,
+  submitting = false,
+): {
   tasks: PicoTask[];
   statusByConversationId: ConversationStatusMap;
   loading: boolean;
@@ -70,7 +80,7 @@ export function usePicoConversationStatusMap(enabled = true): {
     let latest: PicoTask[] = [];
     const schedule = () => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => void load(), nextPollMs(latest, document.hidden));
+      timer = window.setTimeout(() => void load(), nextPollMs(latest, document.hidden, submitting));
     };
     const load = async () => {
       if (!loadedRef.current) {
@@ -111,7 +121,7 @@ export function usePicoConversationStatusMap(enabled = true): {
       window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [enabled, tick]);
+  }, [enabled, tick, submitting]);
 
   return { tasks, statusByConversationId, loading, error, refresh };
 }
