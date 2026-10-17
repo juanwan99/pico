@@ -173,6 +173,7 @@ def test_delivery_claim_and_question():
     assert not ruler.DELIVERY_CLAIM.search("已成功登录！当前已进入控制台首页")
     assert ruler.DELIVERY_CLAIM.search("家长信.docx 在这里")
     assert ruler.DELIVERY_CLAIM.search("Word 文档已经做好了")
+    assert not ruler.DELIVERY_CLAIM.search("需要直接导出为 **Word (.docx)** 打印排版文件，随时告诉我")
     assert ruler.looks_like_question("请告诉我开会的时间和地点？")
     assert not ruler.looks_like_question("通知已写好。")
 

@@ -59,7 +59,7 @@ DELIVERY_CLAIM = re.compile(
     rf"(已|已经)[^。\n]{{0,6}}{_DONE}[^。\n]{{0,12}}{_FILE_WORD}"
     rf"|{_FILE_WORD}[^。\n]{{0,12}}(已|已经){_DONE}"
     rf"|请(下载|查收)[^。\n]{{0,6}}(文件|文档|附件)"
-    r"|\.(docx|pptx|xlsx)\b"
+    r"|[^\s(（.]\.(docx|pptx|xlsx)\b"  # a file name, not「导出为 Word (.docx)」
 )
 NUMBERED = re.compile(r"^\s*(?:第\s*(\d+)\s*题|[（(]\s*(\d+)\s*[)）]|(\d+)\s*[\.．、)）])")
 LINK = re.compile(r"https?://[^\s)）\]>」\"']+")
@@ -579,7 +579,25 @@ def grade(case: dict[str, Any], res: RulerResult, ctx: dict[str, Any]) -> None:
     res.checks = len(results)
     res.passed = sum(1 for _, ok in results if ok)
     res.failed = [name for name, ok in results if not ok]
-    res.ok = res.checks > 0 and res.passed == res.checks and not res.fake_delivery and res.status != "failed"
+    res.ok = (
+        res.checks > 0
+        and res.passed == res.checks
+        and not res.fake_delivery
+        and res.status != "failed"
+        and res.fail_reason != "wall_clock"
+    )
+
+
+def cancel_live_runs(pico: Any, conv: str) -> int:
+    """Cancel every unfinished run of the conversation. The SSE stream keeps sending
+    keep-alives, so an httpx read timeout never fires on a run that loops for hours."""
+    n = 0
+    for task in pico.tasks(conv):
+        run = task.get("latest_run") or {}
+        if run.get("id") and str(run.get("status") or "") not in {"succeeded", "failed", "cancelled", "canceled"}:
+            pico.client.post(f"{pico.base}/v1/runs/{run['id']}/cancel", headers=pico.headers)
+            n += 1
+    return n
 
 
 def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) -> RulerResult:
@@ -618,6 +636,8 @@ def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) 
             watcher = AskWatcher(pico, conv, str(case.get("ask_answer") or ""))
             watcher.start()
             t0 = time.perf_counter()
+            deadline = threading.Timer(timeout, lambda: cancel_live_runs(pico, conv))
+            deadline.start()
             try:
                 reply, wall = pico.chat(conv, turn_text(turn, opts["page"]), timeout_s=timeout)
             except httpx.TimeoutException:
@@ -629,8 +649,12 @@ def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) 
                 reply, wall = "", time.perf_counter() - t0
                 res.notes.append(f"turn {i + 1} stream dropped, followed run")
             finally:
+                deadline.cancel()
                 watcher.stop.set()
                 watcher.join(timeout=10)
+            if time.perf_counter() - t0 >= timeout and res.fail_reason != "wall_clock":
+                res.fail_reason = "wall_clock"
+                res.notes.append(f"turn {i + 1} cancelled at {int(timeout)} s")
             res.asks += watcher.asked
             res.wall_s += wall
             replies.append(reply)
