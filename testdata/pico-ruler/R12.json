@@ -1,0 +1,37 @@
+{
+  "id": "R12",
+  "title": "图片读题出 5 道同类题",
+  "timeout_s": 600,
+  "turns": [
+    {
+      "prompt": "看图里的题，照着出 5 道同类型的新题（附答案），直接写在对话里。",
+      "attachments": [
+        {
+          "name": "r12_questions.png",
+          "file": "fixtures/r12_questions.png"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "reply_numbered_min",
+      "n": 5
+    },
+    {
+      "type": "reply_has",
+      "all": [
+        "答案"
+      ]
+    },
+    {
+      "type": "reply_any",
+      "any": [
+        "方程",
+        "x²",
+        "x^2"
+      ]
+    }
+  ],
+  "how": "对话里 ≥5 道编号题、有答案、是方程题"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "R06",
+  "title": "10 页 PPT",
+  "timeout_s": 1200,
+  "turns": [
+    {
+      "prompt": "做一份 10 页的 PPT，主题「高三一轮复习动员」，给全年级学生看，每页有标题和要点。做好后把文件交给我。"
+    }
+  ],
+  "checks": [
+    {
+      "type": "file",
+      "kind": "pptx",
+      "sub": [
+        {
+          "slides_min": 10
+        },
+        {
+          "slides_max": 13
+        },
+        {
+          "slide_titles_min_distinct": 8
+        },
+        {
+          "text_any": [
+            "复习"
+          ]
+        }
+      ]
+    }
+  ],
+  "how": "有 pptx；10–13 页；≥8 个不同标题；讲复习"
+}

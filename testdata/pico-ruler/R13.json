@@ -1,0 +1,30 @@
+{
+  "id": "R13",
+  "title": "数学周测卷 Word（含答案页）",
+  "timeout_s": 1200,
+  "turns": [
+    {
+      "prompt": "出一份初二数学周测卷（一次函数），12 道题：8 道选择、4 道解答，做成 Word，最后单独一页放答案和解析。做好后把文件交给我。"
+    }
+  ],
+  "checks": [
+    {
+      "type": "file",
+      "kind": "docx",
+      "sub": [
+        {
+          "min_numbered": 10
+        },
+        {
+          "text_has": [
+            "答案"
+          ]
+        },
+        {
+          "docx_answer_after_questions": true
+        }
+      ]
+    }
+  ],
+  "how": "有 docx；≥10 道编号题；有「答案」部分且在题目之后"
+}

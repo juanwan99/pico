@@ -1,0 +1,39 @@
+{
+  "id": "R03",
+  "title": "家长信 Word（标题加粗居中、正文小四宋体）",
+  "timeout_s": 600,
+  "turns": [
+    {
+      "prompt": "帮我写一封致高三家长的信（关于寒假安全和学习安排，600 字左右），做成 Word 文档：标题加粗居中，正文小四号宋体。做好后把文件交给我。"
+    }
+  ],
+  "checks": [
+    {
+      "type": "file",
+      "kind": "docx",
+      "sub": [
+        {
+          "docx_title_center_bold": true
+        },
+        {
+          "docx_body_font": {
+            "size_pt": 12,
+            "east_asia": [
+              "宋体",
+              "SimSun"
+            ]
+          }
+        },
+        {
+          "min_chars": 400
+        },
+        {
+          "text_any": [
+            "寒假"
+          ]
+        }
+      ]
+    }
+  ],
+  "how": "有 docx；首段居中加粗；正文 ≥80% 字是 12 磅（小四）且东亚字体宋体；≥400 字；讲寒假"
+}

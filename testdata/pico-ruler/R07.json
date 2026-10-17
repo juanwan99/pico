@@ -1,0 +1,40 @@
+{
+  "id": "R07",
+  "title": "PPT 改版（换模板、加 2 页）",
+  "timeout_s": 1200,
+  "turns": [
+    {
+      "prompt": "附件是家长会 PPT，帮我换一套更正式的模板（配色和背景都换），并在「下周安排」后面加两页：「期中考试安排」和「家长配合事项」。原来的内容保留。做好后把文件交给我。",
+      "attachments": [
+        {
+          "name": "r07_deck.pptx",
+          "file": "fixtures/r07_deck.pptx"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "file",
+      "kind": "pptx",
+      "sub": [
+        {
+          "slides_min": 7
+        },
+        {
+          "slide_titles_has": [
+            "本周回顾",
+            "作业情况",
+            "下周安排",
+            "期中考试安排",
+            "家长配合事项"
+          ]
+        },
+        {
+          "pptx_restyled_from": "fixtures/r07_deck.pptx"
+        }
+      ]
+    }
+  ],
+  "how": "有 pptx；≥7 页；原标题都在、新加两页标题在；主题或背景和原件不同"
+}

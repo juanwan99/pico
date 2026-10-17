@@ -1,0 +1,23 @@
+{
+  "id": "R00",
+  "title": "固定探针（开工前 token）",
+  "timeout_s": 120,
+  "turns": [
+    {
+      "prompt": "只回一个字：好"
+    }
+  ],
+  "checks": [
+    {
+      "type": "reply_has",
+      "all": [
+        "好"
+      ]
+    },
+    {
+      "type": "tool_calls_max",
+      "n": 0
+    }
+  ],
+  "how": "回复里有「好」、不调工具；它的输入 token 就是系统提示 + 工具表的固定开销"
+}

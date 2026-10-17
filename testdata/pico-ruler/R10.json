@@ -1,0 +1,36 @@
+{
+  "id": "R10",
+  "title": "Excel 转 Word 表",
+  "timeout_s": 900,
+  "turns": [
+    {
+      "prompt": "把附件里的选科名单做成 Word 表格，加标题「高一（3）班选科名单」，表格要有表头和边框。做好后把文件交给我。",
+      "attachments": [
+        {
+          "name": "r10_roster.xlsx",
+          "file": "fixtures/r10_roster.xlsx"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "file",
+      "kind": "docx",
+      "sub": [
+        {
+          "docx_min_table_rows": 16
+        },
+        {
+          "text_has": [
+            "选科名单",
+            "陈思琪",
+            "罗嘉怡",
+            "13912345608"
+          ]
+        }
+      ]
+    }
+  ],
+  "how": "有 docx；表格 ≥16 行（表头 + 15 人）；首尾学生和电话都在"
+}

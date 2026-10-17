@@ -1,0 +1,33 @@
+{
+  "id": "R11",
+  "title": "PDF 转 Word",
+  "timeout_s": 900,
+  "turns": [
+    {
+      "prompt": "把附件 PDF 转成可以编辑的 Word 文档，内容别丢。做好后把文件交给我。",
+      "attachments": [
+        {
+          "name": "r11_notice.pdf",
+          "file": "fixtures/r11_notice.pdf"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "type": "file",
+      "kind": "docx",
+      "sub": [
+        {
+          "text_has": [
+            "11月6日至11月7日",
+            "实验楼三楼",
+            "11月12日",
+            "教务处"
+          ]
+        }
+      ]
+    }
+  ],
+  "how": "有 docx；原文四处关键句都在"
+}
