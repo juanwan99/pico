@@ -142,6 +142,11 @@ def milli_from_row(
     model: str | None = None,
 ) -> int | None:
     extra = extra if isinstance(extra, dict) else {}
+    # pico#1331「我的接口」: the model rode the teacher's own endpoint, paid
+    # to them directly — Pico tokens still recorded above, points always 0.
+    # Per-use features (search/image/sandbox) never carry this tag; unaffected.
+    if str(extra.get("bill_to") or "").strip().lower() == "personal":
+        return 0
     kind_n = (kind or str(extra.get("kind") or "") or "llm").strip().lower()
     model_n = (model or str(extra.get("billed_model") or "")).strip() or None
     channel_id = str(extra.get("channel_id") or "").strip() or None

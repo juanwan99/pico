@@ -208,7 +208,7 @@ async def run_true_pi_agent(
         pi_stall_switch_s,
         should_failover,
     )
-    from pico_orchestrator.provider import runtime_policy_for_model
+    from pico_orchestrator.provider import resolve_provider, runtime_policy_for_model
 
     caps = caps or RunCaps()
     ui = str(getattr(caps, "ui_model", "") or "")
@@ -217,8 +217,16 @@ async def run_true_pi_agent(
     )
     from pico_orchestrator import upstream
 
-    # One switch at most (pico#1271): the head model, then one backup.
-    models = ([m for m in brain_candidates(primary) if m] or [primary])[:2]
+    # pico#1331: a personal endpoint gets exactly one attempt on its own
+    # model — brain_candidates() would otherwise retry with grok-4.6 /
+    # gpt-5.6-sol against the *same* base_url, a model that endpoint never
+    # serves, which is the fallback-shape the card forbids.
+    active_provider = resolve_provider()
+    if active_provider is not None and active_provider.name == "personal":
+        models = [primary]
+    else:
+        # One switch at most (pico#1271): the head model, then one backup.
+        models = ([m for m in brain_candidates(primary) if m] or [primary])[:2]
     last: RunResult | None = None
     gate: _FailoverGate | None = None
     rid = str(kwargs.get("run_id") or "")
@@ -472,7 +480,12 @@ async def _run_true_pi_once(
             openai_brain = uses_openai_responses_brain(provider)
             openai_overlay = uses_new_api_openai_overlay(provider) or openai_brain
             pi_provider = "openai" if openai_overlay or provider.name != "deepseek" else "deepseek"
-            pi_base = provider.base_url if openai_overlay else ""
+            # pico#1331「我的接口」: provider.name == "personal" is never
+            # "deepseek" so pi_provider is already "openai" above, but
+            # openai_overlay (New API loopback heuristics) is false for a
+            # teacher's own endpoint — without this, Pi would dial OpenAI's
+            # default base_url instead of the teacher's.
+            pi_base = provider.base_url if (openai_overlay or provider.name == "personal") else ""
             pi_api, pi_thinking_level = pi_wire(
                 backend_model,
                 openai_brain=openai_brain,
@@ -1037,7 +1050,11 @@ async def _run_true_pi_once(
         from pico_orchestrator import upstream
         from pico_orchestrator.true_pi.config import resume_max
 
-        budget = 0 if toolless else resume_max()
+        # pico#1331: a personal endpoint's error must reach the teacher at
+        # once, not after a same-session retry against the same broken key.
+        active_provider_now = resolve_provider()
+        personal_turn = active_provider_now is not None and active_provider_now.name == "personal"
+        budget = 0 if (toolless or personal_turn) else resume_max()
         spare = upstream.run_state(rid)
         while (
             state.settled
@@ -1187,10 +1204,18 @@ async def _run_true_pi_once(
         # Upstream said this turn failed (quota / provider). Do not succeed blank.
         if state.provider_error:
             await salvage_outputs()
+            reason = state.provider_error
+            final_provider = resolve_provider()
+            if final_provider is not None and final_provider.name == "personal":
+                # pico#1331: tag so user_errors.py answers 「你的接口出错了：…」
+                # instead of the school-branded generic copy.
+                from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG
+
+                reason = f"{PERSONAL_ENDPOINT_ERROR_TAG}{reason}"
             return await _failed(
                 emit,
                 code=_provider_fail_code(state.provider_error),
-                reason=state.provider_error,
+                reason=reason,
                 state=state,
                 principal=principal,
                 tag=tag,

@@ -35,6 +35,7 @@ import { TokenCredits, AutoRefill } from './BillingControls';
 import SharedLinks from '../SettingsTabs/Data/SharedLinks';
 import { showThinkingAtom } from '~/store/showThinking';
 import ProviderKeys from '../SettingsTabs/ProviderKeys';
+import MyModelEndpoint from '../SettingsTabs/MyModelEndpoint';
 import Avatar from '../SettingsTabs/Account/Avatar';
 import About from '../SettingsTabs/About/About';
 import ApiKeys from '../SettingsTabs/ApiKeys';
@@ -476,6 +477,14 @@ export const registry: SettingEntry[] = [
     Component: SharedLinks,
   },
   // Data controls · API keys
+  {
+    id: 'myModelEndpoint',
+    tab: DATA,
+    section: 'apiKeys',
+    labelKey: 'com_ui_settings_label_my_model_endpoint',
+    keywords: ['model', 'endpoint', 'openai', 'interface', '接口', '模型', '密钥'],
+    Component: MyModelEndpoint,
+  },
   {
     id: 'providerApiKeys',
     tab: DATA,

@@ -35,7 +35,7 @@ Same shape as `GET /v1/usage/events` plus `schema: pico.usage.v1`.
 | `estimated` | Always `false` after scrub. Pico no longer writes char/4. **Do not bill.** |
 | `extra.ui_model` | Lane alias `pico-fast` / `pico-deep` when applicable |
 | `extra.cached_tokens` / `extra.cache_write_tokens` / `extra.reasoning_tokens` | Optional ops fields. Cache read is a subset of prompt. Reasoning is a subset of completion. |
-| `extra.bill_to` | `member` (default) or `school`. Payer routing for edu wallets. Not a money field. `school` only when the token has `ai:school-run`. Missing on old rows → treat as `member`. |
+| `extra.bill_to` | `member` (default), `school`, or `personal`. Payer routing for edu wallets. Not a money field. `school` only when the token has `ai:school-run`. `personal` (pico#1331「我的接口」: teacher's own OpenAI-compatible endpoint) always carries `points="0.000"` — nothing to debit either wallet, edu needs no special-case. Missing on old rows → treat as `member`. |
 | `points` | String `N.NNN` or `null`. Cost × 2.5 × 1000. **edu debits this as-is.** Do not rescale. Debit the **school** wallet when `extra.bill_to=school`; otherwise the membership wallet. |
 | `billing` | Always `false` |
 

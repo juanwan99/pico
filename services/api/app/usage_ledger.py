@@ -159,7 +159,7 @@ def _row_meter_kwargs(row: UsageEventRow) -> dict[str, Any]:
 
 def usage_event_dict(row: UsageEventRow) -> dict[str, Any]:
     extra = _strip_money_keys(_row_extra(row))
-    if extra.get("bill_to") not in {"school", "member"}:
+    if extra.get("bill_to") not in {"school", "member", "personal"}:
         extra["bill_to"] = "member"
     from app.points_meter import points_from_row
 
@@ -324,6 +324,10 @@ def _resolve_bill_to(explicit: str | None) -> str:
     """school only from school-run bind or explicit emit arg. extra_json cannot raise it."""
     if (explicit or "").strip().lower() == "school":
         return "school"
+    # pico#1331「我的接口」: the model call rode the teacher's own endpoint —
+    # zero Pico points (see milli_from_row). Explicit only; never inferred.
+    if (explicit or "").strip().lower() == "personal":
+        return "personal"
     try:
         from pico_orchestrator.usage_hook import current_usage_bind
     except ImportError:

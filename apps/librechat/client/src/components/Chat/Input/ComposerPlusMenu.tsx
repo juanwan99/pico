@@ -47,6 +47,21 @@ export function ComposerModeSwitch({
   );
 }
 
+/** pico#1331「我的接口」: shown next to the 快速/深度 switch — the only
+ * "model" indicator teachers see — when the teacher's own endpoint is on.
+ * This turn's model fee goes to their own provider, not Pico points. */
+export function ComposerMyEndpointBadge() {
+  return (
+    <span
+      data-testid="composer-my-endpoint-badge"
+      title="这次对话用你自己配的接口，模型费用由你自己的服务商收"
+      className="pico-type-aux shrink-0 rounded-lg border border-[color:var(--pico-accent)] bg-[color:var(--pico-accent-wash)] px-2 py-0.5 font-medium text-[color:var(--pico-ink)]"
+    >
+      我的接口
+    </span>
+  );
+}
+
 export function ComposerPlanToggle({
   on,
   onChange,

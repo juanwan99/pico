@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import suppress
+from contextlib import contextmanager, suppress
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 
 import httpx
@@ -14,6 +15,7 @@ from openai import APIConnectionError, AsyncOpenAI
 from pico_orchestrator import upstream
 from pico_orchestrator.brain_ha import is_model_dead
 from pico_orchestrator.sse_keepalive import is_proxy_first_byte_timeout
+from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
 DEFAULT_DEEPSEEK_REASONER = "deepseek-reasoner"
@@ -52,6 +54,42 @@ class ProviderConfig:
     api_key: str
     base_url: str
     model: str
+
+
+# pico#1331「我的接口」: the teacher's own OpenAI-compatible endpoint, scoped
+# to the one in-flight turn via a contextvar (set in openai_compat.py right
+# before the model-call dispatch is created, after the Principal is known).
+# resolve_provider() / resolve_provider_for_model() check this first — every
+# caller of those two functions (direct chat, Pi hosted runtime, true Pi)
+# picks it up with no further wiring.
+_personal_provider: ContextVar["ProviderConfig | None"] = ContextVar(
+    "pico_personal_provider", default=None
+)
+
+PERSONAL_PROVIDER_NAME = "personal"
+
+
+@contextmanager
+def personal_provider_scope(cfg: ProviderConfig | None):
+    """Scope resolve_provider()/resolve_provider_for_model() to ``cfg``.
+
+    A no-op when ``cfg`` is None (school model, as today). Safe across
+    ``asyncio.create_task`` — the task copies the context at creation time,
+    so setting this before the task is created is enough; this manager's own
+    exit/reset never reaches back into an already-spawned task.
+    """
+    if cfg is None:
+        yield
+        return
+    token = _personal_provider.set(cfg)
+    try:
+        yield
+    finally:
+        _personal_provider.reset(token)
+
+
+def current_personal_provider() -> ProviderConfig | None:
+    return _personal_provider.get()
 
 
 def _bare_model(requested: str | None) -> str:
@@ -99,6 +137,11 @@ def uses_new_api_openai_overlay(cfg: ProviderConfig | None = None) -> bool:
     target = cfg if cfg is not None else resolve_provider()
     if target is None:
         return False
+    if target.name == PERSONAL_PROVIDER_NAME:
+        # The teacher's endpoint is a plain OpenAI-compatible chat/completions
+        # server, never our New API loopback — a model name that happens to
+        # start with gpt-/grok- must not get routed onto it (#1331).
+        return False
     base = (target.base_url or "").strip().lower()
     if "deepseek.com" in base:
         return False
@@ -117,6 +160,8 @@ def uses_openai_responses_brain(cfg: ProviderConfig | None = None) -> bool:
     target = cfg if cfg is not None else resolve_provider()
     if target is None:
         return False
+    if target.name == PERSONAL_PROVIDER_NAME:
+        return False
     base = (target.base_url or "").strip().lower()
     if "deepseek.com" in base:
         return False
@@ -132,6 +177,10 @@ def product_backend_model(*, deep: bool) -> str:
     Gemini id with thinking on, unless operators set PICO_BRAIN_DEEP_MODEL.
     """
     cfg = resolve_provider()
+    if cfg is not None and cfg.name == PERSONAL_PROVIDER_NAME:
+        # One model, no fast/deep split: the teacher configured exactly what
+        # they want to pay for (#1331).
+        return cfg.model
     if cfg is not None and is_gemini_model(cfg.model):
         flash = (cfg.model or "").strip() or DEFAULT_GEMINI_FLASH
         deep_id = (os.environ.get("PICO_BRAIN_DEEP_MODEL") or "").strip() or flash
@@ -174,7 +223,15 @@ def resolve_provider() -> ProviderConfig | None:
     """Prefer DeepSeek (product brain); fall back to Kimi if only that key exists.
 
     Override order with ``PICO_MODEL_PROVIDER=deepseek|kimi`` when both keys set.
+
+    pico#1331「我的接口」: a personal provider scoped to this turn (contextvar,
+    set in openai_compat.py after the Principal is known) always wins — this
+    is the one place every caller (direct chat, Pi hosted runtime, true Pi)
+    reads the model provider from.
     """
+    personal = _personal_provider.get()
+    if personal is not None:
+        return personal
     prefer = (os.environ.get("PICO_MODEL_PROVIDER") or "deepseek").strip().lower()
     deepseek = _deepseek_config()
     kimi = _kimi_config()
@@ -191,7 +248,13 @@ def resolve_provider_for_model(requested: str | None) -> ProviderConfig | None:
     Critical: never send a Kimi model id to DeepSeek (or the reverse). That
     mismatch is the owner-facing "服务出错" when the UI still defaults to
     kimi-k2.x while ``PICO_MODEL_PROVIDER=deepseek``.
+
+    pico#1331: a personal provider scoped to this turn wins over whatever
+    model id the UI lane requested — the teacher has exactly one model.
     """
+    personal = _personal_provider.get()
+    if personal is not None:
+        return personal
     if is_agent_model(requested):
         return resolve_provider()
 
@@ -226,6 +289,9 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
     Prevents ``kimi-k2.6`` from being forwarded to the DeepSeek HTTPS API when the
     only available key (or remount fallback) is DeepSeek.
     """
+    if cfg.name == PERSONAL_PROVIDER_NAME:
+        # One model, no fast/deep lane remap, no kimi-id passthrough (#1331).
+        return cfg.model
     if is_agent_model(requested):
         low = str(requested).strip().lower()
         if low == "pico-fast":
@@ -749,6 +815,11 @@ async def stream_chat(
             async for piece in _first_byte_guard(provider, mid):
                 yield piece
         except Exception as e:
+            if provider.name == PERSONAL_PROVIDER_NAME:
+                # pico#1331: the teacher's own interface errored. Surface it
+                # verbatim (tagged, classified by user_errors.py) — never the
+                # Kimi/DeepSeek fallback below, never the busy/retry copy.
+                raise RuntimeError(f"{PERSONAL_ENDPOINT_ERROR_TAG}{e}") from e
             fallback = _deepseek_config()
             can_fallback = (
                 provider.name == "kimi"

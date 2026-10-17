@@ -801,3 +801,61 @@ export async function getPicoConversationPoints(conversationId: string): Promise
     `/v1/usage/points?conversation_id=${encodeURIComponent(cid)}`,
   );
 }
+
+// pico#1331「我的接口」: teacher's own OpenAI-compatible model endpoint.
+// The key never round-trips in full — only `sk-…` + the last 4 chars.
+export type PicoModelEndpoint = {
+  configured: boolean;
+  enabled: boolean;
+  base_url: string;
+  model: string;
+  masked_key: string;
+  updated_at: string | null;
+};
+
+export async function getMyModelEndpoint() {
+  return picoFetch<PicoModelEndpoint>(`/v1/me/model-endpoint`);
+}
+
+export async function putMyModelEndpoint(body: {
+  base_url: string;
+  model: string;
+  api_key?: string;
+  enabled: boolean;
+}) {
+  return picoFetch<PicoModelEndpoint>(`/v1/me/model-endpoint`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      base_url: body.base_url,
+      model: body.model,
+      api_key: body.api_key || '',
+      enabled: body.enabled,
+    }),
+  });
+}
+
+export async function deleteMyModelEndpoint() {
+  return picoFetch<{ ok?: boolean }>(`/v1/me/model-endpoint`, { method: 'DELETE' });
+}
+
+export type PicoModelEndpointTestResult = {
+  ok: boolean;
+  model?: string;
+  latency_ms?: number;
+  reason?: string;
+};
+
+export async function testMyModelEndpoint(body: {
+  base_url?: string;
+  model?: string;
+  api_key?: string;
+}) {
+  return picoFetch<PicoModelEndpointTestResult>(`/v1/me/model-endpoint/test`, {
+    method: 'POST',
+    body: JSON.stringify({
+      base_url: body.base_url || '',
+      model: body.model || '',
+      api_key: body.api_key || '',
+    }),
+  });
+}
