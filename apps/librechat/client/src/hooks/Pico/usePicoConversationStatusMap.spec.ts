@@ -162,6 +162,9 @@ describe('sidebar poll cadence (pico#1328)', () => {
     expect(nextPollMs(live, true)).toBe(20_000);
     expect(nextPollMs(idle, false)).toBe(20_000);
     expect(nextPollMs([], false)).toBe(20_000);
+    // A chat sending in this window counts as live before its task shows in the list.
+    expect(nextPollMs([], false, true)).toBe(1_500);
+    expect(nextPollMs([], true, true)).toBe(20_000);
   });
 
   it('flips a live row to 已完成 on the next fast poll, then slows back down', async () => {
@@ -188,6 +191,35 @@ describe('sidebar poll cadence (pico#1328)', () => {
         jest.advanceTimersByTime(1_000);
       });
       expect(mockedListPicoTasks).toHaveBeenCalledTimes(3);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('loads at once when a send starts and ends, polling fast in between', async () => {
+    jest.useFakeTimers();
+    try {
+      mockedListPicoTasks.mockReset();
+      mockedListPicoTasks.mockResolvedValue({ tasks: idle });
+      const { rerender } = renderHook(
+        ({ submitting }) => usePicoConversationStatusMap(true, submitting),
+        { initialProps: { submitting: false } },
+      );
+      await waitFor(() => expect(mockedListPicoTasks).toHaveBeenCalledTimes(1));
+      // Send starts: the new task is not in the list yet, so nothing but the flag says "live".
+      rerender({ submitting: true });
+      await waitFor(() => expect(mockedListPicoTasks).toHaveBeenCalledTimes(2));
+      await act(async () => {
+        jest.advanceTimersByTime(1_500);
+      });
+      expect(mockedListPicoTasks).toHaveBeenCalledTimes(3);
+      // Send ends: load now, then back to the idle pace.
+      rerender({ submitting: false });
+      await waitFor(() => expect(mockedListPicoTasks).toHaveBeenCalledTimes(4));
+      await act(async () => {
+        jest.advanceTimersByTime(19_000);
+      });
+      expect(mockedListPicoTasks).toHaveBeenCalledTimes(4);
     } finally {
       jest.useRealTimers();
     }
