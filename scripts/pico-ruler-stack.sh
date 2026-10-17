@@ -100,6 +100,18 @@ api_env() {
       | grep -vE '^(PICO_DATABASE_URL|PICO_SANDBOX_URL|PICO_OFFICE_URL|PICO_RUNNER_URL|PICO_RUNNER_TOKEN|PICO_RUNNER_PROXY_URL|PICO_HOOK_SERVICE_TOKEN|PICO_EDU_BASE_URL|PICO_EDU_SERVICE_TOKEN|PICO_EDU_HANDOFF_ENABLED|PICO_API_PORT|PICO_SANDBOX_DISK|PICO_GIT_SHA|PICO_MEILI_URL|MEILI_MASTER_KEY|PICO_SANDBOX_URL)=' \
       | grep -v '^$' > "$D/api.env"
     printf 'PICO_RUNNER_TOKEN=%s\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> "$D/api.env"
+    # pico#1336: KEY=VALUE lines that replace the live value (e.g. point
+    # DEEPSEEK_BASE_URL at scripts/pico-fault-upstream.py).
+    if [[ -n "${PICO_RULER_API_ENV_EXTRA:-}" ]]; then
+      local k
+      while IFS= read -r line; do
+        [[ "$line" == *=* ]] || continue
+        k="${line%%=*}"
+        grep -v "^$k=" "$D/api.env" > "$D/api.env.tmp" || true
+        mv "$D/api.env.tmp" "$D/api.env"
+        printf '%s\n' "$line" >> "$D/api.env"
+      done < "$PICO_RULER_API_ENV_EXTRA"
+    fi
   )
 }
 
