@@ -324,8 +324,11 @@ def test_typed_values_masked_on_box_lines_only() -> None:
     raw = (
         '- textbox "短信验证码" [ref=e5]: 677294\n- text: 订单号 677294\n'
         '- textbox "姓名" [ref=e6]: 李\n- textbox [ref=f1e3]: 你好，这是测试邮件\n'
+        '- textbox "密码" [ref=e7]:\n  - text: "pw-from-chat"\n- text: pw-from-chat 在正文里\n'
     )
-    out = mask_typed_box_values(raw, ["677294", "李", "你好，这是测试邮件"])
+    out = mask_typed_box_values(raw, ["677294", "李", "你好，这是测试邮件", "pw-from-chat"])
+    assert '  - text: "' + SECRET_MASK + '"' in out  # value on the box's child line
+    assert "- text: pw-from-chat 在正文里" in out
     assert '- textbox "短信验证码" [ref=e5]: ' + SECRET_MASK in out
     assert "- text: 订单号 677294" in out  # page text untouched
     assert "[ref=e6]: 李" in out  # not code-like

@@ -337,8 +337,14 @@ def mask_typed_box_values(snapshot: str, typed: list[str]) -> str:
     if not values:
         return snapshot
     lines = []
+    box_indent: int | None = None  # inside a textbox: its value sits on child lines
     for line in snapshot.split("\n"):
+        indent = len(line) - len(line.lstrip())
+        if box_indent is not None and indent <= box_indent:
+            box_indent = None
         if "textbox" in line:
+            box_indent = indent
+        if box_indent is not None:
             for value in values:
                 line = line.replace(value, SECRET_MASK)
         lines.append(line)
