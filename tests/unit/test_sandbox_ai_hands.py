@@ -30,6 +30,7 @@ os.environ.setdefault("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.sandbox_s2 import encode_rgb_png
 from pico_orchestrator.sandbox_session_event import (
+    mask_url_query,
     public_tool_args,
     public_tool_result,
     sandbox_session_payload,
@@ -348,6 +349,18 @@ def test_public_tool_args_masks_typed_text_and_form_values() -> None:
     assert form["fields"][1]["value"] == "hunter2"
     other = {"url": "https://example.com"}
     assert public_tool_args("sandbox_browser_open", other) is other
+    assert public_tool_args("sandbox_browser_click", {"ref": "e1"}) == {"ref": "e1"}
+
+
+def test_public_tool_args_masks_url_query_and_fragment() -> None:
+    nav = {"session_id": "sbox_1", "url": "https://mail.example.com/login?token=abc123&u=t701#code=9"}
+    out = public_tool_args("sandbox_browser_navigate", nav)
+    assert out == {"session_id": "sbox_1", "url": "https://mail.example.com/login?***#***"}
+    assert nav["url"].endswith("#code=9")  # the tool still gets the real URL
+    opened = public_tool_args("sandbox_browser_open", {"url": "https://a.cn/x?sid=1"})
+    assert opened["url"] == "https://a.cn/x?***"
+    assert mask_url_query("https://a.cn/p/q") == "https://a.cn/p/q"
+    assert mask_url_query("not a url") == "not a url"
 
 
 # ---------------------------------------------------------------- gateway → runtime

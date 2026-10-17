@@ -19,6 +19,8 @@
 - [ ] LibreChat 的 `CREDS_KEY`、`CREDS_IV`、`JWT_SECRET`、
       `JWT_REFRESH_SECRET` 均为相互独立的随机值
 - [ ] Pico API、Mongo 仅监听内网或 loopback；公网只开放 HTTPS
+- [ ] **和 edu-core 同机**：pico 常驻服务都有内存上限（`docker-compose.host.yml` 的 `mem_limit`：pico-api 3g、librechat 2g、meili 2g、mongo 1g、两个 edu 桥 256m、浏览器沙箱 512m、office 1g；new-api 在 `/home/ops/new-api` 自己的 compose 里 1g），pico#1324
+- [ ] **浏览器沙箱出网**：`pico-sandbox` 在自己的网络 `pico-sb`（172.30.251.0/24）；宿主防火墙单元 `pico-ws-firewall.service` 里的 PICO-SB-FWD / PICO-SB-IN 只放行公网，私网、Tailscale、云元数据（100.100.100.200）和本机都不通。规则要 root：`sudo bash scripts/pi-runner-host-setup.sh`（幂等；`--check` 看状态，`--rollback` 撤掉），pico#1324
 - [ ] **共享 ECS 端口**：Pico UI（LibreChat）loopback 钉 **18088**（`docker-compose.host.yml` / Nginx upstream）；**8080 归 edu-core-bff**，禁止把 LibreChat `PORT` 打回 8080
 
 ## 部署后

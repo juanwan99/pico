@@ -14,7 +14,11 @@
 #   3. /var/lib/pico/workspaces (root 0711).
 #   4. iptables chains PICO-WS-FWD (from DOCKER-USER) and PICO-WS-IN (from
 #      INPUT), only for traffic whose source is pico-ws, persisted by the
-#      systemd unit pico-ws-firewall.service.
+#      systemd unit pico-ws-firewall.service. Same unit: PICO-SB-FWD /
+#      PICO-SB-IN for the browser sandbox network pico-sb (172.30.251.0/24,
+#      created by docker-compose.host.yml): public internet yes; private /
+#      Tailscale / cloud metadata / this host no (pico#1324). pico-api reaches
+#      the sandbox through its published port; the sandbox calls no pico service.
 #   5. systemd slices pico.slice / pico-ws.slice: every box runs under
 #      pico-ws.slice (runner --cgroup-parent), so all boxes share one budget.
 #      CPU yields to production (low weight, quota leaves cores to the host);
@@ -26,6 +30,7 @@ set -euo pipefail
 SUBNET="172.30.250.0/24"
 GATEWAY="172.30.250.1"
 PROXY_PORT="18791"
+SB_SUBNET="172.30.251.0/24"
 NET="pico-ws"
 WS_ROOT="/var/lib/pico/workspaces"
 FW_BIN="/usr/local/sbin/pico-ws-firewall.sh"
@@ -50,20 +55,22 @@ write_firewall() {
 #!/usr/bin/env bash
 # pico-ws box egress policy (card #1093). Source = pico-ws only.
 set -euo pipefail
-SUB="$SUBNET"; GW="$GATEWAY"; PORT="$PROXY_PORT"
+SUB="$SUBNET"; GW="$GATEWAY"; PORT="$PROXY_PORT"; SB="$SB_SUBNET"
 ipt() { iptables -w "\$@"; }
 remove() {
   ipt -D DOCKER-USER -s "\$SUB" -j PICO-WS-FWD 2>/dev/null || true
   ipt -D INPUT -s "\$SUB" -j PICO-WS-IN 2>/dev/null || true
-  for c in PICO-WS-FWD PICO-WS-IN; do ipt -F "\$c" 2>/dev/null || true; ipt -X "\$c" 2>/dev/null || true; done
+  ipt -D DOCKER-USER -s "\$SB" -j PICO-SB-FWD 2>/dev/null || true
+  ipt -D INPUT -s "\$SB" -j PICO-SB-IN 2>/dev/null || true
+  for c in PICO-WS-FWD PICO-WS-IN PICO-SB-FWD PICO-SB-IN; do ipt -F "\$c" 2>/dev/null || true; ipt -X "\$c" 2>/dev/null || true; done
 }
+NO_NETS="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 169.254.0.0/16 127.0.0.0/8 0.0.0.0/8 224.0.0.0/4 240.0.0.0/4"
 if [ "\${1:-apply}" = "remove" ]; then remove; exit 0; fi
 # Box -> anything forwarded: public internet yes; private / Tailscale /
 # metadata / loopback / multicast / SMTP no.
 ipt -N PICO-WS-FWD 2>/dev/null || true
 ipt -F PICO-WS-FWD
-for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 169.254.0.0/16 \\
-           127.0.0.0/8 0.0.0.0/8 224.0.0.0/4 240.0.0.0/4; do
+for net in \$NO_NETS; do
   ipt -A PICO-WS-FWD -d "\$net" -j DROP
 done
 ipt -A PICO-WS-FWD -p tcp --dport 25 -j DROP
@@ -75,6 +82,23 @@ ipt -F PICO-WS-IN
 ipt -A PICO-WS-IN -p tcp -d "\$GW" --dport "\$PORT" -j ACCEPT
 ipt -A PICO-WS-IN -j DROP
 ipt -C INPUT -s "\$SUB" -j PICO-WS-IN 2>/dev/null || ipt -I INPUT 1 -s "\$SUB" -j PICO-WS-IN
+# Browser sandbox (pico-sb) -> forwarded: replies pass, then the same deny
+# list as boxes (100.64/10 covers metadata 100.100.100.200 and Tailscale).
+ipt -N PICO-SB-FWD 2>/dev/null || true
+ipt -F PICO-SB-FWD
+ipt -A PICO-SB-FWD -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+for net in \$NO_NETS; do
+  ipt -A PICO-SB-FWD -d "\$net" -j DROP
+done
+ipt -A PICO-SB-FWD -p tcp --dport 25 -j DROP
+ipt -A PICO-SB-FWD -j RETURN
+ipt -C DOCKER-USER -s "\$SB" -j PICO-SB-FWD 2>/dev/null || ipt -I DOCKER-USER 1 -s "\$SB" -j PICO-SB-FWD
+# Sandbox -> this host: replies to pico-api's calls only (allow-list is empty).
+ipt -N PICO-SB-IN 2>/dev/null || true
+ipt -F PICO-SB-IN
+ipt -A PICO-SB-IN -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+ipt -A PICO-SB-IN -j DROP
+ipt -C INPUT -s "\$SB" -j PICO-SB-IN 2>/dev/null || ipt -I INPUT 1 -s "\$SB" -j PICO-SB-IN
 FW
   chmod 0755 "$FW_BIN"
   cat >"$FW_UNIT" <<UNIT
@@ -124,6 +148,8 @@ check() {
   echo "fw unit:      $(systemctl is-active pico-ws-firewall.service 2>/dev/null || true)"
   echo "DOCKER-USER:  $(iptables -w -S DOCKER-USER 2>/dev/null | grep -c PICO-WS-FWD || true) jump(s)"
   echo "INPUT:        $(iptables -w -S INPUT 2>/dev/null | grep -c PICO-WS-IN || true) jump(s)"
+  echo "sandbox net:  $(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' pico-sb 2>/dev/null || echo missing) (want $SB_SUBNET)"
+  echo "sandbox fw:   DOCKER-USER $(iptables -w -S DOCKER-USER 2>/dev/null | grep -c PICO-SB-FWD || true) jump(s), INPUT $(iptables -w -S INPUT 2>/dev/null | grep -c PICO-SB-IN || true) jump(s)"
   echo "pico.slice:   $(systemctl show pico.slice -p CPUWeight --value 2>/dev/null || echo missing) cpu weight"
   echo "pico-ws.slice: quota $(systemctl show pico-ws.slice -p CPUQuotaPerSecUSec --value 2>/dev/null) mem high $(systemctl show pico-ws.slice -p MemoryHigh --value 2>/dev/null) max $(systemctl show pico-ws.slice -p MemoryMax --value 2>/dev/null)"
   # Kernel view (exists while a box runs): what is actually enforced.

@@ -28,6 +28,9 @@ services:
       ]
     volumes:
       - pico_mongo:/data/db
+    # pico#1324: pico shares the host with edu-core; every long-running pico
+    # service has a ceiling (about 3x its normal use) so one leak cannot starve edu.
+    mem_limit: 1g
 
   pico-api:
     image: pico-api:v13
@@ -145,6 +148,7 @@ services:
       - mongo
       - meilisearch
       - pico-office
+    mem_limit: 3g
 
   meilisearch:
     image: getmeili/meilisearch:v1.13.3
@@ -155,8 +159,11 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
       MEILI_NO_ANALYTICS: "true"
       MEILI_ENV: production
+      # Meili sizes indexing by host RAM, not the container limit (pico#1324).
+      MEILI_MAX_INDEXING_MEMORY: 1Gb
     volumes:
       - pico_meili:/meili_data
+    mem_limit: 2g
 
   pico-sandbox:
     image: pico-sandbox:v13
@@ -177,6 +184,14 @@ services:
       - /dev/shm:size=64m
     ports:
       - "127.0.0.1:18767:18767"
+    # Own network so the host firewall can hold it to the public internet
+    # (PICO-SB-FWD / PICO-SB-IN in scripts/pi-runner-host-setup.sh, pico#1324).
+    networks:
+      - pico_sb
+    # Public resolvers: the cloud resolver sits in 100.64/10, which pico-sb may not reach.
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
     environment:
       PICO_SANDBOX_HOST: "0.0.0.0"
       PICO_SANDBOX_PORT: "18767"
@@ -350,6 +365,8 @@ services:
     depends_on:
       - mongo
       - pico-api
+    # Node heap is capped at 1536 MB (NODE_MAX_OLD_SPACE_SIZE); room for the rest.
+    mem_limit: 2g
 
   # edu → Pico bridge (#995 stage 0). edu-core containers call
   # http://edu-pico-gw:18765 (their PICO_BASE_URL). pico-api is host-network
@@ -371,6 +388,7 @@ services:
       - ${PICO_EDU_GW_SOCK_HOST:-./data/pico-edu-gw-sock}:/sock
     depends_on:
       - pico-api
+    mem_limit: 256m
 
   edu-pico-gw:
     image: alpine/socat@sha256:3d9e7966201dd3a065df591020a09fd3c70845de7e7086e3531ea69db774406b
@@ -386,8 +404,21 @@ services:
       - edu_core
     depends_on:
       - pico-edu-gw-host
+    mem_limit: 256m
 
 networks:
+  # Browser sandbox only (pico#1324). Fixed subnet: the host firewall unit
+  # matches it. icc off: nothing else lives here.
+  pico_sb:
+    name: pico-sb
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-pico-sb
+      com.docker.network.bridge.enable_icc: "false"
+    ipam:
+      config:
+        - subnet: 172.30.251.0/24
+          gateway: 172.30.251.1
   # edu-core's compose network on the same host. External: Pico joins it with
   # one alias; it never creates or owns it.
   edu_core:
