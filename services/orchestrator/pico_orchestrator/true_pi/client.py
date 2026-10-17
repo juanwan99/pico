@@ -7,7 +7,6 @@ Transport is injectable for unit tests (FakeTransport).
 from __future__ import annotations
 
 import asyncio
-import copy
 import json
 import logging
 import os
@@ -21,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 from pico_orchestrator.ask_user import AskTimedOut
-from pico_orchestrator.provider import GEMINI_FLASH_THINKING_OFF_BODY
 from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
 from pico_orchestrator.true_pi.thinking import (
     incremental_text_from_update,
@@ -156,7 +154,7 @@ def true_pi_windows_from_caps(caps: Any | None) -> tuple[int, int]:
     if context <= 0:
         context = 256_000 if thinking else 128_000
     if output <= 0:
-        output = 32_000 if thinking else 8_000
+        output = 32_000
     return context, output
 
 
@@ -186,33 +184,24 @@ def true_pi_models_document(
     if accept_image:
         inputs.append("image")
     gemini = mid.lower().startswith("gemini-")
-    # Fast lane must not advertise extended thinking. Gemini 3.8 with
-    # reasoning:true still thinks for seconds before the first content token
-    # even when argv is --thinking off (#1005 首字).
+    # Both lanes think (pico#1320): fast --thinking low, deep --thinking high.
     model_entry: dict[str, Any] = {
         "id": mid,
-        "reasoning": bool(thinking) or not gemini,
+        "reasoning": True,
         "input": inputs,
         **overlay,
     }
+    del thinking
     if gemini:
-        # pico-fast: reasoning off. pico-deep: New API honors reasoning_effort.
-        model_entry["reasoning"] = bool(thinking)
-        if not thinking and "flash" in mid.lower():
-            # reasoning:false only stops Pi from *asking* for thinking; Gemini
-            # flash still thinks dynamically unless the wire carries
-            # thinking_budget 0. Pi's models.json samplingParams is the
-            # official way to add request fields (#1183).
-            model_entry["samplingParams"] = copy.deepcopy(GEMINI_FLASH_THINKING_OFF_BODY)
-        if thinking:
-            model_entry["thinkingLevelMap"] = {
-                "off": "none",
-                "minimal": "low",
-                "low": "low",
-                "medium": "medium",
-                "high": "high",
-                "xhigh": "high",
-            }
+        # New API honors reasoning_effort for Gemini.
+        model_entry["thinkingLevelMap"] = {
+            "off": "none",
+            "minimal": "low",
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "xhigh": "high",
+        }
     provider_entry: dict[str, Any] = {
         "modelOverrides": {mid: dict(overlay)},
         "models": [model_entry],
@@ -390,7 +379,7 @@ class SubprocessTransport(TruePiTransport):
         if max_context is None:
             max_context = 256_000 if thinking else 128_000
         if max_tokens is None:
-            max_tokens = 32_000 if thinking else 8_000
+            max_tokens = 32_000
         self.max_context = int(max_context)
         self.max_tokens = int(max_tokens)
         self.agent_home: Path | None = None

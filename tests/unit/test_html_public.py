@@ -50,17 +50,21 @@ def test_publish_tools_on_allowlist_and_system_stays_generic():
     assert len(ALLOWED_GATEWAY_TOOLS) == 38  # 24 + 7 AI-hands verbs (#1207) + back/hover/tabs (#1217) + fill_form/file_upload (#1219) + page_file/page_fn (#1242)
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     body = pico_system_text()
-    assert "publish_html_page" in body
     assert "这是什么" not in body
     assert "课件" not in body
     assert "学生端" not in body
     assert "教师看板" not in body
     assert "发布并收表" not in body
-    assert "`publish_html_page` is not a Pico capability" in body
-    assert "school-admin approval" in body
-    assert "If `publish_html_page` is listed this turn" not in body
-    assert "parks until the teacher confirms this exact page" not in body
     assert "问卷" not in body
+
+    # pico#1320: system.md no longer names publish_html_page by name — the
+    # "not a Pico capability" / school-admin-approval rule lives on the tool.
+    from pico_orchestrator.tools_builtin import build_default_gateway
+
+    gw = build_default_gateway()
+    publish_desc = gw.tools["publish_html_page"].description
+    assert "Not a Pico capability" in publish_desc
+    assert "school-admin approval" in publish_desc
 
 
 def test_prepare_public_html_drops_embedded_form_action_none():

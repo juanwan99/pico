@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html as html_lib
 
-LOGIN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
+LOGIN_COPY = "这是你的隔离浏览器，可以直接在画面里操作"
 
 
 def render_session_view_html(

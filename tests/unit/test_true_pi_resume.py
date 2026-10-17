@@ -131,7 +131,9 @@ async def test_error_after_output_resumes_same_session_and_succeeds() -> None:
     assert "不要重做" in prompts[1]
     resumes = [p for k, p in events if k == "run.resume"]
     assert resumes and resumes[0]["attempt"] == 1 and resumes[0]["reason"] == _CUT
-    assert any("正在重试" in str(p.get("text")) for k, p in events if k == "message.delta")
+    # pico#1320: the retry note rides the run.resume payload itself (step box),
+    # not a separate message.delta into the chat bubble.
+    assert "正在重试" in str(resumes[0].get("text"))
     assert [k for k, _ in events if k == "run.status"][-1:] == ["run.status"]
     assert [p["status"] for k, p in events if k == "run.status"][-1] == "succeeded"
     assert not any(k == "run.error" for k, _ in events)

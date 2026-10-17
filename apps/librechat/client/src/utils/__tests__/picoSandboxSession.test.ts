@@ -12,14 +12,14 @@ describe('collectPicoSandboxSession', () => {
         session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
         url: 'https://example.com/',
         title: 'Example Domain',
-        human_copy: '请在此画面自行登录，不要在聊天里发送密码',
+        human_copy: '这是你的隔离浏览器，可以直接在画面里操作',
       }),
     ]);
     expect(view).toEqual({
       sessionId: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
       url: 'https://example.com/',
       title: 'Example Domain',
-      humanCopy: '请在此画面自行登录，不要在聊天里发送密码',
+      humanCopy: '这是你的隔离浏览器，可以直接在画面里操作',
     });
   });
 

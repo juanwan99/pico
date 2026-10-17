@@ -42,10 +42,6 @@ _JARGON_LINE = re.compile(
     r").*$"
 )
 
-_JARGON_INLINE = re.compile(
-    r"(?i)\b(?:artifact_id|verification_level|interaction_status|source_wall|"
-    r"content_encoding|L0_structure|min_artifacts)\b\s*[:=]?\s*`?[\w\-.]+`?"
-)
 
 # Full HTML document pasted into chat (source wall).
 _HTML_DOC = re.compile(
@@ -56,10 +52,6 @@ _HTML_DOC = re.compile(
 # Long fenced HTML without doctype still hurts.
 _FENCED_HTML = re.compile(r"(?is)```(?:html|htm)\s*\n.*?\n```")
 
-_MARKDOWN_TABLE_L0 = re.compile(
-    r"(?im)^\|[^\n]*(?:L0|L1|verification|interaction_status|artifact)[^\n]*\|\s*\n"
-    r"(?:\|[^\n]*\|\s*\n)+"
-)
 
 # Tool/process chrome that must not linger in the user main bubble (G2).
 # Long process diaries are stripped; short mid-run UI chrome is not final_text.
@@ -69,9 +61,6 @@ _PROCESS_LINE = re.compile(
     r"正在写|正在改|正在调工具|正在落盘|正在出图|正在画|正在列文件|正在读文件|"
     r"正在检索|正在阅读|正在核对"
     r")[^〕\]]*[〕\]]?[ \t]*$"
-)
-_PROCESS_INLINE = re.compile(
-    r"[〔\[](?:调用工具[^〕\]]*|工具完成|步骤\s*\d+|检查点已保存)[〕\]]"
 )
 # Model status headlines that landed as assistant text (**Generating …**).
 _EN_PROCESS_HEADLINE = re.compile(
@@ -92,25 +81,6 @@ _L0_SELFCHECK_LINE = re.compile(
     r")$"
 )
 # Mid-paragraph L0 walls when the model packs self-check into one long line with product copy.
-_L0_SELFCHECK_INLINE = re.compile(
-    r"(?i)(?:"
-    r"由于系统侧[^。\n]{0,120}(?:自检|账本|编码)[^。\n]{0,80}[。.]?"
-    r"|静态自检[^。\n]{0,100}[。.]?"
-    r"|结构自检[^。\n]{0,100}[。.]?"
-    r"|未经真机点击[^。\n]{0,80}[。.]?"
-    r"|未做浏览器真机点击[^。\n]{0,80}[。.]?"
-    r"|不夸大其可用性[。.]?"
-    r"|我如实说明[：:]?"
-    r"|对用户[：:]只说明[^。\n]{0,80}[。.]?"
-    r"|勿复读[^。\n]{0,60}[。.]?"
-    r"|本工具不做无头浏览器[^。\n]{0,80}[。.]?"
-    # #399 R3: English system-side / structure-check engineer voice in main bubble
-    r"|(?:Now\s+)?let me run the system-side verification[^.。\n]*[.。]?"
-    r"|system-side verification(?:\s+check)?[^.。\n]*[.。]?"
-    r"|完成结构校验[。.]?"
-    r"|结构校验[，,]?页面为完整可运行[^。\n]{0,80}[。.]?"
-    r")"
-)
 _ENGINEER_VERIFY_LINE = _L0_SELFCHECK_LINE
 # Pure engineer EN self-check lines (no Chinese product copy mixed in).
 _ENGINEER_EN_LINE = re.compile(
@@ -155,9 +125,6 @@ _TOOL_MONOLOGUE_BLOCK = re.compile(
     r"|让我(?:构造|调用|写)[^\n]{0,80})"
 )
 # 「正在准备…」mid-run chrome that must not linger once the bubble is settled.
-_PROCESS_PREFIX_INLINE = re.compile(
-    r"(?i)^[ \t]*(?:正在准备|preparing|generating)[.。…\s]*"
-)
 _TOOL_NAME_BARE = re.compile(
     r"(?i)\b(?:generate_(?:html|docx|pptx)_document|workspace_write_file|"
     r"verify_html_document)\b"
@@ -251,43 +218,6 @@ def _strip_model_identity(text: str) -> str:
     return _PICO_ID_FLUFF_EN.sub("I am Pico", out)
 
 
-def _strip_jargon(text: str) -> str:
-    text = _MARKDOWN_TABLE_L0.sub("", text)
-    text = _PROCESS_INLINE.sub("", text)
-    # Self-check walls before monologue blocks so EN+中文 lines keep product copy.
-    text = _L0_SELFCHECK_INLINE.sub("", text)
-    # 「正在准备…」prefix must not linger on a settled bubble (also trips
-    # client-side settled detection and reads as tool chrome in human view).
-    text = _PROCESS_PREFIX_INLINE.sub("", text)
-    text = _TOOL_MONOLOGUE_BLOCK.sub("", text)
-    lines: list[str] = []
-    for line in text.splitlines():
-        if _JARGON_LINE.search(line):
-            continue
-        if _PROCESS_LINE.search(line) or _EN_PROCESS_HEADLINE.search(line):
-            continue
-        if _L0_SELFCHECK_LINE.search(line):
-            continue
-        if _TOOL_MONOLOGUE_LINE.search(line):
-            continue
-        cleaned = _JARGON_INLINE.sub("", line)
-        cleaned = _TOOL_NAME_BARE.sub("", cleaned)
-        cleaned = _L0_SELFCHECK_INLINE.sub("", cleaned)
-        # After inline strip, drop pure remaining EN engineer lines.
-        if _ENGINEER_EN_LINE.search(cleaned):
-            continue
-        # Drop leftover empty bullet rows after inline strip.
-        if cleaned.strip() in {"-", "*", "·", "•", "|", "||"}:
-            continue
-        if not cleaned.strip():
-            continue
-        lines.append(cleaned)
-    text = "\n".join(lines)
-    # Collapse 3+ blank lines.
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
-
-
 def looks_like_tool_monologue(text: str) -> bool:
     """True when the blob is mostly tool-planning diary (for stream gates)."""
     raw = (text or "").strip()
@@ -331,20 +261,6 @@ def _human_card(titles: list[str]) -> str:
         f"请在右侧「结果 / 产物」区逐一点 **下载**（文件名优先，勿找 ID）。\n"
         f"需要调整哪一份，直接说文件名即可。"
     )
-
-
-def _mentions_titles(text: str, titles: list[str]) -> bool:
-    if not titles:
-        return True
-    lower = text.lower()
-    hits = 0
-    for t in titles:
-        base = t.rsplit("/", 1)[-1].strip()
-        if base and base.lower() in lower:
-            hits += 1
-    # At least half of titles (or 1) mentioned.
-    need = 1 if len(titles) == 1 else max(1, (len(titles) + 1) // 2)
-    return hits >= need
 
 
 def strip_ansi(text: str | None) -> str:
@@ -391,7 +307,8 @@ def sanitize_user_facing_text(
     artifact_titles: list[str] | None = None,
     force_card_if_artifacts: bool = True,
 ) -> str:
-    """Return chat-safe text: human package, no full HTML dump, no machine self-check."""
+    """Chat-safe text: no pasted page source, no model / provider name. Nothing else."""
+    del force_card_if_artifacts
     raw = strip_ansi(text or "").strip()
     raw = _EXECUTE_PLAN_LINE.sub("", raw).strip()
     titles = [t.strip() for t in (artifact_titles or []) if t and not is_bookkeeping_title(t)]
@@ -410,71 +327,17 @@ def sanitize_user_facing_text(
         return ""
 
     stripped = _strip_html_dumps(raw)
-    stripped = _strip_jargon(stripped)
     stripped = _strip_model_identity(stripped)
 
-    had_html_dump = bool(_HTML_DOC.search(raw) or _FENCED_HTML.search(raw))
-    # If model only pasted source / jargon and we have files → replace with card.
-    if titles and (not stripped or had_html_dump or len(stripped) < 12):
+    # The model's own words stand (pico#1320). Only an empty reply — e.g. it pasted
+    # nothing but page source — gets a plain download line so the bubble is not blank.
+    if titles and not stripped.strip():
         return _human_card(titles)
-
-    if titles and force_card_if_artifacts and not _mentions_titles(stripped, titles):
-        card = _human_card(titles)
-        if stripped:
-            return f"{stripped.rstrip()}\n\n---\n{card}"
-        return card
-
-    if had_html_dump and titles:
-        note = "（完整 HTML 已写入可下载文件，聊天中不再贴源码。）"
-        if stripped:
-            return f"{stripped.rstrip()}\n\n{note}\n\n{_human_card(titles)}"
-        return _human_card(titles)
-
     return stripped
 
 
-UNLOOKED_NOTE = "这份文件的版面我还没逐页看过，用之前请先打开翻一遍。"
 
 
-def note_unlooked(text: str, *, made_file: bool, looked: int) -> str:
-    """pico#1297: a file was made but no page of it was looked at → say so plainly."""
-    if not made_file or looked > 0 or UNLOOKED_NOTE in (text or ""):
-        return text
-    body = (text or "").rstrip()
-    return f"{body}\n\n{UNLOOKED_NOTE}" if body else UNLOOKED_NOTE
-
-
-UNREAD_NOTE_TAIL = "这一轮我没有打开核对，相关内容按通用知识整理，用之前请核对。"
-_BOOK_NAME = re.compile(r"《([^《》\n]{1,60})》")
-_FILE_EXT = re.compile(r"\.[A-Za-z0-9]{1,5}$")
-
-
-def _plain(text: str) -> str:
-    return re.sub(r"[\W_]+", "", text or "").lower()
-
-
-def note_unread_basis(text: str, *, opened: str) -> str:
-    """pico#1297: the 依据 line names 《X》 that nothing this turn opened → say so plainly.
-
-    ``opened`` is everything the turn saw: the teacher's words, attachment paths,
-    and tool results (files read, searches, web pages).
-    """
-    seen = _plain(opened)
-    unread: list[str] = []
-    for line in (text or "").splitlines():
-        if "依据" not in line:
-            continue
-        for name in _BOOK_NAME.findall(line):
-            core = _plain(_FILE_EXT.sub("", name.strip()))
-            if core and core not in seen and name not in unread:
-                unread.append(name)
-    if not unread:
-        return text
-    note = "、".join(f"《{n}》" for n in unread) + UNREAD_NOTE_TAIL
-    if note in (text or ""):
-        return text
-    body = (text or "").rstrip()
-    return f"{body}\n\n{note}"
 
 
 def engineer_trace_note() -> str:

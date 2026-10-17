@@ -77,7 +77,7 @@ function fromBody(body: Record<string, unknown> | null): PicoSandboxSession | nu
   }
   const url = String(body.url || '').trim();
   const title = String(body.title || '').trim();
-  const humanCopy = String(body.human_copy || '请在此画面自行登录，不要在聊天里发送密码').trim();
+  const humanCopy = String(body.human_copy || '这是你的隔离浏览器，可以直接在画面里操作').trim();
   return { sessionId, url, title, humanCopy, ...(kind ? { kind } : {}) };
 }
 

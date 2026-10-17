@@ -78,10 +78,8 @@ def test_sticky_does_not_inherit_prior_landing() -> None:
 
 def test_system_md_is_generic_not_scene_if(tmp_path: Path) -> None:
     body = pico_system_text()
-    assert "This block is **SYSTEM**" in body
-    assert "Being listed does **not** mean you must call them" in body
-    assert "Default is a chat answer" in body
-    assert "School library search is in scope this turn" in body
+    assert "You are **Pico**" in body
+    assert "pick a sensible default and go" in body
     assert "uploaded materials" not in body
     assert "这是什么" not in body
     assert "课件" not in body

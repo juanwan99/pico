@@ -275,20 +275,11 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
         "ui_model": ui if ui.startswith("pico-") else (low or "pico-fast"),
         "backend_model": product_backend_model(deep=deep),
         "thinking": thinking,
-        "max_steps": 24,
+        "max_steps": 60,
         "max_tokens": 32000,
         "max_context": 256000,
         "fallback": product_backend_model(deep=bool(gpt_brain or deep)),
     }
-
-
-# Gemini flash via New API only turns thinking off through this literal
-# ``extra_body`` key (``reasoning_effort: none`` is ignored — probed on the
-# live gateway, #1183). Shared by the direct path and the Pi models.json
-# overlay so the fast lane means the same thing on both wires.
-GEMINI_FLASH_THINKING_OFF_BODY: dict[str, object] = {
-    "extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}
-}
 
 
 def thinking_extra_body(
@@ -300,21 +291,15 @@ def thinking_extra_body(
 
     DeepSeek v4: ``thinking.type`` disabled or the stream is HTTP 200 empty.
     Gemini 3.8: do **not** send DeepSeek's thinking object (empty content);
-    deep lane uses ``reasoning_effort``. Fast lane turns thinking off for
-    flash: New API only reads Gemini's thinking config under a literal
-    ``extra_body`` key (``reasoning_effort: none`` is ignored), and dynamic
-    thinking otherwise eats the output budget (#1116).
+    both lanes use ``reasoning_effort``: fast = low, deep = high (pico#1320).
     """
     policy = runtime_policy_for_model(model)
     if thinking is None:
         thinking = bool(policy.get("thinking", False))
     backend = str(policy.get("backend_model") or model or "")
     if is_gemini_model(backend) or is_gemini_model(model):
-        if thinking:
-            return {"reasoning_effort": "medium"}
-        if "flash" in backend.lower():
-            return dict(GEMINI_FLASH_THINKING_OFF_BODY)
-        return {}
+        # pico#1320 (owner 10-16): fast lane thinks lightly, deep lane thinks hard.
+        return {"reasoning_effort": "high" if thinking else "low"}
     return {"thinking": {"type": "enabled" if thinking else "disabled"}}
 
 

@@ -13,7 +13,6 @@ from pico_orchestrator.office.render import render_spec
 from pico_orchestrator.office.spec import parse_spec, sanitize_slide_text, spec_from_plain
 from pico_orchestrator.tool_observation import observe_write
 from pico_orchestrator.tools_builtin import build_default_gateway
-from pico_orchestrator.true_pi.runtime import pico_system_text
 
 ROOT = Path(__file__).resolve().parents[2]
 PNG = base64.b64decode(
@@ -128,10 +127,8 @@ def test_pi_surface_names_image_artifact_ids() -> None:
     img = ts[ts.find("Create one png/jpg") : ts.find("Create one png/jpg") + 500]
     assert "SiliconFlow" not in img
     assert "image_artifact_ids" in img
-    system = pico_system_text()
-    assert "image_artifact_ids" in system
-    assert "IMAGE_PATHS" in system
-    assert "[image:" in system
+    # pico#1320: system.md no longer spells out image_artifact_ids / IMAGE_PATHS —
+    # that craft detail lives on sandbox_office_lib / generate_image (above, ts).
 
 
 @dataclass

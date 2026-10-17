@@ -14,7 +14,6 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from app.openai_compat import _sidebar_chat_only, _workbench_tool_step_line
-from pico_orchestrator.human_package import sanitize_user_facing_text
 from pico_orchestrator.image_generate import NO_KEY_MESSAGE
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import FakeTransport, RpcEvent
@@ -98,12 +97,6 @@ def test_failed_write_ignored_when_a_write_succeeded() -> None:
     )
 
 
-def test_human_package_strips_in_flight_progress() -> None:
-    out = sanitize_user_facing_text("正在写 Word\n教案已写好。")
-    assert "正在写" not in out
-    assert "教案已写好" in out
-
-
 @pytest.mark.asyncio
 async def test_tool_call_emits_chinese_step_line() -> None:
     events: list[tuple[str, dict[str, Any]]] = []
@@ -128,6 +121,30 @@ async def test_tool_call_emits_chinese_step_line() -> None:
     assert calls
     assert calls[0]["step_line"] == "正在写 Word：教案.docx"
     assert "%" not in calls[0]["step_line"]
+
+
+@pytest.mark.asyncio
+async def test_tool_call_event_masks_typed_code() -> None:
+    """pico#1320: the live tool.call stream carries *** for what the AI types."""
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    await map_event(
+        RpcEvent(
+            {
+                "type": "tool_execution_start",
+                "toolName": "sandbox_browser_type",
+                "toolCallId": "c1",
+                "args": {"ref": "e5", "text": "677294"},
+            }
+        ),
+        emit=emit,
+        state=EventMapState(),
+    )
+    calls = [p for k, p in events if k == "tool.call"]
+    assert calls[0]["arguments"] == {"ref": "e5", "text": "***"}
 
 
 @pytest.mark.asyncio

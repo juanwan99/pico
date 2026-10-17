@@ -13,7 +13,7 @@ from app.openai_compat import (
     _direct_thinking,
     _thinking_override,
 )
-from pico_orchestrator.provider import GEMINI_FLASH_THINKING_OFF_BODY, thinking_extra_body
+from pico_orchestrator.provider import thinking_extra_body
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import SubprocessTransport, true_pi_models_document
 
@@ -59,21 +59,23 @@ def test_pi_caps_honor_request_and_sidebar_still_wins() -> None:
     assert rail.thinking_on is False
 
 
-def test_direct_and_pi_share_one_gemini_flash_off_body() -> None:
-    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == GEMINI_FLASH_THINKING_OFF_BODY
+def test_fast_lane_thinks_low_on_both_wires() -> None:
+    """pico#1320 (owner 10-16): fast lane thinks lightly, deep lane thinks hard."""
+    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == {"reasoning_effort": "low"}
+    assert thinking_extra_body("gemini-3.8-flash", thinking=True) == {"reasoning_effort": "high"}
     doc = true_pi_models_document(
         provider="openai",
         model="gemini-3.8-flash",
         max_context=128_000,
-        max_tokens=8_000,
+        max_tokens=32_000,
         base_url="http://127.0.0.1:3000/v1",
         api="openai-completions",
         thinking=False,
     )
     model = doc["providers"]["openai"]["models"][0]
-    assert model["reasoning"] is False
-    assert model["samplingParams"] == GEMINI_FLASH_THINKING_OFF_BODY
-    assert model["samplingParams"] is not GEMINI_FLASH_THINKING_OFF_BODY  # overlay owns its copy
+    assert model["reasoning"] is True
+    assert "samplingParams" not in model
+    assert model["thinkingLevelMap"]["low"] == "low"
 
 
 def test_pi_deep_lane_and_non_flash_do_not_pin_budget_zero() -> None:
@@ -107,7 +109,7 @@ def test_pi_deep_lane_and_non_flash_do_not_pin_budget_zero() -> None:
     assert "samplingParams" not in gpt
 
 
-def test_written_models_json_carries_budget_zero(tmp_path: Path) -> None:
+def test_written_models_json_lets_the_fast_lane_think(tmp_path: Path) -> None:
     t = SubprocessTransport(
         session_dir=tmp_path / "sess-flash-off",
         tool_url="http://127.0.0.1:1",
@@ -122,8 +124,9 @@ def test_written_models_json_carries_budget_zero(tmp_path: Path) -> None:
         api="openai-completions",
     )
     written = json.loads((t.prepare_agent_home() / "models.json").read_text(encoding="utf-8"))
-    sp = written["providers"]["openai"]["models"][0]["samplingParams"]
-    assert sp["extra_body"]["google"]["thinking_config"]["thinking_budget"] == 0
+    model = written["providers"]["openai"]["models"][0]
+    assert model["reasoning"] is True
+    assert "samplingParams" not in model
 
 
 def test_tip_and_health_expose_revision() -> None:

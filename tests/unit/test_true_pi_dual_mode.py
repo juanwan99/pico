@@ -200,8 +200,10 @@ def test_gemini_models_json_uses_openai_completions_not_responses(tmp_path: Path
     assert block["models"][0]["id"] == "gemini-3.8-flash"
     assert block["models"][0]["api"] == "openai-completions"
     assert block["models"][0]["api"] != "openai-responses"
-    assert block["models"][0]["reasoning"] is False
-    assert "thinkingLevelMap" not in block["models"][0]
+    # pico#1320: both lanes think now — reasoning is always on and the gemini
+    # thinkingLevelMap is always carried, fast and deep alike.
+    assert block["models"][0]["reasoning"] is True
+    assert block["models"][0]["thinkingLevelMap"]["off"] == "none"
     assert block["compat"]["thinkingFormat"] == "reasoning_effort"
     assert block["compat"]["supportsReasoningEffort"] is True
     assert "image" in block["models"][0]["input"]
@@ -258,7 +260,7 @@ def test_true_pi_runtime_source_passes_caps_windows() -> None:
     assert "tool_server.start()" in src
     assert "max_tokens=max_out" in src
     assert "pi_api, pi_thinking_level = pi_wire(" in src
-    assert '"medium" if thinking_on else "off"' in src
+    assert '"high" if thinking_on else "low"' in src
     assert 'pi_thinking_level = "medium" if openai_brain else ""' not in src
 
 
@@ -362,14 +364,14 @@ def test_pi_wire_responses_models_on_gemini_primary() -> None:
     from pico_orchestrator.true_pi.runtime import pi_wire
 
     wire = {"openai_brain": False, "openai_overlay": True}
-    assert pi_wire("gpt-5.6-sol", thinking_on=True, **wire) == ("openai-responses", "medium")
-    assert pi_wire("grok-4.6", thinking_on=False, **wire) == ("openai-responses", "off")
-    assert pi_wire("gemini-3.8-flash", thinking_on=True, **wire) == ("openai-completions", "medium")
-    assert pi_wire("gemini-3.8-flash", thinking_on=False, **wire) == ("openai-completions", "off")
+    assert pi_wire("gpt-5.6-sol", thinking_on=True, **wire) == ("openai-responses", "high")
+    assert pi_wire("grok-4.6", thinking_on=False, **wire) == ("openai-responses", "low")
+    assert pi_wire("gemini-3.8-flash", thinking_on=True, **wire) == ("openai-completions", "high")
+    assert pi_wire("gemini-3.8-flash", thinking_on=False, **wire) == ("openai-completions", "low")
     # GPT primary brain unchanged; DeepSeek direct unchanged.
     assert pi_wire("gpt-5.6-sol", thinking_on=False, openai_brain=True, openai_overlay=True) == (
         "openai-responses",
-        "off",
+        "low",
     )
     assert pi_wire("deepseek-v4-flash", thinking_on=True, openai_brain=False, openai_overlay=False) == (
         "",
@@ -383,5 +385,5 @@ def test_pi_wire_gemini_backup_under_gpt_primary() -> None:
     from pico_orchestrator.true_pi.runtime import pi_wire
 
     wire = {"openai_brain": True, "openai_overlay": True}
-    assert pi_wire("gemini-3.8-flash", thinking_on=False, **wire) == ("openai-completions", "off")
-    assert pi_wire("grok-4.6", thinking_on=False, **wire) == ("openai-responses", "off")
+    assert pi_wire("gemini-3.8-flash", thinking_on=False, **wire) == ("openai-completions", "low")
+    assert pi_wire("grok-4.6", thinking_on=False, **wire) == ("openai-responses", "low")

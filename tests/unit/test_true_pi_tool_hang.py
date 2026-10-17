@@ -155,7 +155,9 @@ async def test_hung_tool_is_aborted_and_the_session_resumes(
     )
     resumes = [p for k, p in events if k == "run.resume"]
     assert resumes and "bash 命令运行超过" in resumes[0]["reason"]
-    assert any("跑太久" in str(p.get("text")) for k, p in events if k == "message.delta")
+    # pico#1320: the retry note rides the run.resume payload itself (step box),
+    # not a separate message.delta into the chat bubble.
+    assert "跑太久" in str(resumes[0].get("text"))
     assert [p["status"] for k, p in events if k == "run.status"][-1] == "succeeded"
 
 

@@ -1653,7 +1653,6 @@ async def chat_completions(
 
         page_affordances = affordances_from_request(body.metadata, client_system, prompt)
         page_title = page_title_from_request(client_system)
-    kb_scope_block = ""
     try:
         # Use the module-level session_factory. A local `from app.db import
         # session_factory` here makes it a cell of chat_completions; the
@@ -1662,24 +1661,13 @@ async def chat_completions(
         from app.edu_school import (
             excerpts_for_conversation,
             inject_named_school_materials,
-            kb_scope_system_block,
-            load_named_search_flags,
         )
 
         factory = session_factory()
-        search_school = False
-        search_fields: list[str] = []
         async with factory() as named_session:
             named_items = await excerpts_for_conversation(
                 principal, conversation_id or "", named_session, settings
             )
-            if not edu_sidebar:
-                search_school, search_fields = await load_named_search_flags(
-                    named_session,
-                    principal.school_id,
-                    principal.membership_id,
-                    conversation_id or "",
-                )
             from app.edu_files import uploads_for_conversation
 
             upload_items = await uploads_for_conversation(
@@ -1720,12 +1708,9 @@ async def chat_completions(
             from app.edu_files import inject_conversation_uploads
 
             prompt = inject_conversation_uploads(prompt, upload_items)
-            kb_scope_block = kb_scope_system_block(
-                search_school=search_school, search_field_ids=search_fields
-            )
     except Exception:
         logger.exception("named school materials inject failed")
-    teacher_extra = "\n\n".join(part for part in (day_use_block, kb_scope_block) if part)
+    teacher_extra = day_use_block or ""
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 100000) or 100000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the

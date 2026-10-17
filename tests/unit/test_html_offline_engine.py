@@ -388,9 +388,8 @@ def test_pi_visible_offline_html_words() -> None:
     ts = (
         ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts"
     ).read_text(encoding="utf-8")
-    assert "no network" in sys_md
-    assert "Three.js" in sys_md
-    assert "window.THREE" in sys_md
+    # pico#1320: the no-CDN / no-network HTML rules moved to the tool
+    # description (below); system.md only keeps the generic skeleton.
     assert "课件" not in sys_md
     assert "run offline" in ts
     assert "fails closed" in ts

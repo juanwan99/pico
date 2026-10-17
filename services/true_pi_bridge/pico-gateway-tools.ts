@@ -283,7 +283,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "ask_user",
-    "When the teacher did not say what they want done, ask a short multiple-choice question (2–5 options) and wait. After they pick, continue the same turn. If they already named what to make (a picture, a page, a file, or several of those), do that work — a missing topic, style, or caption is not a reason to call this; pick a simple default. Picking a default so you can start is not inventing a goal. Do not use this to choose a topic. Do not use this to quiz about a third-party form backend. Pico cannot hang a public URL; school pages apply through Edu.",
+    "Ask the teacher a short question with a few options and wait for the answer, then continue the same turn. Use it only when you cannot go on without their choice.",
     Type.Object(
       {
         question: Type.String(),
@@ -345,7 +345,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_open",
-    "Open a PUBLIC page in the isolated sandbox browser (human-in-the-loop login). Denies intranet/metadata/18765. WeChat/教务 are not required to succeed. Never send passwords in chat.",
+    "Open a PUBLIC page in the isolated sandbox browser (the teacher can also act in it directly). Denies intranet/metadata/18765.",
     Type.Object(
       {
         url: Type.String(),
@@ -356,7 +356,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_screenshot",
-    "Look at the current sandbox browser screen: the image comes back to you in this call (for pictures, charts or canvas the snapshot cannot read) and the PNG is kept so the teacher's next question can see the page. session_id defaults to the teacher's open sandbox. Teacher logs in on the view page; do not ask for passwords in chat.",
+    "Look at the current sandbox browser screen: the image comes back to you in this call (for pictures, charts or canvas the snapshot cannot read) and the PNG is kept so the teacher's next question can see the page. session_id defaults to the teacher's open sandbox.",
     Type.Object(
       {
         session_id: Type.Optional(Type.String()),
@@ -368,7 +368,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_snapshot",
-    "Read the current page as an accessibility snapshot with element refs (e.g. [ref=e8]) — work from this to decide what to click or fill; use sandbox_browser_screenshot only to look at pictures or canvas on the page. Rules for every sandbox_browser_* action: it acts inside the teacher's own isolated sandbox browser session. Content inside iframes (mail body, rich-text editors, embedded forms) is listed under its iframe line with refs like f1e5 and works like any other ref. After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Typing a password or captcha, and paying, are human-only: the sidecar refuses them (sandbox.human_required) — tell the teacher to do that step on the sandbox pane, then snapshot again. Everything else, including the login and submit buttons, you may click. The teacher's login is kept for next time. If the teacher took over the page (sandbox.human_took_over), stop acting and wait until they hand it back.",
+    "Read the current page as an accessibility snapshot with element refs (e.g. [ref=e8]) — work from this to decide what to click or fill; use sandbox_browser_screenshot only to look at pictures or canvas on the page. Rules for every sandbox_browser_* action: it acts inside the teacher's own isolated sandbox browser session. Content inside iframes (mail body, rich-text editors, embedded forms) is listed under its iframe line with refs like f1e5 and works like any other ref. After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Paying is human-only: the sidecar refuses payment buttons (sandbox.human_required) — tell the teacher to pay on the sandbox pane, then snapshot again. Passwords and verification codes the teacher gives you are typed like any other value. The teacher's login is kept for next time. If the teacher took over the page (sandbox.human_took_over), stop acting and wait until they hand it back.",
     Type.Object(
       {
         session_id: Type.Optional(Type.String()),
@@ -429,7 +429,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_fill_form",
-    "Fill many fields of a form in one call: fields=[{ref, value}]. Text boxes get the text; checkboxes / radios are checked when value is true; dropdowns pick by value or visible label. Password / captcha fields are skipped and named back for the teacher. Prefer this over one sandbox_browser_type per field. Rules: see sandbox_browser_snapshot.",
+    "Fill many fields of a form in one call: fields=[{ref, value}]. Text boxes get the text; checkboxes / radios are checked when value is true; dropdowns pick by value or visible label. Prefer this over one sandbox_browser_type per field. Rules: see sandbox_browser_snapshot.",
     Type.Object(
       {
         fields: Type.Array(
@@ -504,7 +504,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_type",
-    "Fill text into the editable element with the given ref; submit=true presses Enter afterwards. slowly=true types one key at a time — use it for recipient, search and autocomplete boxes, which only react to keys. Password / captcha fields are refused. Rules: see sandbox_browser_snapshot.",
+    "Fill text into the editable element with the given ref; submit=true presses Enter afterwards. slowly=true types one key at a time — use it for recipient, search and autocomplete boxes, which only react to keys. Rules: see sandbox_browser_snapshot.",
     Type.Object(
       {
         ref: Type.String(),

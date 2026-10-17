@@ -457,17 +457,12 @@ def test_xlsx_cabinet_lists_one_row(client: TestClient) -> None:
 
 
 def test_system_tells_pi_to_read_paperclip_documents() -> None:
+    """pico#1320: system.md only says attachments are available; the paperclip /
+    model-file-channel / re-save detail now lives on workspace_read_file (TS)."""
     system = (
         ROOT / "services" / "orchestrator" / "pico_orchestrator" / "agent_assets" / "system.md"
     ).read_text(encoding="utf-8")
-    assert "Documents attached this turn" in system
-    assert "workspace_read_file" in system
-    assert "this-turn images" in system
-    assert "model file channel" in system
-    assert "are rastered into this-turn images" not in system
-    assert "do not say you cannot read the file" not in system
-    assert "Old .doc" in system
-    assert "re-save" in system
+    assert "Files and images the teacher attached this turn are available to you" in system
     assert "没抽出正文" not in system
     bridge = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"

@@ -79,7 +79,7 @@ def test_delivery_defaults_are_hours_not_15min() -> None:
     assert DELIVERY_MAX_TOKENS >= 16_000
     bare = RunCaps()
     assert bare.max_seconds == 14_400
-    assert bare.max_steps == 24
+    assert bare.max_steps == 60
 
 
 def test_short_tier_stays_fast() -> None:
@@ -104,7 +104,7 @@ def test_settings_delivery_and_short_caps() -> None:
     delivery = settings.delivery_run_caps()
     short = settings.short_run_caps()
     assert delivery.max_seconds == 14_400
-    assert delivery.max_steps == 24
+    assert delivery.max_steps == 60
     assert short.max_seconds == 1_800
     public = settings.spend_caps_dict()
     assert public["max_seconds"] == 14_400

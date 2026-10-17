@@ -264,6 +264,11 @@ function describeSearchOrTool(event: PicoRunEvent): string | null {
     }
     return '压缩失败';
   }
+  if (event.type === 'run.resume') {
+    // Retry status lives in the step box, never in the reply (pico#1320).
+    const text = event.payload?.text;
+    return typeof text === 'string' && text.trim() ? text.trim() : '正在重试';
+  }
   if (event.type === 'ui.prompt.begin') {
     return '在等你选';
   }

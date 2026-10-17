@@ -193,13 +193,12 @@ HUMAN_KEYS = frozenset(
         "Home", "End", "Control+a",
     }
 )
-# Human-only steps: typing a password or captcha, and paying. Everything else
-# (login button, submit) the AI may click (owner 2026-10-11 09:17「简单、有效」).
+# Human-only step: paying. Passwords and verification codes the teacher gives in
+# chat are typed like any other value (pico#1320, owner 2026-10-16).
 HANDOFF_RE = re.compile(
     r"支付|付款|缴费|付费|\bpay\b|checkout|结算",
     re.IGNORECASE,
 )
-CAPTCHA_RE = re.compile(r"验证码|captcha|短信码|动态码", re.IGNORECASE)
 HUMAN_REQUIRED_CODE = "sandbox.human_required"
 PROFILE_ROOT = Path(
     os.environ.get("PICO_SANDBOX_PROFILE_ROOT") or "/tmp/pico-sandbox-profiles"
@@ -257,7 +256,7 @@ class BrowserHands(Protocol):
 
     def take_dialogs(self) -> list[str]: ...
 
-    async def fill_form(self, fields: list[dict[str, Any]]) -> list[str]: ...
+    async def fill_form(self, fields: list[dict[str, Any]]) -> None: ...
 
     async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None: ...
 
@@ -325,10 +324,37 @@ def mask_secret_values(snapshot: str, secrets: list[str]) -> str:
     return out
 
 
+# Code / password shaped: 4–32 chars, no spaces, no CJK. Mail bodies and names stay
+# readable so the AI can check what it wrote.
+_CODE_LIKE = re.compile(r"[\x21-\x7e]{4,32}")
+
+
+def mask_typed_box_values(snapshot: str, typed: list[str]) -> str:
+    """Code-like values the AI typed into a text box (codes, passwords the teacher
+    gave) show masked on the box lines, so they do not ride the snapshot into the
+    run ledger (pico#1320). Page text elsewhere is untouched."""
+    values = [v for v in typed if _CODE_LIKE.fullmatch(v)]
+    if not values:
+        return snapshot
+    lines = []
+    box_indent: int | None = None  # inside a textbox: its value sits on child lines
+    for line in snapshot.split("\n"):
+        indent = len(line) - len(line.lstrip())
+        if box_indent is not None and indent <= box_indent:
+            box_indent = None
+        if "textbox" in line:
+            box_indent = indent
+        if box_indent is not None:
+            for value in values:
+                line = line.replace(value, SECRET_MASK)
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def human_required(step: str) -> ToolError:
     return ToolError(
         HUMAN_REQUIRED_CODE,
-        f"这一步（{step}）要老师自己在沙箱画面里做：输密码、填验证码、付款只能人来。"
+        f"这一步（{step}）是付款，要老师自己在沙箱画面里点。"
         "做完后再调用 sandbox_browser_snapshot 继续。",
     )
 
@@ -455,18 +481,6 @@ def read_login_state(path: Path | None) -> dict[str, Any] | None:
     return state if isinstance(state, dict) else None
 
 
-def is_human_only_field(info: dict[str, Any]) -> str | None:
-    if str(info.get("type") or "").lower() == "password":
-        return "密码"
-    text = " ".join(
-        str(info.get(k) or "")
-        for k in ("name", "placeholder", "aria_label", "label", "autocomplete", "id")
-    )
-    if CAPTCHA_RE.search(text) or "one-time-code" in text:
-        return "验证码"
-    return None
-
-
 def _is_browser_internal(url: str) -> bool:
     low = (url or "").strip().lower()
     return low.startswith(
@@ -561,6 +575,8 @@ class PlaywrightPage:
         self._viewport = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
         self._dialogs: list[str] = []
         self._rate_limit: tuple[float, str] | None = None
+        # Values the AI typed into boxes; masked on box lines in snapshots (pico#1320).
+        self._typed: list[str] = []
         for existing in list(getattr(context, "pages", []) or []):
             self._watch(existing)
         if page not in list(getattr(context, "pages", []) or []):
@@ -806,6 +822,7 @@ class PlaywrightPage:
         except Exception as exc:
             raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能生成页面快照") from exc
         text = mask_secret_values(str(text or ""), await self._password_values())
+        text = mask_typed_box_values(text, self._typed)
         if len(text) > SNAPSHOT_MAX_CHARS:
             text = text[:SNAPSHOT_MAX_CHARS] + "\n- text: …（快照过长已截断，可滚动或翻页后再取）"
         return text
@@ -911,14 +928,12 @@ class PlaywrightPage:
         # Never log `text`.
         loc = self._ref(ref)
         info = await self._element_info(loc)
-        step = is_human_only_field(info)
-        if step:
-            raise human_required(step)
         before = self.url
         if info.get("inside_editable"):
             # A paragraph of a rich-text body (mail / TinyMCE, often in an iframe):
             # Playwright fills the editing host, not a line inside it (#1233).
             loc = loc.locator(EDIT_HOST_XPATH)
+        self._typed.append(text)
         try:
             if slowly:
                 await loc.press_sequentially(text, timeout=5_000 + 50 * len(text))
@@ -930,22 +945,17 @@ class PlaywrightPage:
             await loc.press("Enter", timeout=5_000)
             await self._settle(before)
 
-    async def fill_form(self, fields: list[dict[str, Any]]) -> list[str]:
+    async def fill_form(self, fields: list[dict[str, Any]]) -> None:
         """Fill many fields in one call (#1219). Each element decides how: text box
         ``fill``, checkbox / radio ``set_checked``, dropdown ``select_option``.
-        Password / captcha fields are left for the teacher and named back. Never logs values."""
+        Never logs values."""
         if not fields or len(fields) > FILL_FORM_MAX:
             raise ToolError("tool.invalid_arguments", f"fields 要 1–{FILL_FORM_MAX} 格")
-        left: list[str] = []
         for i, field in enumerate(fields, start=1):
             ref = str(field.get("ref") or "")
             value = field.get("value")
             loc = self._ref(ref)
             info = await self._element_info(loc)
-            step = is_human_only_field(info)
-            if step:
-                left.append(step)
-                continue
             tag = str(info.get("tag") or "").upper()
             kind = str(info.get("type") or "").lower()
             role = str(info.get("role") or "").lower()
@@ -956,14 +966,15 @@ class PlaywrightPage:
                     picks = [str(v) for v in value] if isinstance(value, list) else [str(value)]
                     await self.select_ref(ref, picks)
                 else:
-                    await loc.fill("" if value is None else str(value), timeout=5_000)
+                    text = "" if value is None else str(value)
+                    self._typed.append(text)
+                    await loc.fill(text, timeout=5_000)
             except ToolError:
                 raise
             except Exception as exc:
                 raise ToolError(
                     "sandbox.action_failed", f"第 {i} 格（{ref}）填不进去，前面 {i - 1} 格已填"
                 ) from exc
-        return left
 
     async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None:
         """Attach files (#1219): a file input takes them directly; an「上传」button opens
@@ -1117,14 +1128,6 @@ class PlaywrightPage:
             raise ToolError(
                 "tool.invalid_arguments", "key 必须是按键名，例如 Enter / Tab / ArrowDown"
             )
-        focused = await self._each_frame(
-            """() => {
-                const el = document.activeElement;
-                return document.hasFocus() && el ? String(el.type || '').toLowerCase() : '';
-            }"""
-        )
-        if "password" in focused:
-            raise human_required("密码")
         before = self.url
         await self._page.keyboard.press(token)
         await self._settle(before)

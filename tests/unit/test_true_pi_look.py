@@ -1,8 +1,8 @@
-"""pico#1296: look at the finished file before answering (and pico#1297: own up when it was not looked at).
+"""pico#1296 look cap, after pico#1320 slimmed the rules.
 
-The workspace rules say how to look (render pages, `read` the pictures), and
-once per run, when the model starts writing a file the teacher will open,
-Pico steers it to look before its final answer.
+Pico no longer orders the model to look at its files, and no longer appends
+notes to the reply. What stays: `read` on a picture works, and the hard cap of
+8 pictures / 2 rounds (owner 10-16) with one steer when it is hit.
 """
 
 from __future__ import annotations
@@ -18,17 +18,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from pico_orchestrator.human_package import (
-    UNLOOKED_NOTE,
-    UNREAD_NOTE_TAIL,
-    note_unlooked,
-    note_unread_basis,
-)
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi import runner
 from pico_orchestrator.true_pi.client import FakeTransport
 from pico_orchestrator.true_pi.runner import (
-    LOOK_STEER,
     WORKSPACE_SYSTEM,
     look_read_call,
     visual_output_call,
@@ -47,11 +40,11 @@ async def _not_cancelled() -> bool:
     return False
 
 
-def test_workspace_rules_say_how_to_look() -> None:
+def test_workspace_rules_are_facts_not_orders() -> None:
     assert "`read` on a .png / .jpg shows you the picture" in WORKSPACE_SYSTEM
-    assert "pdftoppm" in WORKSPACE_SYSTEM and "screenshot" in WORKSPACE_SYSTEM
-    assert "at most 8 pictures" in WORKSPACE_SYSTEM
-    assert "counting pages is not looking" in WORKSPACE_SYSTEM
+    assert "/workspace/outputs/" in WORKSPACE_SYSTEM
+    assert "Look at what you made" not in WORKSPACE_SYSTEM
+    assert len(WORKSPACE_SYSTEM) < 1200
 
 
 @pytest.mark.parametrize(
@@ -143,160 +136,45 @@ def _steers(transport: FakeTransport) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_steers_once_when_a_teacher_file_is_made(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_no_look_steer_when_a_teacher_file_is_made(monkeypatch: pytest.MonkeyPatch) -> None:
     transport = FakeTransport(
         scripted=_script(
             _call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "<p>1</p>"}),
-            _call("c2", "write", {"path": "/workspace/outputs/b.html", "content": "<p>2</p>"}),
-            _call("c3", "read", {"path": "/workspace/work/look/a.png"}),
         )
     )
-    events = await _run(monkeypatch, transport)
-    assert _steers(transport) == [LOOK_STEER]
-    assert [k for k, _ in events].count("run.look_check") == 1
-
-
-@pytest.mark.asyncio
-async def test_no_steer_without_a_teacher_file(monkeypatch: pytest.MonkeyPatch) -> None:
-    transport = FakeTransport(scripted=_script(_call("c1", "bash", {"command": "ls /workspace"})))
     events = await _run(monkeypatch, transport)
     assert _steers(transport) == []
     assert "run.look_check" not in [k for k, _ in events]
 
 
-@pytest.mark.asyncio
-async def test_no_steer_outside_the_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
-    transport = FakeTransport(
-        scripted=_script(_call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "x"}))
-    )
-    await _run(monkeypatch, transport, workspace=False)
-    assert _steers(transport) == []
-
-
-@pytest.mark.asyncio
-async def test_a_failed_steer_never_fails_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pico_orchestrator.true_pi.client import TruePiRpcClient
-
-    async def broken_steer(self: Any, message: str) -> None:
-        raise TimeoutError
-
-    monkeypatch.setattr(TruePiRpcClient, "steer", broken_steer)
-    transport = FakeTransport(
-        scripted=_script(_call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "x"}))
-    )
-    events = await _run(monkeypatch, transport)
-    kinds = [k for k, _ in events]
-    assert "run.look_check" not in kinds
-    assert "run.error" not in kinds
-
-
-# pico#1297: a landed file nobody looked at → the reply says so plainly.
-
-
-async def _final_text(monkeypatch: pytest.MonkeyPatch, *calls: list[dict[str, Any]]) -> str:
+async def _final_text(monkeypatch: pytest.MonkeyPatch, *calls: list[dict[str, Any]], final: str) -> str:
     async def fake_land(**_kw: Any) -> list[tuple[str, dict[str, Any]]]:
         return [("workspace_output", {"title": "a.html", "bytes": 3, "via": "workspace"})]
 
-    transport = FakeTransport(scripted=_script(*calls))
+    transport = FakeTransport(scripted=_script(*calls, final=final))
     events = await _run(monkeypatch, transport, land=fake_land)
     texts = [p.get("text", "") for k, p in events if k == "message.delta"]
     return texts[-1] if texts else ""
 
 
 @pytest.mark.asyncio
-async def test_unlooked_file_is_owned_up_to(monkeypatch: pytest.MonkeyPatch) -> None:
-    text = await _final_text(
-        monkeypatch, _call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "x"})
-    )
-    assert text.startswith("做好了。")
-    assert UNLOOKED_NOTE in text
-
-
-@pytest.mark.asyncio
-async def test_looked_file_gets_no_note(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reply_stands_as_written(monkeypatch: pytest.MonkeyPatch) -> None:
+    reply = "做好了，共三页。\n步骤 1：打开文件\n依据：按《某某指南》整理。"
     text = await _final_text(
         monkeypatch,
         _call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "x"}),
-        _call("c2", "read", {"path": "/workspace/work/look/a.png"}),
+        final=reply,
     )
-    assert text.startswith("做好了。")
-    assert UNLOOKED_NOTE not in text
+    assert text == reply
 
 
-def test_note_unlooked() -> None:
-    assert note_unlooked("好了", made_file=False, looked=0) == "好了"
-    assert note_unlooked("好了", made_file=True, looked=2) == "好了"
-    once = note_unlooked("好了", made_file=True, looked=0)
-    assert once == f"好了\n\n{UNLOOKED_NOTE}"
-    assert note_unlooked(once, made_file=True, looked=0) == once
-    assert note_unlooked("", made_file=True, looked=0) == UNLOOKED_NOTE
-
-
-@pytest.mark.asyncio
-async def test_unlooked_note_reaches_the_live_bubble(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_land(**_kw: Any) -> list[tuple[str, dict[str, Any]]]:
-        return [("workspace_output", {"title": "a.html", "bytes": 3, "via": "workspace"})]
-
-    streamed = [{"type": "text_delta", "delta": "做好了。"}]
-    transport = FakeTransport(
-        scripted=_script(
-            _call("c1", "write", {"path": "/workspace/outputs/a.html", "content": "x"}), streamed
-        )
-    )
-    events = await _run(monkeypatch, transport, land=fake_land)
-    live = "".join(p.get("text", "") for k, p in events if k == "message.stream")
-    assert live == f"做好了。\n\n{UNLOOKED_NOTE}"
-
-
-def test_reply_rules_ask_for_basis_and_no_unchecked_claims() -> None:
+def test_reply_rules_keep_one_basis_line() -> None:
     from pico_orchestrator.true_pi.runtime import pico_system_text
 
     text = pico_system_text()
-    assert "**依据**" in text
-    assert "your own knowledge" in text and "check the facts" in text
-    assert "only if you opened it this turn" in text
-    assert "No guarantees you did not check" in text
-
-
-def test_note_unread_basis_names_what_was_not_opened() -> None:
-    reply = "做好了。\n**依据**：按通用知识与《某某安全指导纲要》整理，请核对。"
-    noted = note_unread_basis(reply, opened="老师：做一份班会 PPT")
-    assert noted == f"{reply}\n\n《某某安全指导纲要》{UNREAD_NOTE_TAIL}"
-    assert note_unread_basis(noted, opened="老师：做一份班会 PPT") == noted
-
-
-def test_note_unread_basis_keeps_what_was_opened() -> None:
-    reply = "**依据**：基于您上传的《期中成绩.csv》计算。"
-    assert note_unread_basis(reply, opened="/workspace/attachments/期中成绩.csv") == reply
-    reply = "**依据**：按《浮力》一章的通用知识整理。"
-    assert note_unread_basis(reply, opened="初二物理《浮力》复习讲义") == reply
-    # Only the basis line is checked; titles elsewhere are the model's own words.
-    assert note_unread_basis("讲义《浮力专题》已做好。", opened="") == "讲义《浮力专题》已做好。"
-
-
-@pytest.mark.asyncio
-async def test_unread_basis_note_reaches_the_live_bubble(monkeypatch: pytest.MonkeyPatch) -> None:
-    reply = "依据：《没打开的指南》。"
-    transport = FakeTransport(scripted=_script([{"type": "text_delta", "delta": reply}], final=reply))
-    events = await _run(monkeypatch, transport)
-    live = "".join(p.get("text", "") for k, p in events if k == "message.stream")
-    assert live.endswith(f"《没打开的指南》{UNREAD_NOTE_TAIL}")
-    final = [p.get("text", "") for k, p in events if k == "message.delta"][-1]
-    assert final.endswith(f"《没打开的指南》{UNREAD_NOTE_TAIL}")
-
-
-@pytest.mark.asyncio
-async def test_basis_read_from_an_attachment_gets_no_note(monkeypatch: pytest.MonkeyPatch) -> None:
-    transport = FakeTransport(
-        scripted=_script(
-            _call("c1", "read", {"path": "/workspace/attachments/学校安全手册.pdf"}),
-            final="依据：《学校安全手册》。",
-        )
-    )
-    events = await _run(monkeypatch, transport)
-    final = [p.get("text", "") for k, p in events if k == "message.delta"][-1]
-    assert UNREAD_NOTE_TAIL not in final
-
+    assert "where its content came from" in text
+    assert "ask_user" not in text and "2–5" not in text
+    assert "captcha" not in text.lower() and "human-only" not in text.lower()
 
 
 # pico#1296 hard cap: 8 pictures or 2 rounds, then the box answers a picture read with text.
@@ -338,7 +216,6 @@ def test_look_cap_rule_matches_the_box_extension() -> None:
         LOOK_CAP_TEXT,
         LOOK_MAX_PICTURES,
         LOOK_MAX_ROUNDS,
-        WORKSPACE_SYSTEM,
     )
 
     ts = Path(look_cap_extension_path()).read_text(encoding="utf-8")
@@ -346,7 +223,6 @@ def test_look_cap_rule_matches_the_box_extension() -> None:
     assert f"const MAX_ROUNDS = {LOOK_MAX_ROUNDS};" in ts
     assert f'const CAP_TEXT = "{LOOK_CAP_TEXT}";' in ts
     assert '"write" || event.toolName === "edit"' in ts and "/attachments/" in ts
-    assert "看图额度用完" in WORKSPACE_SYSTEM and "-r 90" in WORKSPACE_SYSTEM
 
 
 @pytest.mark.asyncio
@@ -360,7 +236,7 @@ async def test_steers_once_when_the_look_cap_is_hit(monkeypatch: pytest.MonkeyPa
         )
     )
     events = await _run(monkeypatch, transport)
-    assert _steers(transport) == [LOOK_STEER, LOOK_CAP_STEER]
+    assert _steers(transport) == [LOOK_CAP_STEER]
     caps = [p for k, p in events if k == "run.look_cap"]
     assert len(caps) == 1 and caps[0]["capped"] == 1
 
@@ -374,5 +250,5 @@ async def test_no_cap_steer_within_the_cap(monkeypatch: pytest.MonkeyPatch) -> N
         )
     )
     events = await _run(monkeypatch, transport)
-    assert _steers(transport) == [LOOK_STEER]
+    assert _steers(transport) == []
     assert "run.look_cap" not in [k for k, _ in events]

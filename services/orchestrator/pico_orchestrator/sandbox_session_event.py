@@ -25,10 +25,28 @@ SANDBOX_BROWSER_TOOLS = frozenset(
         "sandbox_document_open",
     }
 )
-HUMAN_COPY = "请在此画面自行登录，不要在聊天里发送密码"
+HUMAN_COPY = "这是你的隔离浏览器，可以直接在画面里操作"
 _SECRET_KEYS = frozenset({"password", "passwd", "secret", "credential", "cookie", "cookies"})
 # Screenshot pixels go to the model as image content (bridge), never into the ledger.
 _PIXEL_KEYS = frozenset({"image_png_base64"})
+
+
+_ARG_MASK = "***"
+
+
+def public_tool_args(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    """What the AI types into a page (codes, passwords the teacher gave) never hits
+    the ledger: mask ``text`` of sandbox_browser_type and every ``fields[].value`` of
+    sandbox_browser_fill_form (pico#1320). The tool itself still gets the real args."""
+    if tool == "sandbox_browser_type" and "text" in args:
+        return {**args, "text": _ARG_MASK}
+    if tool == "sandbox_browser_fill_form" and isinstance(args.get("fields"), list):
+        fields = [
+            {**f, "value": _ARG_MASK} if isinstance(f, dict) and "value" in f else f
+            for f in args["fields"]
+        ]
+        return {**args, "fields": fields}
+    return args
 
 
 def public_tool_result(result: Any) -> Any:

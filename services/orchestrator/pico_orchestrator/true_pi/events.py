@@ -12,6 +12,7 @@ from typing import Any
 
 from pico_orchestrator.sandbox_session_event import (
     SANDBOX_BROWSER_TOOLS,
+    public_tool_args,
     public_tool_result,
     sandbox_session_payload,
 )
@@ -298,7 +299,7 @@ async def map_event(
             "tool.call",
             {
                 "tool": name,
-                "arguments": args,
+                "arguments": public_tool_args(name, args),
                 "call_id": call_id,
                 "step_line": step,
                 **tag,
