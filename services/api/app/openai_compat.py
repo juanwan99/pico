@@ -47,6 +47,7 @@ from app.auth import (
 )
 from app.channel_rates import require_rate
 from app.db import RunRow, TaskRow, append_event, new_id, session_factory
+from app.delivery_gate import mark_turn_writers
 from app.settings import Settings, get_settings
 
 router = APIRouter(tags=["openai-compat"])
@@ -203,6 +204,17 @@ def _resolve_allowed_tools(
         return request_tools
     inter = [t for t in skill_tools if t in set(request_tools)]
     return inter or request_tools
+
+
+def _turn_has_tools(
+    *, use_direct: bool, skill_snapshot: dict[str, Any] | None, request_tools: list[str] | None
+) -> bool:
+    """Direct chat has no tools; a Pi turn has whatever the request/skill leaves (#1334)."""
+    if use_direct:
+        return False
+    from pico_orchestrator.capability_loading import resolve_visible_tools
+
+    return bool(resolve_visible_tools(_resolve_allowed_tools(skill_snapshot, request_tools)))
 
 
 def _model_preference_from_prompt(prompt: str) -> str | None:
@@ -1957,6 +1969,11 @@ async def chat_completions(
     )
     if native_files and not json_only:
         use_direct = False
+    mark_turn_writers(
+        _turn_has_tools(
+            use_direct=use_direct, skill_snapshot=skill_snapshot, request_tools=request_tools
+        )
+    )
     if use_direct and turn_images and personal_cfg is None:
         # pico#1331: when personal_cfg is still set here, turn_images is
         # already known-compatible with it (the vision check right after
@@ -2260,6 +2277,11 @@ async def chat_completions(
         )
         if native_files and not json_only:
             use_direct = False
+        mark_turn_writers(
+            _turn_has_tools(
+                use_direct=use_direct, skill_snapshot=skill_snapshot, request_tools=request_tools
+            )
+        )
         if use_direct:
             from pico_orchestrator.provider import stream_chat
 

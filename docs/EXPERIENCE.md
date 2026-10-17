@@ -87,6 +87,7 @@ DATE: 2026-09-02
 97. **同机只能一个 `prod-update` 在跑（#994 阶段 0）。** 两窗同时部会留下 `Created` 临时容器 + compose 名字冲突。bootstrap 现持 `flock`（`PICO_DEPLOY_LOCK`，缺省 `/tmp/pico-prod-update.lock`），第二个直接 exit 5 并打印持有者。开部前仍先 `ps | grep prod-update` 看一眼。
 98. **失败率只看账本，不看感觉。** `scripts/teacher-failure-rate.py`（只读 helper，非真源）在 pico-api 箱里跑，出近 24h/7d 失败率、失败归并、成功 p50。阶段包必贴。9/8 93 轮 0 失败、9/11 56% 全是上游代理——核能稳，翻车在机器层。
 99. **Gemini 3.x 文本/识图必须 Vertex `global`，禁止 `us-central1`。** 试算项目 `project-788f89a1-433e-476b-b41`。`gemini-3*`（`gemini-3-flash-preview` / `3.5-flash` / `3.6-flash` / `3.8-flash`）publisher model 只在 `locations/global`。打 `us-central1` = **404**，不是模型名写错、不是 JSON 错。正确口：机上 `POST http://127.0.0.1:8082/v1beta/models/{model}:generateContent`（`vertex-adc-proxy` 必须 `startswith("gemini-3") → global` + `aiplatform.googleapis.com`）；或 ADC 直打 `https://aiplatform.googleapis.com/v1/projects/{PROJECT}/locations/global/publishers/google/models/{model}:generateContent`。New API 渠道 `gemini-vertex-trial` / `gemini-official` 必须把 `gemini-3.8-flash` 写进 `models` + abilities（Vertex prio 10）。业主点名 Gemini 3 / 3.8 时禁止用 2.5-flash/pro 顶替。测通：2026-09-12 DMIT 阅卷 `gemini-3-flash-preview` 200；2026-09-16 ECS ADC `gemini-3.8-flash` 200。钉评：https://github.com/juanwan99/pico/issues/1029
+100. **「说交了没文件」只判有工具的一轮（pico#1334 · 2026-10-18）。** 现网 10-03～10-17 判了 21 次，19 次是 edu 服务端要细则 / 判分 / JSON 的调用：这一轮没给工具，回答里写「已生成」就被判失败，考试线、题库线拿到失败。入口用 `mark_turn_writers()` 记这一轮有没有工具，`delivery.summary` 里记 `writers_visible`；没工具的一轮不判。对账：`python scripts/pico-delivery-gate-report.py --days 1`，没工具却被判的应为 0。
 
 ## D · Cloud Agent
 
