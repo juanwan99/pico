@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 SANDBOX_BROWSER_TOOLS = frozenset(
     {
@@ -32,12 +33,36 @@ _PIXEL_KEYS = frozenset({"image_png_base64"})
 
 
 _ARG_MASK = "***"
+_URL_TOOLS = frozenset({"sandbox_browser_open", "sandbox_browser_navigate"})
+
+
+def mask_url_query(url: str) -> str:
+    """Keep scheme, host and path; a query or fragment (login links, tokens) becomes ***."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    if not parts.query and not parts.fragment:
+        return url
+    return urlunsplit(
+        (
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            _ARG_MASK if parts.query else "",
+            _ARG_MASK if parts.fragment else "",
+        )
+    )
 
 
 def public_tool_args(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     """What the AI types into a page (codes, passwords the teacher gave) never hits
     the ledger: mask ``text`` of sandbox_browser_type and every ``fields[].value`` of
-    sandbox_browser_fill_form (pico#1320). The tool itself still gets the real args."""
+    sandbox_browser_fill_form (pico#1320), and the query of an opened / navigated URL
+    (pico#1324). The tool itself still gets the real args."""
+    if tool in _URL_TOOLS and isinstance(args.get("url"), str):
+        url = mask_url_query(args["url"])
+        return args if url == args["url"] else {**args, "url": url}
     if tool == "sandbox_browser_type" and "text" in args:
         return {**args, "text": _ARG_MASK}
     if tool == "sandbox_browser_fill_form" and isinstance(args.get("fields"), list):
