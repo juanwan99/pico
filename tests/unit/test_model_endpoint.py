@@ -633,3 +633,181 @@ def test_usage_event_dict_accepts_personal_bill_to() -> None:
     )
     body = usage_event_dict(row)
     assert body["extra"]["bill_to"] == "personal"
+
+
+# ---------------------------------------------------------------------------
+# Vision: 看图 must never forward a school vision model id to the teacher's
+# own endpoint (#1331 coordinator follow-up).
+# ---------------------------------------------------------------------------
+
+# 1x1 transparent PNG — just needs to be valid base64 + decodable bytes.
+_TINY_PNG_DATA_URL = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0l"
+    "EQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+
+
+def test_personal_cfg_for_images_drops_scope_when_personal_model_cannot_see() -> None:
+    """The card: 看图仍走学校的视觉模型、照扣 — never with the teacher's key."""
+    from app.openai_compat import _personal_cfg_for_images
+
+    cfg = SimpleNamespace(name="personal", model="deepseek-chat")
+    assert _personal_cfg_for_images(cfg, [{"type": "image", "data": "x"}]) is None
+    # No images at all: untouched, even though the model still can't see.
+    assert _personal_cfg_for_images(cfg, []) is cfg
+    assert _personal_cfg_for_images(cfg, None) is cfg
+    # No personal scope to begin with: stays None either way.
+    assert _personal_cfg_for_images(None, [{"type": "image", "data": "x"}]) is None
+
+
+def test_personal_cfg_for_images_keeps_scope_when_personal_model_can_see() -> None:
+    from app.openai_compat import _personal_cfg_for_images
+
+    cfg = SimpleNamespace(name="personal", model="gpt-4o-mini")
+    assert _personal_cfg_for_images(cfg, [{"type": "image", "data": "x"}]) is cfg
+    assert _personal_cfg_for_images(cfg, []) is cfg
+
+
+def _put_personal_endpoint(client, headers, *, model: str) -> None:
+    resp = client.put(
+        "/v1/me/model-endpoint",
+        json={
+            "base_url": "https://api.example.com/v1",
+            "model": model,
+            "api_key": "sk-teacher-live",
+            "enabled": True,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def _bill_to_for_last_llm_row(tmp_path) -> str | None:
+    import json
+    import sqlite3
+
+    database = tmp_path / "model-endpoint.db"
+    con = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+    row = con.execute(
+        "SELECT extra_json FROM usage_events WHERE kind='llm' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    con.close()
+    if row is None:
+        return None
+    return json.loads(row[0] or "{}").get("bill_to")
+
+
+def test_chat_completions_image_on_non_vision_personal_model_runs_on_school_not_personal(
+    client, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Agent path (model=pico-fast): the teacher's own model can't read
+    images, so this turn must run on the *school* provider — never send
+    DEFAULT_DEEPSEEK_VISION (a school model id) to the teacher's own
+    base_url — and bill normally (bill_to != personal)."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-school")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+
+    headers = _headers()
+    _put_personal_endpoint(client, headers, model="deepseek-chat")  # not vision-capable
+
+    captured: dict = {}
+
+    async def _fake_run_agent_runtime(**kwargs):
+        from pico_orchestrator.provider import resolve_provider
+        from pico_orchestrator.run_types import RunResult
+
+        caps = kwargs["caps"]
+        provider = resolve_provider()
+        captured["provider_name"] = getattr(provider, "name", None)
+        captured["backend_model"] = getattr(caps, "backend_model", None)
+        return RunResult(
+            status="succeeded",
+            final_text="看到了，图里是……",
+            token_usage={"prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25},
+        )
+
+    monkeypatch.setattr(
+        "pico_orchestrator.runtime.run_agent_runtime", _fake_run_agent_runtime
+    )
+
+    resp = client.post(
+        "/v1/chat/completions",
+        headers=headers,
+        json={
+            "model": "pico-fast",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "看这张图"},
+                        {"type": "image_url", "image_url": {"url": _TINY_PNG_DATA_URL}},
+                    ],
+                }
+            ],
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert captured["provider_name"] != "personal"
+    assert "vision" in str(captured["backend_model"] or "").lower()
+    assert _bill_to_for_last_llm_row(tmp_path) != "personal"
+
+
+def test_chat_completions_image_on_vision_capable_personal_model_stays_personal(
+    client, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same shape, but the teacher's own model *can* see — must stay
+    personal (own key, own base_url, 0 llm points billed as personal)."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-school")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+
+    headers = _headers()
+    _put_personal_endpoint(client, headers, model="gpt-4o-mini")  # vision-capable
+
+    captured: dict = {}
+
+    async def _fake_run_agent_runtime(**kwargs):
+        from pico_orchestrator.provider import resolve_provider
+        from pico_orchestrator.run_types import RunResult
+
+        caps = kwargs["caps"]
+        provider = resolve_provider()
+        captured["provider_name"] = getattr(provider, "name", None)
+        captured["backend_model"] = getattr(caps, "backend_model", None)
+        return RunResult(
+            status="succeeded",
+            final_text="看到了，图里是……",
+            token_usage={"prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25},
+        )
+
+    monkeypatch.setattr(
+        "pico_orchestrator.runtime.run_agent_runtime", _fake_run_agent_runtime
+    )
+
+    resp = client.post(
+        "/v1/chat/completions",
+        headers=headers,
+        json={
+            "model": "pico-fast",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "看这张图"},
+                        {"type": "image_url", "image_url": {"url": _TINY_PNG_DATA_URL}},
+                    ],
+                }
+            ],
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert captured["provider_name"] == "personal"
+    assert captured["backend_model"] == "gpt-4o-mini"
+    assert _bill_to_for_last_llm_row(tmp_path) == "personal"

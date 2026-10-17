@@ -828,6 +828,30 @@ def _caps_with_images(caps: Any, images: list[dict[str, Any]] | None) -> Any:
     return apply_images_to_caps(caps, images or [])
 
 
+def _personal_cfg_for_images(cfg: Any, images: list[dict[str, Any]] | None) -> Any:
+    """pico#1331 vision: never forward a school vision model id to a
+    teacher's own endpoint.
+
+    ``apply_images_to_caps``/``true_pi.runtime`` swap ``caps.backend_model``
+    to ``DEFAULT_DEEPSEEK_VISION`` (a *school* model id) whenever the current
+    backend can't read images — that swap happens regardless of which
+    provider is in scope. If a personal provider stayed in scope, the swapped
+    id would be sent straight to the teacher's own base_url, which almost
+    never serves that model: a guaranteed, confusing error. So when the
+    turn carries images and the teacher's own model can't read them
+    (``model_accepts_image`` false), drop personal scope for this one turn —
+    it then runs on the school provider + school vision model, billed
+    normally (``bill_to`` is never "personal" for a turn that never touched
+    the teacher's key). When the teacher's own model *can* read images,
+    nothing changes: stay personal.
+    """
+    if cfg is None or not images:
+        return cfg
+    from pico_orchestrator.vision import model_accepts_image
+
+    return cfg if model_accepts_image(getattr(cfg, "model", None)) else None
+
+
 def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
     """Apply the dual-mode runtime policy onto RunCaps (Pico 快速 / Pico 深度).
 
@@ -1754,6 +1778,14 @@ async def chat_completions(
         logger.exception("named school materials inject failed")
     teacher_extra = day_use_block or ""
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
+    # pico#1331「我的接口」看图: turn_images is fully merged by this point
+    # (user message, native PDF pages, conversation memory, this turn's
+    # uploads) — the exact set that will reach the model. personal_cfg may
+    # drop back to None here (see _personal_cfg_for_images); every later use
+    # of it (_bill_to_for_turn, personal_provider_scope(personal_cfg)) reads
+    # this same closure variable, so the school fallback + normal billing
+    # happen automatically with no extra branch in true_pi / pi_runtime.
+    personal_cfg = _personal_cfg_for_images(personal_cfg, turn_images)
     max_chars = int(getattr(settings, "pico_chat_max_prompt_chars", 100000) or 100000)
     # Sidebar propose packs a whitelist JSON. Cap the asked field only; the
     # marker is explicit so this must not 400 a legal affordance table.
@@ -1925,7 +1957,12 @@ async def chat_completions(
     )
     if native_files and not json_only:
         use_direct = False
-    if use_direct and turn_images:
+    if use_direct and turn_images and personal_cfg is None:
+        # pico#1331: when personal_cfg is still set here, turn_images is
+        # already known-compatible with it (the vision check right after
+        # turn_images was finalized above nulls personal_cfg back to school
+        # otherwise) — direct_accepts_images() only knows about the school
+        # model id and must not 400 a personal model it never resolves.
         from pico_orchestrator.provider import direct_accepts_images
 
         if not direct_accepts_images(model):
