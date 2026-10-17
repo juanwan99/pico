@@ -4,6 +4,14 @@
 
 ## 怎么跑（只在一次性栈上，不打现网）
 
+验收对账一条命令（起栈 → 跑两遍 → 对卡面验收逐条打 ✅ / ❌ → 两遍对照表 → 拆栈，出错也拆）：
+
+```bash
+bash scripts/pico-ruler-check.sh git:<main SHA> base 0     # 结果在 ~/pico-ruler-out/base-<时间>/，reconcile.txt 有一条 ❌ 就退出 1
+```
+
+分步：
+
 ```bash
 # ECS 上：一次性栈（现网镜像 + 挂某个版本的源码，自己的库、runner、盒子；跑完删）
 bash scripts/pico-ruler-stack.sh up base git:<main SHA> 0

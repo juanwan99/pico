@@ -229,3 +229,18 @@ def test_case_files_are_complete():
                 assert keys <= KNOWN_SUB[check["kind"]], (case["id"], keys - KNOWN_SUB[check["kind"]])
     assert (ruler.CASES_DIR / "www" / "login.html").read_text(encoding="utf-8").count("ok.txt") == 2
     json.dumps(cases, ensure_ascii=False)
+
+
+def test_reconcile_flags_missing_pass_and_low_memory():
+    cases = ruler.load_cases("")
+    full = [("R00", True)] + [(f"R{i:02d}", i != 7) for i in range(1, 21)]
+    a, b = _report(full), _report(full)
+    for rep in (a, b):
+        rep["revision"] = "638dd663"
+        rep["env"] = {"edu_start": "cf43f706117c", "edu_end": "b6b610b7040a", "min_avail_mb": 23000}
+    ok, text = ruler.reconcile(cases, a, b)
+    assert ok, text
+    b["env"]["min_avail_mb"] = 6000
+    b["results"] = b["results"][:10]
+    ok, text = ruler.reconcile(cases, a, b)
+    assert not ok and "❌ 基线第 2 遍跑完" in text and "❌ ECS 可用内存" in text

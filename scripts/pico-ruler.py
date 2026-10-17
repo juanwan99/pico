@@ -795,6 +795,39 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
+def reconcile(cases: list[dict[str, Any]], a: dict[str, Any], b: dict[str, Any], min_avail_mb: int = 8192) -> tuple[bool, str]:
+    """Card acceptance (pico#1323) line by line against two baseline runs."""
+    tasks = [c for c in cases if c["id"] != "R00"]
+    items: list[tuple[str, bool, str]] = []
+    items.append(
+        (
+            "20 个用例 + 判分规则",
+            len(tasks) == 20 and all(c.get("how") and c.get("checks") for c in cases),
+            f"{len(tasks)} 个任务 + R00 探针，每个有「怎么算做好」和自动检查",
+        )
+    )
+    for tag, rep in (("第 1 遍", a), ("第 2 遍", b)):
+        done = [r for r in rep["results"] if r["case"] != "R00" and r["fail_reason"] != "skipped_mem_floor"]
+        items.append((f"基线{tag}跑完", len(done) == 20, f"src {str(rep.get('revision', '?'))[:8]}，{len(done)}/20 有结果"))
+    keys = ("success_rate", "wall_median_s", "wall_p90_s", "fake_delivery", "probe_input_tokens", "tool_calls_median")
+    items.append(
+        (
+            "指标：成功率、墙钟中位 / p90、假交付、开工前 token、工具往返中位",
+            all(k in rep["summary"] for rep in (a, b) for k in keys) and a["summary"]["probe_input_tokens"] > 0,
+            "积分在一次性栈不计，记 token（README 写明）",
+        )
+    )
+    flips = [r["case"] for r in b["results"] for o in a["results"] if o["case"] == r["case"] and o["ok"] != r["ok"]]
+    items.append(("两遍翻转的用例单列", True, "、".join(flips) or "无"))
+    envs = [rep.get("env") or {} for rep in (a, b)]
+    health_ok = all(not str(e.get(k, "down")).startswith(("down", "?")) for e in envs for k in ("edu_start", "edu_end"))
+    mem = min(int(e.get("min_avail_mb") or 0) for e in envs)
+    items.append(("edu-core health 记了、没断", health_ok, " / ".join(f"{e.get('edu_start')}→{e.get('edu_end')}" for e in envs)))
+    items.append((f"ECS 可用内存不低于 {min_avail_mb // 1024}G", mem >= min_avail_mb, f"最低 {mem} MB"))
+    lines = [f"{'✅' if ok else '❌'} {name}：{detail}" for name, ok, detail in items]
+    return all(ok for _, ok, _ in items), "\n".join(lines)
+
+
 # --------------------------------------------------------------------- main
 
 
@@ -833,9 +866,15 @@ def main() -> int:
     ap.add_argument("--min-avail-mb", type=int, default=8192)
     ap.add_argument("--edu-health", default="http://127.0.0.1:8080/health")
     ap.add_argument("--compare", nargs=2, metavar=("A", "B"))
+    ap.add_argument("--reconcile", nargs=2, metavar=("PASS1", "PASS2"), help="card acceptance check, exit 1 on a miss")
     ap.add_argument("--list", action="store_true")
     args = ap.parse_args()
 
+    if args.reconcile:
+        a, b = (json.loads(Path(p).read_text(encoding="utf-8")) for p in args.reconcile)
+        ok, text = reconcile(load_cases(""), a, b, args.min_avail_mb)
+        print(text)
+        return 0 if ok else 1
     if args.compare:
         a, b = (json.loads(Path(p).read_text(encoding="utf-8")) for p in args.compare)
         print(compare(a, b))
