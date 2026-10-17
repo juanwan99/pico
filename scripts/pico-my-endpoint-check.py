@@ -511,8 +511,8 @@ def main(argv: list[str] | None = None) -> int:
         # Clean up no matter what happened above — never leave the test row.
         try:
             api.delete_endpoint()
-        except Exception:  # noqa: BLE001 — best-effort cleanup only
-            pass
+        except Exception as exc:  # noqa: BLE001 — cleanup must not mask the result
+            print(f"⚠ 清理失败，测试行可能还在：{exc}", file=sys.stderr)
 
     if args.pico_db is not None:
         sections["额外·表结构 user_model_endpoint"] = check_schema(args.pico_db)

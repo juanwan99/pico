@@ -173,7 +173,7 @@ async def personal_provider_config_for(principal: Principal) -> Any | None:
         raise RuntimeError(f"{PERSONAL_ENDPOINT_ERROR_TAG}{exc.message}") from exc
     try:
         api_key = decrypt_api_key(row.api_key_enc)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(
             "model_endpoint: decrypt failed for %s/%s — failing the turn, not falling back",
             principal.school_id,
@@ -343,7 +343,6 @@ async def test_model_endpoint(
 
 async def _probe(*, base_url: str, api_key: str, model: str) -> dict[str, Any]:
     from openai import AsyncOpenAI
-
     from pico_orchestrator.user_errors import personal_endpoint_reason
 
     client = AsyncOpenAI(

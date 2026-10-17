@@ -62,7 +62,7 @@ class ProviderConfig:
 # resolve_provider() / resolve_provider_for_model() check this first — every
 # caller of those two functions (direct chat, Pi hosted runtime, true Pi)
 # picks it up with no further wiring.
-_personal_provider: ContextVar["ProviderConfig | None"] = ContextVar(
+_personal_provider: ContextVar[ProviderConfig | None] = ContextVar(
     "pico_personal_provider", default=None
 )
 

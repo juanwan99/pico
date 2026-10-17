@@ -113,7 +113,7 @@ async def test_school_model_same_failure_does_retry_on_backup(
     # brain_candidates is imported *inside* run_true_pi_agent on every call
     # (fresh `from pico_orchestrator.brain_ha import brain_candidates`), so
     # the patch target is the source module's attribute, not runtime's.
-    import pico_orchestrator.brain_ha as brain_ha
+    from pico_orchestrator import brain_ha
 
     monkeypatch.setattr(brain_ha, "brain_candidates", lambda primary: [primary, "grok-4.6-backup"])
 

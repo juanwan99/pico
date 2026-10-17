@@ -23,13 +23,13 @@ from pico_orchestrator.edu_sidebar import (
     shape_web_hits,
 )
 from pico_orchestrator.gateway import ToolError as ChannelToolError
+from pico_orchestrator.provider import personal_provider_scope
 from pico_orchestrator.sse_keepalive import (
     SSE_COMMENT_KEEPALIVE,
     SSE_KEEPALIVE_SECONDS,
     SSE_STREAM_HEADERS,
     iter_with_idle_ticks,
 )
-from pico_orchestrator.provider import personal_provider_scope
 from pico_orchestrator.user_errors import is_wall_timeout_code, user_message_for_error
 from pydantic import BaseModel
 
@@ -1644,7 +1644,7 @@ async def chat_completions(
     else:
         try:
             personal_cfg = await personal_provider_config_for(principal)
-        except Exception as exc:  # noqa: BLE001 — tagged: never fall back to school model
+        except Exception as exc:
             # user_message_for_error is already a module-level import (top of
             # file) — re-importing it here would shadow that name as local
             # for this *entire* function (Python scoping), breaking the

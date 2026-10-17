@@ -519,9 +519,8 @@ async def test_personal_endpoint_error_tagged_never_falls_back_to_school(
     personal = ProviderConfig(
         name="personal", api_key="sk-teacher", base_url="https://teacher.example/v1", model="gpt-4o-mini"
     )
-    with personal_provider_scope(personal):
-        with pytest.raises(RuntimeError) as ei:
-            _ = [piece async for piece in stream_chat("hi", model="pico-fast", thinking=False)]
+    with personal_provider_scope(personal), pytest.raises(RuntimeError) as ei:
+        _ = [piece async for piece in stream_chat("hi", model="pico-fast", thinking=False)]
 
     assert PERSONAL_ENDPOINT_ERROR_TAG in str(ei.value)
     assert calls, "expected at least one call against the teacher's own endpoint"
