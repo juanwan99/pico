@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pico_orchestrator.sandbox_session_event import public_tool_args
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -526,6 +527,12 @@ async def append_event(
     # its work anyway.
     if commit and session.in_transaction():
         await session.commit()
+    if event_type == "tool.call" and isinstance(payload.get("arguments"), dict):
+        # Typed text / form values never land in the ledger, whatever runtime emitted it.
+        payload = {
+            **payload,
+            "arguments": public_tool_args(str(payload.get("tool") or ""), payload["arguments"]),
+        }
     payload_json = json.dumps(payload, ensure_ascii=False)
     next_seq = (
         select(func.coalesce(func.max(EventRow.seq), 0) + 1)

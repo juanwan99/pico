@@ -79,3 +79,32 @@ async def test_concurrent_runs_never_lose_events_to_sqlite_busy(event_db):
                 )
             ).all()
             assert seqs == list(range(1, 31))
+
+
+async def test_tool_call_ledger_never_stores_typed_values(event_db):
+    """pico#1320: codes / passwords the teacher gave are typed for real but the
+    ledger keeps only ***, whatever runtime emitted the tool.call."""
+    async with session_factory()() as session:
+        task = TaskRow(id=new_id(), school_id="school-a", membership_id="member-a")
+        run = RunRow(id=new_id(), task_id=task.id)
+        session.add_all([task, run])
+        await session.commit()
+        await append_event(
+            session,
+            run.id,
+            "tool.call",
+            {"tool": "sandbox_browser_type", "arguments": {"ref": "e5", "text": "677294"}},
+        )
+        await append_event(
+            session,
+            run.id,
+            "tool.call",
+            {
+                "tool": "sandbox_browser_fill_form",
+                "arguments": {"fields": [{"ref": "e3", "value": "hunter2"}]},
+            },
+        )
+        rows = (await session.execute(text("SELECT payload_json FROM events"))).scalars().all()
+    blob = " ".join(rows)
+    assert "677294" not in blob and "hunter2" not in blob
+    assert blob.count("***") == 2

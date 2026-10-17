@@ -324,6 +324,27 @@ def mask_secret_values(snapshot: str, secrets: list[str]) -> str:
     return out
 
 
+# Code / password shaped: 4–32 chars, no spaces, no CJK. Mail bodies and names stay
+# readable so the AI can check what it wrote.
+_CODE_LIKE = re.compile(r"[\x21-\x7e]{4,32}")
+
+
+def mask_typed_box_values(snapshot: str, typed: list[str]) -> str:
+    """Code-like values the AI typed into a text box (codes, passwords the teacher
+    gave) show masked on the box lines, so they do not ride the snapshot into the
+    run ledger (pico#1320). Page text elsewhere is untouched."""
+    values = [v for v in typed if _CODE_LIKE.fullmatch(v)]
+    if not values:
+        return snapshot
+    lines = []
+    for line in snapshot.split("\n"):
+        if "textbox" in line:
+            for value in values:
+                line = line.replace(value, SECRET_MASK)
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def human_required(step: str) -> ToolError:
     return ToolError(
         HUMAN_REQUIRED_CODE,
@@ -548,6 +569,8 @@ class PlaywrightPage:
         self._viewport = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
         self._dialogs: list[str] = []
         self._rate_limit: tuple[float, str] | None = None
+        # Values the AI typed into boxes; masked on box lines in snapshots (pico#1320).
+        self._typed: list[str] = []
         for existing in list(getattr(context, "pages", []) or []):
             self._watch(existing)
         if page not in list(getattr(context, "pages", []) or []):
@@ -793,6 +816,7 @@ class PlaywrightPage:
         except Exception as exc:
             raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能生成页面快照") from exc
         text = mask_secret_values(str(text or ""), await self._password_values())
+        text = mask_typed_box_values(text, self._typed)
         if len(text) > SNAPSHOT_MAX_CHARS:
             text = text[:SNAPSHOT_MAX_CHARS] + "\n- text: …（快照过长已截断，可滚动或翻页后再取）"
         return text
@@ -903,6 +927,7 @@ class PlaywrightPage:
             # A paragraph of a rich-text body (mail / TinyMCE, often in an iframe):
             # Playwright fills the editing host, not a line inside it (#1233).
             loc = loc.locator(EDIT_HOST_XPATH)
+        self._typed.append(text)
         try:
             if slowly:
                 await loc.press_sequentially(text, timeout=5_000 + 50 * len(text))
@@ -935,7 +960,9 @@ class PlaywrightPage:
                     picks = [str(v) for v in value] if isinstance(value, list) else [str(value)]
                     await self.select_ref(ref, picks)
                 else:
-                    await loc.fill("" if value is None else str(value), timeout=5_000)
+                    text = "" if value is None else str(value)
+                    self._typed.append(text)
+                    await loc.fill(text, timeout=5_000)
             except ToolError:
                 raise
             except Exception as exc:

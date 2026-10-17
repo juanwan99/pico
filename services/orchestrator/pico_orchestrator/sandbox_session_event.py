@@ -31,6 +31,24 @@ _SECRET_KEYS = frozenset({"password", "passwd", "secret", "credential", "cookie"
 _PIXEL_KEYS = frozenset({"image_png_base64"})
 
 
+_ARG_MASK = "***"
+
+
+def public_tool_args(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    """What the AI types into a page (codes, passwords the teacher gave) never hits
+    the ledger: mask ``text`` of sandbox_browser_type and every ``fields[].value`` of
+    sandbox_browser_fill_form (pico#1320). The tool itself still gets the real args."""
+    if tool == "sandbox_browser_type" and "text" in args:
+        return {**args, "text": _ARG_MASK}
+    if tool == "sandbox_browser_fill_form" and isinstance(args.get("fields"), list):
+        fields = [
+            {**f, "value": _ARG_MASK} if isinstance(f, dict) and "value" in f else f
+            for f in args["fields"]
+        ]
+        return {**args, "fields": fields}
+    return args
+
+
 def public_tool_result(result: Any) -> Any:
     """Drop password-like keys and raw pixels before a sandbox tool result hits the ledger."""
     if not isinstance(result, dict):

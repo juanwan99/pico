@@ -69,7 +69,11 @@ def build_day_use_block(
     titles = normalize_recent_titles(recent_titles, limit=max_titles)
     if not name and not titles:
         return ""
-    lines = ["## Teacher"]
+    lines = [
+        "## Day-use context (thin · not a memory store)",
+        "Facts from Pico ledger / SSO for this membership. Do not invent history beyond this list.",
+        "Long-chat recall uses Pi official compaction + session files — not this block.",
+    ]
     if name:
         lines.append(f"- Teacher display name: {name}")
     if titles:

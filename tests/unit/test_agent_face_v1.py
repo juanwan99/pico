@@ -124,6 +124,30 @@ async def test_tool_call_emits_chinese_step_line() -> None:
 
 
 @pytest.mark.asyncio
+async def test_tool_call_event_masks_typed_code() -> None:
+    """pico#1320: the live tool.call stream carries *** for what the AI types."""
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    await map_event(
+        RpcEvent(
+            {
+                "type": "tool_execution_start",
+                "toolName": "sandbox_browser_type",
+                "toolCallId": "c1",
+                "args": {"ref": "e5", "text": "677294"},
+            }
+        ),
+        emit=emit,
+        state=EventMapState(),
+    )
+    calls = [p for k, p in events if k == "tool.call"]
+    assert calls[0]["arguments"] == {"ref": "e5", "text": "***"}
+
+
+@pytest.mark.asyncio
 async def test_image_tool_error_is_chinese_not_ok() -> None:
     events: list[tuple[str, dict[str, Any]]] = []
 

@@ -29,7 +29,11 @@ os.environ.setdefault("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
 
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.sandbox_s2 import encode_rgb_png
-from pico_orchestrator.sandbox_session_event import public_tool_result, sandbox_session_payload
+from pico_orchestrator.sandbox_session_event import (
+    public_tool_args,
+    public_tool_result,
+    sandbox_session_payload,
+)
 from pico_orchestrator.tools_builtin import build_default_gateway
 from pico_orchestrator.web_guard import parse_public_http_url
 from sandbox_worker.browser import (
@@ -41,6 +45,7 @@ from sandbox_worker.browser import (
     VIEWPORT_WIDTH,
     is_handoff_control,
     mask_secret_values,
+    mask_typed_box_values,
     read_login_state,
 )
 from sandbox_worker.runtime import CURRENT_SESSION, LOGIN_FILE, RUNTIME
@@ -312,6 +317,34 @@ def test_mask_secret_values_hides_password_text() -> None:
     assert "hunter2" not in out
     assert out.count(SECRET_MASK) == 2
     assert mask_secret_values("plain", []) == "plain"
+
+
+def test_typed_values_masked_on_box_lines_only() -> None:
+    """pico#1320: a code the AI typed does not ride the snapshot into the ledger."""
+    raw = (
+        '- textbox "短信验证码" [ref=e5]: 677294\n- text: 订单号 677294\n'
+        '- textbox "姓名" [ref=e6]: 李\n- textbox [ref=f1e3]: 你好，这是测试邮件\n'
+    )
+    out = mask_typed_box_values(raw, ["677294", "李", "你好，这是测试邮件"])
+    assert '- textbox "短信验证码" [ref=e5]: ' + SECRET_MASK in out
+    assert "- text: 订单号 677294" in out  # page text untouched
+    assert "[ref=e6]: 李" in out  # not code-like
+    assert "[ref=f1e3]: 你好，这是测试邮件" in out  # mail body stays readable
+    assert mask_typed_box_values(raw, []) == raw
+
+
+def test_public_tool_args_masks_typed_text_and_form_values() -> None:
+    typed = {"ref": "e5", "text": "677294", "submit": True}
+    out = public_tool_args("sandbox_browser_type", typed)
+    assert out == {"ref": "e5", "text": "***", "submit": True}
+    assert typed["text"] == "677294"  # the tool still gets the real value
+    form = {"fields": [{"ref": "e2", "value": "13800138000"}, {"ref": "e3", "value": "hunter2"}]}
+    masked = public_tool_args("sandbox_browser_fill_form", form)
+    assert [f["value"] for f in masked["fields"]] == ["***", "***"]
+    assert [f["ref"] for f in masked["fields"]] == ["e2", "e3"]
+    assert form["fields"][1]["value"] == "hunter2"
+    other = {"url": "https://example.com"}
+    assert public_tool_args("sandbox_browser_open", other) is other
 
 
 # ---------------------------------------------------------------- gateway → runtime
@@ -700,6 +733,8 @@ async def test_real_chromium_snapshot_refs_fill_select_and_handoff() -> None:
         await hands.type_ref(ref_of("验证码"), "677294", submit=False)
         assert await page.locator("input[name=pwd]").input_value() == "pw-from-chat"
         assert await page.locator("input[name=code]").input_value() == "677294"
+        typed_snap = await hands.snapshot()
+        assert "677294" not in typed_snap and "pw-from-chat" not in typed_snap
         await hands.click_ref(ref_of("提交报名"))  # AI may submit (owner 09:17)
         with pytest.raises(ToolError) as exc:
             await hands.click_ref(ref_of("立即支付"))

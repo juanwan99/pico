@@ -126,7 +126,7 @@ def test_b2_view_and_cross_account_and_loopback(client) -> None:
     assert view.status_code == 200, view.text
     assert "text/html" in view.headers.get("content-type", "")
     assert LOGIN_COPY in view.text
-    assert "不要在聊天里发送密码" in view.text
+    assert "不要在聊天里发送密码" not in view.text  # pico#1320: no longer warns off chat codes
     assert "Chromium" in view.text
 
     png = client.get(f"/v1/sandbox/sessions/{session_id}/screenshot", headers=owner)
