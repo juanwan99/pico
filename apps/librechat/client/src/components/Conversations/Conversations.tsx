@@ -207,7 +207,16 @@ const Conversations: FC<ConversationsProps> = ({
     width: listWidth,
     height: listHeight,
   } = useElementSize<HTMLDivElement>();
-  const { statusByConversationId } = usePicoConversationStatusMap(true);
+  const { statusByConversationId, refresh: refreshStatus } = usePicoConversationStatusMap(true);
+  // A stream that just ended in this window: refresh now instead of waiting for the next poll.
+  const anySubmitting = useRecoilValue(store.anySubmittingSelector);
+  const wasSubmittingRef = useRef(anySubmitting);
+  useEffect(() => {
+    if (wasSubmittingRef.current && !anySubmitting) {
+      refreshStatus();
+    }
+    wasSubmittingRef.current = anySubmitting;
+  }, [anySubmitting, refreshStatus]);
 
   const favoritesContentKeyRef = useRef('');
 

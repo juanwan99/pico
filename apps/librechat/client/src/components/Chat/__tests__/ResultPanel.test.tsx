@@ -1162,11 +1162,15 @@ describe('ResultPanel sandbox web pane', () => {
     expect(screen.queryByTestId('sandbox-login-form')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sandbox-web-password')).not.toBeInTheDocument();
     (postPicoSandboxInput as jest.Mock).mockClear();
+    // A printable key reaches the box once (keydown + the IME's own insert used to send it twice).
     fireEvent.keyDown(typer, { key: 'a' });
+    fireEvent.change(typer, { target: { value: 'a' } });
     fireEvent.keyDown(typer, { key: '1' });
+    fireEvent.change(typer, { target: { value: '1' } });
     fireEvent.keyDown(typer, { key: 'Tab' });
     fireEvent.compositionStart(typer);
     fireEvent.keyDown(typer, { key: 'Process' });
+    (typer as HTMLTextAreaElement).value = '你好';
     fireEvent.compositionEnd(typer, { data: '你好' });
     fireEvent.paste(typer, { clipboardData: { getData: () => 'p@ss' } });
     fireEvent.change(typer, { target: { value: '!' } });

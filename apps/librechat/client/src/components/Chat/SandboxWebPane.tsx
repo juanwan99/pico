@@ -529,15 +529,16 @@ export default function SandboxWebPane({
       void sendInput({ key: ev.key });
       return;
     }
-    if (ev.key.length === 1) {
-      ev.preventDefault();
-      queueTyped(ev.key);
-    }
+    // Printable keys fall through: text is read once from the textarea (onChange). Queuing the
+    // key here too doubled every digit under a Chinese IME, which inserts despite preventDefault
+    // (pico#1320: 677294 into a 4-box code field landed as 6677).
   };
 
   const onTypeCompositionEnd = (ev: React.CompositionEvent<HTMLTextAreaElement>) => {
     composingRef.current = false;
-    queueTyped(ev.data);
+    // Take what is in the box, not ev.data: a browser that also fires input after
+    // compositionend then sees an empty box and sends nothing twice.
+    queueTyped(ev.currentTarget.value);
     ev.currentTarget.value = '';
   };
 

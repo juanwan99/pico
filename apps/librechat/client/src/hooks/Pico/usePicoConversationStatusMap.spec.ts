@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
   buildConversationStatusMap,
+  nextPollMs,
   usePicoConversationStatusMap,
 } from './usePicoConversationStatusMap';
 import { listPicoTasks, type PicoTask } from '~/data-provider/pico/api';
@@ -145,5 +146,50 @@ describe('usePicoConversationStatusMap', () => {
     await waitFor(() => expect(result.current.error).toBe('任务历史暂不可用，请稍后重试'));
     expect(result.current.tasks).toEqual(tasks);
     expect(result.current.error).not.toContain('internal stack');
+  });
+});
+
+describe('sidebar poll cadence (pico#1328)', () => {
+  const live: PicoTask[] = [
+    { id: 't1', title: 'a', conversation_id: 'c1', latest_run: { id: 'r1', status: 'running' } },
+  ];
+  const idle: PicoTask[] = [
+    { id: 't2', title: 'b', conversation_id: 'c2', latest_run: { id: 'r2', status: 'succeeded' } },
+  ];
+
+  it('polls every 1.5 s only while a run is live and the page is visible', () => {
+    expect(nextPollMs(live, false)).toBe(1_500);
+    expect(nextPollMs(live, true)).toBe(20_000);
+    expect(nextPollMs(idle, false)).toBe(20_000);
+    expect(nextPollMs([], false)).toBe(20_000);
+  });
+
+  it('flips a live row to 已完成 on the next fast poll, then slows back down', async () => {
+    jest.useFakeTimers();
+    try {
+      mockedListPicoTasks.mockReset();
+      mockedListPicoTasks.mockResolvedValueOnce({ tasks: live }).mockResolvedValue({
+        tasks: [{ ...live[0], latest_run: { id: 'r1', status: 'succeeded' } }],
+      });
+      const { result } = renderHook(() => usePicoConversationStatusMap());
+      await waitFor(() =>
+        expect(result.current.statusByConversationId).toEqual({ c1: '仍在处理…' }),
+      );
+      await act(async () => {
+        jest.advanceTimersByTime(1_500);
+      });
+      await waitFor(() => expect(result.current.statusByConversationId).toEqual({ c1: '已完成' }));
+      expect(mockedListPicoTasks).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        jest.advanceTimersByTime(19_000);
+      });
+      expect(mockedListPicoTasks).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        jest.advanceTimersByTime(1_000);
+      });
+      expect(mockedListPicoTasks).toHaveBeenCalledTimes(3);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
