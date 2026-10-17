@@ -1,7 +1,7 @@
 import React, { createRef } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { RecoilRoot } from 'recoil';
+import { RecoilRoot, useSetRecoilState } from 'recoil';
 import type { CellMeasurerCache, List } from 'react-virtualized';
 import type { TConversation } from 'librechat-data-provider';
 import Conversations from '../Conversations';
@@ -55,6 +55,7 @@ jest.mock('~/store', () => {
         key: 'test-conversations-convo-by-index',
         default: null,
       }),
+      anySubmittingSelector: atom({ key: 'test-conversations-any-submitting', default: false }),
     },
   };
 });
@@ -284,5 +285,36 @@ describe('Conversations – pinned header', () => {
   it('does not show the pinned header during search', () => {
     const { queryByText } = renderConversations([pinnedConvo], 'some query');
     expect(queryByText('com_ui_pinned')).not.toBeInTheDocument();
+  });
+});
+
+describe('Conversations – sidebar status refresh when a stream ends (pico#1328)', () => {
+  it('refreshes the Pico status map once when submitting goes true → false', () => {
+    let setSubmitting: (v: boolean) => void = () => undefined;
+    const Setter = () => {
+      setSubmitting = useSetRecoilState(store.anySubmittingSelector);
+      return null;
+    };
+    mockPicoTaskState.refresh.mockClear();
+    render(
+      <RecoilRoot>
+        <Setter />
+        <Conversations
+          conversations={[]}
+          moveToTop={jest.fn()}
+          toggleNav={jest.fn()}
+          containerRef={createRef<List>()}
+          loadMoreConversations={jest.fn()}
+          isLoading={false}
+          isSearchLoading={false}
+          isChatsExpanded={true}
+          setIsChatsExpanded={jest.fn()}
+        />
+      </RecoilRoot>,
+    );
+    act(() => setSubmitting(true));
+    expect(mockPicoTaskState.refresh).not.toHaveBeenCalled();
+    act(() => setSubmitting(false));
+    expect(mockPicoTaskState.refresh).toHaveBeenCalledTimes(1);
   });
 });
