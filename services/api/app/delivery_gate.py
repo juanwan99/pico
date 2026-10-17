@@ -15,6 +15,7 @@ and empty Office zip only.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any
 
 from pico_orchestrator.delivery_policy import (
@@ -25,6 +26,23 @@ from pico_orchestrator.delivery_policy import (
     looks_like_redelivery_claim,
 )
 from pico_orchestrator.document_generators import office_shell_reason
+
+# pico#1334: a turn that was given no tools cannot land a file, so 「…已生成」
+# in its text is not a file claim. edu servers ask for 细则 / 判分 / JSON text
+# with no tools; 19 of 21 live deliverable_missing_artifact (10-03～10-17) were
+# those calls failed by mistake. None = not marked (judge the claim as before).
+_turn_writers_visible: ContextVar[bool | None] = ContextVar(
+    "pico_turn_writers_visible", default=None
+)
+
+
+def mark_turn_writers(visible: bool) -> None:
+    """Entry points call this once per turn: did the model get any tools?"""
+    _turn_writers_visible.set(bool(visible))
+
+
+def turn_can_write() -> bool:
+    return _turn_writers_visible.get() is not False
 
 
 async def _prior_user_artifact_count(session: Any, run: Any) -> int:
@@ -141,6 +159,7 @@ async def apply_delivery_gate(
                 "implicit_package": False,
                 "structure_item_count": 0,
                 "prior_artifact_count": prior_artifact_count,
+                "writers_visible": _turn_writers_visible.get(),
                 "ok": status == "succeeded",
                 "human_titles": titles[:40],
                 "note": (
@@ -157,9 +176,11 @@ async def apply_delivery_gate(
     # Fail-closed only when the assistant claimed a file landed and none did
     # on this conversation. Restating files from an earlier turn on the same
     # chat is not fake-green (结果区 would otherwise go empty + 假红); saying
-    # they were made again this turn is (#1167).
+    # they were made again this turn is (#1167). A turn with no tools makes no
+    # file claim at all (#1334).
     empty_turn = (
-        status == "succeeded"
+        turn_can_write()
+        and status == "succeeded"
         and user_art_count == 0
         and not looks_like_clarification(final_text or "")
     )

@@ -564,6 +564,11 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             allowed_tools=allowed_tools,
             skill_instruction=skill_instruction,
         )
+        from pico_orchestrator.capability_loading import resolve_visible_tools
+
+        from app.delivery_gate import mark_turn_writers
+
+        mark_turn_writers(bool(resolve_visible_tools(caps.allowed_tools)))
 
         result = await run_agent_runtime(
             use_pi_agent=settings.pico_pi_agent_runtime,
