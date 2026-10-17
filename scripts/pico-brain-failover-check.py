@@ -10,7 +10,7 @@
   - 这一轮的用量记在备用模型上（不是主模型）；
   - 老师收到的流里有正文、没有报错事件；
   - 假上游确实对主模型注入过这种错（不然这一项不算数）。
-换错型前重启栈里的 pico-api，清掉上一种错留下的「主模型暂时下线」记忆。
+每格前重启栈里的 pico-api，主模型从「好的」开始；同一格里头一次识别出坏了，后面几次直接走备用（主模型暂时下线），这也算接住。
 """
 
 from __future__ import annotations
@@ -80,6 +80,17 @@ def injected(log: Path, since: float, mode: str) -> int:
     return n
 
 
+def restart(stack: str, base: str) -> None:
+    """Fresh pico-api per cell: the head model starts healthy (no mark_down left over)."""
+    subprocess.run(["docker", "restart", f"ruler-{stack}-api"], check=True, capture_output=True)
+    for _ in range(60):
+        try:
+            urllib.request.urlopen(f"{base}/health", timeout=3)
+            return
+        except OSError:
+            time.sleep(2)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stack", required=True)
@@ -100,15 +111,9 @@ def main() -> int:
     print(f"主模型 {head} · 备用 {env.get('PICO_BRAIN_FALLBACKS', '')} · 每格 {args.n} 次")
     bad_total = 0
     for mode in args.modes.split(","):
-        subprocess.run(["docker", "restart", f"ruler-{args.stack}-api"], check=True, capture_output=True)
-        for _ in range(60):
-            try:
-                urllib.request.urlopen(f"{base}/health", timeout=3)
-                break
-            except OSError:
-                time.sleep(2)
-        (relay / "fault.json").write_text(json.dumps({"mode": mode, "head": head}), encoding="utf-8")
         for lane in args.lanes.split(","):
+            restart(args.stack, base)
+            (relay / "fault.json").write_text(json.dumps({"mode": mode, "head": head}), encoding="utf-8")
             model, extra, text = LANES[lane]
             since, ok, misses = time.time(), 0, []
             for i in range(args.n):

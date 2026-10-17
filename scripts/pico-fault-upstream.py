@@ -108,12 +108,15 @@ def main() -> None:
             self.send_header("Connection", "close")
             self.end_headers()
             self.close_connection = True
-            while True:
-                chunk = resp.read1(65536) if hasattr(resp, "read1") else resp.read(65536)
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
-                self.wfile.flush()
+            try:
+                while True:
+                    chunk = resp.read1(65536) if hasattr(resp, "read1") else resp.read(65536)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                log({"model": bare, "action": "client_closed"})  # hedge loser cancelled
 
         do_POST = _relay
         do_GET = _relay
