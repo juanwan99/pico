@@ -82,7 +82,7 @@ DATE: 2026-07-29
 | **L2 API 控制面** | 鉴权、任务、流式/兼容协议、变更确认 | `services/api` FastAPI |
 | **L3 编排层** | 多步 tool-calling、事件发射、超时/token 帽 | `pico_orchestrator.run_agent_loop` |
 | **L4 工具网关** | 白名单、校隔离、跨校 fail-closed | `AllowlistGateway` |
-| **L5 模型提供商** | Kimi / 可扩展 DeepSeek 等；教师个人 BYOK（pico#1331「我的接口」，OpenAI 兼容，模型费记在教师自己账上） | `provider.resolve_provider` / `personal_provider_scope` |
+| **L5 模型提供商** | Kimi / 可扩展 DeepSeek 等；教师个人 BYOK（pico#1331「我的接口」，OpenAI 兼容，模型费记在教师自己账上；**已封存** pico#1349，业主 10-18 下线、代码保留） | `provider.resolve_provider` / `personal_provider_scope` |
 | **L6 账本存储** | Task/Run/Event/Artifact/Change | SQL（可演进 Postgres） |
 | **L7 计量计费** | 点池、科目、超额 | **方案层已定，工程分阶段** |
 | **L8 集成** | edu 凭证、只读适配、回写提案 | Phase 2 合同 / Phase 3 对接 |

@@ -28,12 +28,10 @@ import AskUserQuestionPopover from './AskUserQuestionPopover';
 import {
   ComposerModeSwitch,
   ComposerPlanToggle,
-  ComposerMyEndpointBadge,
   useComposerAttachInput,
 } from './ComposerPlusMenu';
 import { ComposerMaterialsChip } from '~/components/Chat/ComposerMaterials';
 import { useComposerMaterials } from '~/hooks/Pico/useComposerMaterials';
-import useMyModelEndpoint from '~/hooks/Pico/useMyModelEndpoint';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { cn, removeFocusRings } from '~/utils';
 import DuringRunSendButton from './DuringRunSendButton';
@@ -144,9 +142,7 @@ const ChatForm = memo(function ChatForm({
   // T-PLAN-WIRE T3: 先计划 is this composer only. Never seed from pico:planOn
   // localStorage — that made a leftover toggle send pico_plan on every later "hi".
   const picoPlanOn = Boolean(conversation?.pico_plan);
-  // pico#1331「我的接口」: badge next to the 快速/深度 switch when on.
-  const { data: myEndpoint } = useMyModelEndpoint();
-  const myEndpointOn = myEndpoint.configured && myEndpoint.enabled;
+  // 「我的接口」badge (ComposerMyEndpointBadge) 封存 · pico#1349: offline, code kept.
   const applyPicoMode = useCallback(
     (raw: string) => {
       const id = normalizePicoModelMode(raw);
@@ -684,7 +680,6 @@ const ChatForm = memo(function ChatForm({
                   <div className="min-w-0 flex-1" />
                   <ComposerMaterialsChip open={materials.open} onToggle={materials.toggle} />
                   <ComposerModeSwitch value={picoMode} onChange={applyPicoMode} />
-                  {myEndpointOn && <ComposerMyEndpointBadge />}
                   <ComposerPlanToggle on={picoPlanOn} onChange={applyPicoPlan} />
                   <div className="shrink-0">
                     {isSubmitting && showStopButton && !answerMode.active ? (
