@@ -94,7 +94,7 @@ Token 规则：
 
 价签按 **渠道×模型**（同一模型不同渠道必须各有一条），记的是真实成本，统一价不改它。无价签 → 该渠道锁死，不准调用（对话模型也一样，统一价不放行没价签的模型）。钱/钱包在 edu-core；edu 拉 export 的 `points` **禁止再乘**。Pico 不做充值/支付/余额。`pico-fast`/`pico-deep` 是档位不是计费型号。出图优先用提供方 `usageMetadata`；没有则用价签的 `per_image_yuan`。unknown 且无按次价签 → `points=null`（不是 0）。老师面只见积分，禁止 token / 公式。每一轮钉在该条回复末尾：有积分显示「实际」。
 
-**个人接口零积分（pico#1331「我的接口」）：** 老师在「设置 → 我的接口」填自己的 OpenAI 兼容地址/密钥后，该轮 `kind=llm` 仍按正常规则记 token（诚实账），但 `extra.bill_to="personal"` 时 `milli_from_row` 直接短路返回 `0`——不进统一价公式、不扣积分，因为这轮模型调用的钱已经由老师自己的服务商收了。这个 tag **只在 `openai_compat.py` 明确拿到 `personal_provider_scope` 配置时写**，从不由别处推断；按次功能（`search`/`kb`/`image`/`sandbox`）永远不带这个 tag，继续正常扣积分——「我的接口」只换模型调用那一刀，不是免费额度。
+**个人接口零积分（pico#1331「我的接口」；已封存 pico#1349，业主 10-18 下线，`model_endpoint.SEALED` 打开前不会再出现 `personal`）：** 老师在「设置 → 我的接口」填自己的 OpenAI 兼容地址/密钥后，该轮 `kind=llm` 仍按正常规则记 token（诚实账），但 `extra.bill_to="personal"` 时 `milli_from_row` 直接短路返回 `0`——不进统一价公式、不扣积分，因为这轮模型调用的钱已经由老师自己的服务商收了。这个 tag **只在 `openai_compat.py` 明确拿到 `personal_provider_scope` 配置时写**，从不由别处推断；按次功能（`search`/`kb`/`image`/`sandbox`）永远不带这个 tag，继续正常扣积分——「我的接口」只换模型调用那一刀，不是免费额度。
 
 ---
 

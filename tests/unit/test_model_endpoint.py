@@ -1,4 +1,8 @@
-"""pico#1331「我的接口」: storage, SSRF guard, model switch, billing."""
+"""pico#1331「我的接口」: storage, SSRF guard, model switch, billing.
+
+封存 since pico#1349: the tests below run with the switch off; the last test
+pins the sealed behaviour live runs with.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,12 @@ from app.auth import Principal, issue_test_token
 from app.settings import get_settings
 
 ENDPOINT_SECRET = "test-endpoint-secret-at-least-32-bytes!!"
+
+
+@pytest.fixture(autouse=True)
+def _unsealed(request, monkeypatch):
+    if not request.node.name.startswith("test_sealed"):
+        monkeypatch.setattr("app.model_endpoint.SEALED", False)
 
 
 @pytest.fixture()
@@ -810,3 +820,25 @@ def test_chat_completions_image_on_vision_capable_personal_model_stays_personal(
     assert captured["provider_name"] == "personal"
     assert captured["backend_model"] == "gpt-4o-mini"
     assert _bill_to_for_last_llm_row(tmp_path) == "personal"
+
+
+@pytest.mark.asyncio
+async def test_sealed_hides_the_routes_and_never_reads_a_saved_endpoint(client, monkeypatch) -> None:
+    """pico#1349 封存: owner 10-18「先下线功能，代码暂时不删除」."""
+    from app import model_endpoint
+
+    assert model_endpoint.SEALED is True
+    for method, path in (
+        ("get", "/v1/me/model-endpoint"),
+        ("put", "/v1/me/model-endpoint"),
+        ("delete", "/v1/me/model-endpoint"),
+        ("post", "/v1/me/model-endpoint/test"),
+    ):
+        assert getattr(client, method)(path, headers=_headers()).status_code == 404
+
+    async def boom(*_a, **_kw):
+        raise AssertionError("sealed: no lookup")
+
+    monkeypatch.setattr(model_endpoint, "_get_row", boom)
+    assert await model_endpoint.personal_provider_config_for(_PERSONAL_PRINCIPAL) is None
+

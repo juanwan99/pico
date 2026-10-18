@@ -1,5 +1,11 @@
 """「我的接口」(pico#1331): teacher's own OpenAI-compatible model endpoint.
 
+封存 (sealed, pico#1349): owner 2026-10-18 「先下线功能，代码暂时不删除，（标注封存」.
+While ``SEALED`` is True the four routes answer 404 and no turn reads a saved
+endpoint (every turn runs on Pico's own model and is billed as usual). The
+code, table and tests stay; to bring it back set ``SEALED = False``, put the
+settings entry back (``Nav/Settings/registry.tsx``) and open a card.
+
 Only the authenticated membership can read/write its own row — identity is
 always ``Principal.school_id`` / ``Principal.membership_id`` from the
 request, never a value the caller supplies. The key is Fernet-encrypted
@@ -30,7 +36,17 @@ from app.db import UserModelEndpointRow, get_session, session_factory
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["model-endpoint"], dependencies=[Depends(require_person)])
+SEALED = True  # 封存 · pico#1349 (owner 2026-10-18)
+
+
+def _not_sealed() -> None:
+    if SEALED:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
+router = APIRouter(
+    tags=["model-endpoint"], dependencies=[Depends(_not_sealed), Depends(require_person)]
+)
 
 ENDPOINT_SECRET_ENV = "PICO_ENDPOINT_SECRET"
 _TEST_TIMEOUT_S = 10.0
@@ -137,6 +153,8 @@ async def personal_provider_config_for(principal: Principal) -> Any | None:
     points that would imply) just because the teacher's own config broke;
     the turn must fail with a teacher-facing 「你的接口出错了：…」 instead.
     """
+    if SEALED:
+        return None
     from pico_orchestrator.gateway import ToolError
     from pico_orchestrator.provider import PERSONAL_PROVIDER_NAME, ProviderConfig
     from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG

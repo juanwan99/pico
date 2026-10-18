@@ -47,7 +47,8 @@ export function ComposerModeSwitch({
   );
 }
 
-/** pico#1331「我的接口」: shown next to the 快速/深度 switch — the only
+/** 封存 · pico#1349 (owner 10-18): not rendered anywhere; kept for restore.
+ * pico#1331「我的接口」: shown next to the 快速/深度 switch — the only
  * "model" indicator teachers see — when the teacher's own endpoint is on.
  * This turn's model fee goes to their own provider, not Pico points. */
 export function ComposerMyEndpointBadge() {

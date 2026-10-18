@@ -1,3 +1,5 @@
+// 封存 · pico#1349 (owner 2026-10-18「先下线功能，代码暂时不删除」): not mounted;
+// the API answers 404 while app/model_endpoint.SEALED is True.
 import { useCallback, useEffect, useState } from 'react';
 import {
   deleteMyModelEndpoint,
