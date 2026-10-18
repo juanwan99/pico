@@ -58,3 +58,18 @@ def test_preflight_keeps_a_down_backup_when_another_catches(monkeypatch) -> None
         ("p", "text"): True, ("p", "image"): True, ("s", "text"): False, ("s", "image"): False,
     }))
     assert bs.preflight("b", "k", "p", ["s"]) is False
+
+
+def test_preflight_never_probes_aiproxy(monkeypatch) -> None:
+    """pico#1344: a probe is a one-shot call; AIProxy is for long sessions only."""
+    probed: list[str] = []
+    fake = _fake({("p", "text"): True, ("p", "image"): True, ("g", "text"): True, ("g", "image"): True})
+
+    def probe(base, key, model, content, want):
+        probed.append(model)
+        return fake(base, key, model, content, want)
+
+    monkeypatch.setattr(bs, "relay_probe", probe)
+    assert bs.preflight("b", "k", "p", ["g", "s"], frozenset({"s"})) is True
+    assert "s" not in probed
+    assert bs.preflight("b", "k", "s", ["g"], frozenset({"s"})) is False

@@ -134,7 +134,7 @@ def chat_answer(
             "POST",
             f"{base.rstrip('/')}/v1/chat/completions",
             json={
-                "model": os.environ.get("PICO_REGRESS_MODEL") or "gpt-5.6-sol",
+                "model": os.environ.get("PICO_REGRESS_MODEL") or "pico-fast",
                 "stream": True,
                 "messages": [{"role": "user", "content": question}],
             },
