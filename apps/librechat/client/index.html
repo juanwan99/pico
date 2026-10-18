@@ -229,6 +229,32 @@
           },
           true,
         );
+        /* Script errors before the app mounts (old WebView: syntax / missing API in both the modern and the
+         * legacy bundle, edu-core#3330) would leave #pico-boot spinning forever. The legacy fallback itself
+         * starts with an expected syntax error, so only give up if the boot screen is still up well after load. */
+        var bootErrors = [];
+        window.addEventListener('error', function (event) {
+          if (event.target && event.target !== window && event.target.tagName) {
+            return;
+          }
+          bootErrors.push(String(event.message || 'error').slice(0, 200));
+        });
+        window.addEventListener('unhandledrejection', function (event) {
+          bootErrors.push(String((event.reason && event.reason.message) || 'rejection').slice(0, 200));
+        });
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            var boot = document.getElementById('pico-boot');
+            if (!boot || !bootErrors.length) {
+              return;
+            }
+            window.__lcRumPush('boot-too-old', { message: bootErrors[bootErrors.length - 1] });
+            boot.innerHTML =
+              '<h1 style="font-size:1.25rem;font-weight:600;margin:0">浏览器太旧，Pico 打不开</h1>' +
+              '<p style="margin:0;opacity:.75;font-size:.95rem;max-width:22rem">请在应用商店更新「Android System WebView」或手机浏览器后再试，也可以在电脑上打开 pico.aivia.asia</p>' +
+              '<button type="button" onclick="location.reload()" style="margin-top:8px;padding:8px 20px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;font-size:.95rem">重新加载</button>';
+          }, 15000);
+        });
         window.addEventListener('unhandledrejection', function (event) {
           var message = event.reason && event.reason.message;
           if (
