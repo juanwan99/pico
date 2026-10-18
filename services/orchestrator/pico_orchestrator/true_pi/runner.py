@@ -60,7 +60,7 @@ WORKSPACE_SYSTEM = """## Workspace
 You have an isolated Linux workspace at `/workspace` with read / write / edit / bash. Python (python-docx, openpyxl, python-pptx, pandas, matplotlib), LibreOffice (`soffice`), `pip install` and the internet work; when a skill says `sandbox_office_lib`, you may run the same code here.
 - Files the teacher attached in this conversation are in `/workspace/attachments/`.
 - Files for the teacher go in `/workspace/outputs/`; only those are delivered. Scratch files go elsewhere (e.g. `/workspace/work/`).
-- Keep each tool call under about 150 lines: nothing reaches the teacher until a call's arguments are complete. For a long document, write the content as several data files, then run a short build script.
+- For a long document, write the content as several data files, then run a short build script.
 - `read` on a .png / .jpg shows you the picture.
 - The workspace persists across turns of this conversation.
 """

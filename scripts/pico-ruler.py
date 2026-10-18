@@ -86,6 +86,7 @@ class RulerResult:
     # failed or was cancelled (the teacher was told) = 如实没做成 (#1334, 统筹窗 10-18).
     fake_delivery: list[str] = field(default_factory=list)
     honest_fail: list[str] = field(default_factory=list)
+    drafting_max_gap_s: float = 0.0
     status: str = ""
     fail_reason: str = ""
     files: list[str] = field(default_factory=list)
@@ -757,7 +758,9 @@ def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) 
             rid = str((task.get("latest_run") or {}).get("id") or "")
             if rid:
                 res.run_ids.append(rid)
-                res.tool_calls += sum(1 for e in pico.events(rid) if str(e.get("kind") or e.get("type") or "") == "tool.call")
+                evs = pico.events(rid)
+                res.tool_calls += sum(1 for e in evs if str(e.get("kind") or e.get("type") or "") == "tool.call")
+                res.drafting_max_gap_s = max(res.drafting_max_gap_s, drafting_max_gap(evs))
         res.input_tokens, res.output_tokens, res.model_calls, res.first_input_tokens = usage_for(opts["db"], res.run_ids)
         all_new = [a for new in turn_new for a in new]
         res.files = [str(a.get("title") or "") for a in all_new]
@@ -779,6 +782,23 @@ def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) 
         res.fail_reason = "other"
         res.notes.append(f"HTTP {exc.response.status_code}")
     return res
+
+
+def drafting_max_gap(events: list[dict[str, Any]]) -> float:
+    """Longest wait between two tool.drafting lines of one long tool call (pico#1332)."""
+    from datetime import datetime
+
+    gap, prev = 0.0, None
+    for e in sorted(events, key=lambda x: int(x.get("seq") or 0)):
+        kind = str(e.get("kind") or e.get("type") or "")
+        if kind != "tool.drafting":
+            prev = None
+            continue
+        ts = datetime.fromisoformat(str(e.get("created_at"))).timestamp() if e.get("created_at") else None
+        if prev is not None and ts is not None:
+            gap = max(gap, ts - prev)
+        prev = ts
+    return round(gap, 1)
 
 
 # ---------------------------------------------------------------- reporting
@@ -808,6 +828,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "input_tokens_total": sum(r["input_tokens"] for r in results),
         "output_tokens_total": sum(r["output_tokens"] for r in results),
         "asks_total": sum(r["asks"] for r in tasks),
+        "drafting_max_gap_s": max((r.get("drafting_max_gap_s", 0.0) for r in tasks), default=0.0),
     }
 
 
@@ -849,6 +870,7 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
         ("工具往返中位", sa["tool_calls_median"], sb["tool_calls_median"]),
         ("输入 token 合计", sa["input_tokens_total"], sb["input_tokens_total"]),
         ("输出 token 合计", sa["output_tokens_total"], sb["output_tokens_total"]),
+        ("写参数进度最大间隔 s", sa.get("drafting_max_gap_s", "—"), sb.get("drafting_max_gap_s", "—")),
     ]
     out = [f"| 指标 | {a.get('label') or 'A'} | {b.get('label') or 'B'} |", "|---|---:|---:|"]
     out += [f"| {k} | {x} | {y} |" for k, x, y in rows]

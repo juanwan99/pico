@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from pico_orchestrator.ask_user import AskTimedOut
+from pico_orchestrator.model_caps import output_cap_for_model
 from pico_orchestrator.true_pi.config import extension_path, normalize_pi_thinking_level, pi_bin
 from pico_orchestrator.true_pi.thinking import (
     incremental_text_from_update,
@@ -146,8 +147,11 @@ def official_compaction_settings(
     }
 
 
-def true_pi_windows_from_caps(caps: Any | None) -> tuple[int, int]:
-    """Lane windows: context window, output cap. Never treat them as the same."""
+def true_pi_windows_from_caps(caps: Any | None, model: str | None = None) -> tuple[int, int]:
+    """Lane windows: context window, output cap. Never treat them as the same.
+
+    Output cap: the model's own ceiling when known (pico#1332), else the tier cap.
+    """
     thinking = bool(getattr(caps, "thinking_on", False)) if caps is not None else False
     context = int(getattr(caps, "max_context", 0) or 0) if caps is not None else 0
     output = int(getattr(caps, "max_tokens", 0) or 0) if caps is not None else 0
@@ -155,7 +159,7 @@ def true_pi_windows_from_caps(caps: Any | None) -> tuple[int, int]:
         context = 256_000 if thinking else 128_000
     if output <= 0:
         output = 32_000
-    return context, output
+    return context, output_cap_for_model(model, output)
 
 
 def true_pi_models_document(

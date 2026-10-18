@@ -535,13 +535,15 @@ def test_box_hides_redundant_office_tools() -> None:
     assert "/workspace/outputs/" in WORKSPACE_SYSTEM and "/workspace/attachments/" in WORKSPACE_SYSTEM
 
 
-def test_box_prompt_keeps_tool_calls_small() -> None:
-    # Vertex emits tool-call arguments in one piece: a 90KB write = 3+ min of silence (#1111).
+def test_box_prompt_has_no_tool_call_size_rule() -> None:
+    # pico#1332: the 150-line rule split one document into dozens of round trips.
+    # Gemini via New API streams tool arguments (measured 10-17: 117 deltas, max gap
+    # 0.4 s), so tool.drafting shows progress while a long call is written.
     from pico_orchestrator.true_pi.runner import WORKSPACE_SYSTEM
 
-    assert "150 lines" in WORKSPACE_SYSTEM
+    assert "150 lines" not in WORKSPACE_SYSTEM
+    # Ruler s13: dropping the data-files half too cut a 20-page doc to 1190 words.
     assert "several data files" in WORKSPACE_SYSTEM
-    assert "short build script" in WORKSPACE_SYSTEM
 
 
 def test_proxy_hedges_model_calls_not_tools(proxy_client) -> None:

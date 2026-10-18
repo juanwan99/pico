@@ -179,3 +179,25 @@ def test_c2_deep_context_is_256k_not_output() -> None:
     assert deep["max_tokens"] == 32_000
     assert delivery.max_tokens != 256_000
     assert delivery.max_context != delivery.max_tokens
+
+
+def test_output_cap_follows_model_ceiling() -> None:
+    # pico#1332: gemini-3.8-flash takes 65536 (65537 is a 400 on the live gateway).
+    from pico_orchestrator.model_caps import output_cap_for_model
+
+    assert output_cap_for_model("gemini-3.8-flash", 32_000) == 65_536
+    assert output_cap_for_model("new-api/gemini-3.8-flash", 64_000) == 65_536
+    # Unknown models (incl. a teacher's own endpoint, pico#1331) keep the configured cap.
+    assert output_cap_for_model("deepseek-chat", 32_000) == 32_000
+    assert output_cap_for_model("", 32_000) == 32_000
+    assert output_cap_for_model(None, 64_000) == 64_000
+
+
+def test_true_pi_output_window_uses_model_ceiling() -> None:
+    from pico_orchestrator.run_types import RunCaps
+    from pico_orchestrator.true_pi.client import true_pi_windows_from_caps
+
+    caps = RunCaps(max_context=256_000, max_tokens=32_000, thinking_on=False)
+    assert true_pi_windows_from_caps(caps, "gemini-3.8-flash") == (256_000, 65_536)
+    assert true_pi_windows_from_caps(caps, "my-own-model") == (256_000, 32_000)
+    assert true_pi_windows_from_caps(caps) == (256_000, 32_000)

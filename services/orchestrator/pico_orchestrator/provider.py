@@ -14,6 +14,7 @@ from openai import APIConnectionError, AsyncOpenAI
 
 from pico_orchestrator import upstream
 from pico_orchestrator.brain_ha import is_model_dead
+from pico_orchestrator.model_caps import output_cap_for_model
 from pico_orchestrator.sse_keepalive import is_proxy_first_byte_timeout
 from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG
 
@@ -342,7 +343,7 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
         "backend_model": product_backend_model(deep=deep),
         "thinking": thinking,
         "max_steps": 60,
-        "max_tokens": 32000,
+        "max_tokens": output_cap_for_model(product_backend_model(deep=deep), 32000),
         "max_context": 256000,
         "fallback": product_backend_model(deep=bool(gpt_brain or deep)),
     }

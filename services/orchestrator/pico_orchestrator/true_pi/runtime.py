@@ -542,7 +542,7 @@ async def _run_true_pi_once(
 
                 backend_model = vision_model_for_images(backend_model)
             thinking_on = bool(getattr(caps, "thinking_on", False))
-            max_context, max_out = true_pi_windows_from_caps(caps)
+            max_context, max_out = true_pi_windows_from_caps(caps, backend_model)
             openai_brain = uses_openai_responses_brain(provider)
             openai_overlay = uses_new_api_openai_overlay(provider) or openai_brain
             pi_provider = "openai" if openai_overlay or provider.name != "deepseek" else "deepseek"
