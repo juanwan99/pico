@@ -1,8 +1,10 @@
-"""pico#1322: Pi re-sending the same call and getting the same result stops the run.
+"""pico#1322: Pi re-sending the same calls and getting the same results stops the run.
 
 Ruler lp (10-18): R20 sent one bash command 37 times with one IndexError each
-time, R08 one base64 decode 50 times; both ran on until the wall clock. The
-third identical (tool, args, result) in a row now stops Pi as an honest failure.
+time, R08 one base64 decode 50 times; ruler nb R08 took turns between two
+unchanged checks 46 rounds. All ran on until the wall clock. The third identical
+round in a row (one to four calls, each the same tool, args and result) now
+stops Pi as an honest failure.
 """
 
 from __future__ import annotations
@@ -85,6 +87,29 @@ def test_a_different_call_in_between_starts_the_count_over() -> None:
     other = ("read", "make.py", "def main(): ...")
     assert _ends([BAD, BAD, other, BAD, BAD, other, BAD, BAD]) == [False] * 8
     assert _ends([BAD, BAD, other, BAD, BAD, BAD]) == [False] * 5 + [True]
+
+
+CHECK = ("bash", "python check_rows.py", "期中成绩 46 4")
+CHART = ("bash", "python check_chart.py", "BarChart 三科平均分对比")
+
+
+def test_two_checks_taking_turns_stop_at_the_third_round() -> None:
+    assert _ends([CHECK, CHART] * 3) == [False] * 5 + [True]
+
+
+def test_a_changed_call_inside_the_rounds_starts_over() -> None:
+    other = ("bash", "python fix_chart.py", "已保存")
+    assert not any(_ends([CHECK, CHART, CHECK, other, CHECK, CHART]))
+
+
+def test_a_round_of_three_stops_at_the_third_round() -> None:
+    assert _ends([CHECK, CHECK, CHART] * 3)[-1] is True
+    assert not any(_ends([CHECK, CHECK, CHART] * 2))
+
+
+def test_rounds_longer_than_four_calls_are_not_watched() -> None:
+    five = [("bash", f"python step{i}.py", "ok") for i in range(5)]
+    assert not any(_ends(five * 3))
 
 
 def test_anything_said_in_between_starts_the_count_over() -> None:

@@ -86,8 +86,11 @@ def track_open_tool(
         open_tools.clear()
 
 
-# pico#1322: the same tool, args and result this many times in a row is no progress.
+# pico#1322: the same tool calls, args and results this many times in a row is no
+# progress. A round may be one call or a few taking turns (ruler R08: two checks
+# alternating 46 rounds), up to SAME_STEP_ROUND calls.
 SAME_STEP_LIMIT = 3
+SAME_STEP_ROUND = 4
 SAME_STEP_CODE = "true_pi.no_progress"
 
 
@@ -96,27 +99,28 @@ def _same_key(value: Any) -> str:
 
 
 class SameStep:
-    """Adjacent tool calls that change nothing: same tool, same args, same result.
+    """Tool calls that change nothing: the same round of calls (same tool, same
+    args, same result each) done again as is, ``limit`` times in a row.
 
     Pi's end event carries no args; they come from the start of the same call.
-    A different call in between starts the count over, and so does anything the
-    model is told in between (a new prompt, a resume, a teacher's steer). Args
-    that change are never counted as the same step.
+    Any call that differs starts the count over, and so does anything the model
+    is told in between (a new prompt, a resume, a teacher's steer). Args that
+    change are never counted as the same step.
     """
 
-    def __init__(self, limit: int = SAME_STEP_LIMIT) -> None:
+    def __init__(self, limit: int = SAME_STEP_LIMIT, round_max: int = SAME_STEP_ROUND) -> None:
         self.limit = limit
+        self.round_max = round_max
         self.args: dict[str, str] = {}
-        self.last: tuple[str, str, str] | None = None
-        self.count = 0
+        self.steps: list[tuple[str, str, str]] = []
 
     def see(self, event_type: str, raw: dict[str, Any]) -> bool:
-        """True when this event ends the ``limit``-th identical call in a row."""
+        """True when this event ends the ``limit``-th identical round in a row."""
         msg = raw.get("message")
         if event_type == "agent_start" or (
             event_type == "message_start" and isinstance(msg, dict) and msg.get("role") == "user"
         ):
-            self.last, self.count = None, 0
+            self.steps.clear()
             return False
         call_id = str(raw.get("toolCallId") or raw.get("callId") or "")
         if event_type == "tool_execution_start":
@@ -128,14 +132,19 @@ class SameStep:
         if isinstance(result, dict) and "content" in result:
             # What the model reads; details may hold a fresh temp path per call.
             result = result["content"]
-        step = (
-            str(raw.get("toolName") or raw.get("tool") or ""),
-            self.args.pop(call_id, ""),
-            _same_key([result, bool(raw.get("isError"))]),
+        self.steps.append(
+            (
+                str(raw.get("toolName") or raw.get("tool") or ""),
+                self.args.pop(call_id, ""),
+                _same_key([result, bool(raw.get("isError"))]),
+            )
         )
-        self.count = self.count + 1 if step == self.last else 1
-        self.last = step
-        return self.count >= self.limit
+        del self.steps[: -self.limit * self.round_max]
+        for size in range(1, self.round_max + 1):
+            tail = self.steps[-size * self.limit :]
+            if len(tail) == size * self.limit and tail == tail[-size:] * self.limit:
+                return True
+        return False
 
 
 def pi_accepts_image(images: Any, model: str | None) -> bool:
@@ -1073,7 +1082,7 @@ async def _run_true_pi_once(
                         return await _failed(
                             emit,
                             code=SAME_STEP_CODE,
-                            reason=f"{state.same_step} 连续 {SAME_STEP_LIMIT} 次同样的调用、同样的结果",
+                            reason=f"{state.same_step} 连续 {SAME_STEP_LIMIT} 轮同样的调用、同样的结果",
                             state=state,
                             principal=principal,
                             tag=tag,
