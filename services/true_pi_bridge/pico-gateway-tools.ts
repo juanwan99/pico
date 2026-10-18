@@ -188,9 +188,14 @@ function opened(toolName: string, isError: boolean, details: unknown): boolean {
 
 function lazyPageHands(pi: ExtensionAPI) {
   let open = false;
+  // Registration order, not hands-at-the-end: Pi sends the list (and rebuilds the
+  // system prompt) in this order, so the run that opens a page and every later
+  // run must get the same list or the upstream prompt cache is lost (#1346).
   const withHands = () => {
-    const hands = pi.getAllTools().map((tool) => tool.name).filter(pageHand);
-    pi.setActiveTools([...new Set([...pi.getActiveTools(), ...hands])]);
+    const active = new Set(pi.getActiveTools());
+    pi.setActiveTools(
+      pi.getAllTools().map((tool) => tool.name).filter((name) => active.has(name) || pageHand(name)),
+    );
   };
   // Every prompt of the run (the self-check round too). An earlier run of the
   // same conversation that opened a page leaves it in the session.

@@ -14,6 +14,9 @@ prints, for one channel over a window:
   key's first and last 4 characters, hence the prefixes;
 * from a conversation's second request on, the share that hit the cache.
 
+Only Pico's own token is judged (``--token``, default ``pico-gateway``); other
+tokens on the channel (smoke checks, probes) are counted on one line apart.
+
 Pass lines (card acceptance): peak <= 4, session share >= 99 %, second-step-on
 hit share >= 90 %. Exit 1 on a miss.
 
@@ -124,6 +127,7 @@ def main() -> int:
     )
     ap.add_argument("--db", default=DB)
     ap.add_argument("--channel", default="aiproxy-openai", help="New API channel name")
+    ap.add_argument("--token", default="pico-gateway", help="New API token whose requests are judged")
     ap.add_argument("--days", type=float, default=1.0)
     ap.add_argument(
         "--since", default="", help="Shanghai time, e.g. 2026-10-19 08:00 (overrides --days)"
@@ -139,14 +143,22 @@ def main() -> int:
     if not ids:
         print(f"没有叫 {args.channel} 的通道", file=sys.stderr)
         return 2
+    window = "type = 2 and channel_id = ? and created_at >= ? and created_at < ?"
     rows = db.execute(
-        "select created_at, use_time, prompt_tokens, other from logs"
-        " where type = 2 and channel_id = ? and created_at >= ? and created_at < ? order by created_at",
-        (ids[0], since, until),
+        f"select created_at, use_time, prompt_tokens, other from logs where {window}"
+        " and token_name = ? order by created_at",
+        (ids[0], since, until, args.token),
+    ).fetchall()
+    others = db.execute(
+        f"select token_name, count(*) from logs where {window} and token_name != ?"
+        " group by token_name order by 2 desc",
+        (ids[0], since, until, args.token),
     ).fetchall()
     m = measure(rows)
     span = f"{datetime.fromtimestamp(since, SH):%m-%d %H:%M} – {datetime.fromtimestamp(until, SH):%m-%d %H:%M}"
-    print(f"通道 {args.channel} · {span}（上海时间）")
+    print(f"通道 {args.channel} · 令牌 {args.token} · {span}（上海时间）")
+    if others:
+        print("不判：" + " · ".join(f"{name or '（无令牌）'} {n} 次" for name, n in others))
     print(
         f"请求 {m['requests']} · 同一把 key 同时请求峰值 {m['peak']} · 缓存命中 {m['cache_hit']:.0%}"
         f" · 零缓存 {m['zero_cache']:.0%}"
