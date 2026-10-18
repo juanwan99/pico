@@ -114,6 +114,13 @@ def brain_candidates(primary: str | None, *, long_session: bool = False) -> list
     return up + [m for m in out if m not in up]
 
 
+def one_shot_model(model: str | None) -> str | None:
+    """The model a one-shot call (web search, query expansion) may use: ``model``
+    unless it is AIProxy-only, else the first fallback that is not; None if none."""
+    models = brain_candidates(model)
+    return models[0] if models else None
+
+
 def mark_down(model: str, seconds: float | None = None) -> None:
     """Skip a dead channel / key for a while instead of hitting it on every call."""
     span = seconds

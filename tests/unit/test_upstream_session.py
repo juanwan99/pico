@@ -364,3 +364,37 @@ async def test_a_pi_run_may_fall_back_to_aiproxy(monkeypatch: pytest.MonkeyPatch
         caps=RunCaps(backend_model="gemini-3.8-flash", ui_model="pico-fast"),
     )
     assert tried == ["gemini-3.8-flash", "gpt-5.6-sol"]
+
+
+def test_one_shot_callers_stay_off_aiproxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Web search and KB query expansion are one-shot calls: never on AIProxy."""
+    from pico_orchestrator import brain_ha, meili_kb, web_tools
+
+    monkeypatch.delenv(brain_ha.LONG_SESSION_ENV, raising=False)
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "grok-4.6,gpt-5.6-sol")
+    assert brain_ha.one_shot_model("gemini-3.8-flash") == "gemini-3.8-flash"
+    assert brain_ha.one_shot_model("gpt-5.6-sol") == "grok-4.6"
+
+    sent: list[str] = []
+
+    class Http:
+        def request(self, method, url, json=None, **kw):
+            sent.append(json["model"])
+            return 200, {"output": []}
+
+    monkeypatch.setenv("PICO_KB_QUERY_EXPAND", "1")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gpt-5.6-sol")
+    monkeypatch.setattr(meili_kb, "new_api_base", lambda: "http://127.0.0.1:3000/v1")
+    monkeypatch.setattr(meili_kb, "new_api_key", lambda: "k")
+    monkeypatch.setattr(meili_kb, "_is_new_api_loopback", lambda _b: True)
+    monkeypatch.setattr(meili_kb, "HttpxClient", Http)
+    meili_kb.expand_search_queries("期中考试安排")
+    assert sent == ["grok-4.6"]
+
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "gpt-5.6-sol")
+    assert meili_kb.expand_search_queries("期中考试安排") == [] and sent == ["grok-4.6"]
+    brain = SimpleNamespace(name="deepseek", api_key="k", model="gpt-5.6-sol", base_url="http://x/v1")
+    monkeypatch.setattr(web_tools, "resolve_provider", lambda: brain)
+    monkeypatch.setattr(web_tools.httpx, "AsyncClient", None)  # any request would blow up
+    out = asyncio.run(web_tools._deepseek_web_search("今天天气"))
+    assert out["honest_miss"] and "多轮会话" in out["message"]

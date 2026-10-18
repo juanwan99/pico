@@ -426,7 +426,12 @@ def expand_search_queries(query: str) -> list[str]:
     q = (query or "").strip()
     if not q or not new_api_base() or not new_api_key() or not _is_new_api_loopback(new_api_base()):
         return []
-    model = (os.environ.get("DEEPSEEK_MODEL") or "gpt-5.6-sol").strip() or "gpt-5.6-sol"
+    from pico_orchestrator.brain_ha import one_shot_model
+
+    # One-shot call: never on AIProxy, which is for long sessions only (pico#1344).
+    model = one_shot_model(os.environ.get("DEEPSEEK_MODEL") or "gpt-5.6-sol")
+    if model is None:
+        return []
     prompt = (
         "老师在搜学校材料。根据这个问题写出 2 条检索词，要用材料里可能出现的专名、文件名、地名、日期，"
         "不要解释。只输出 JSON：{\"q\":[\"...\",\"...\"]}\n问题：" + q[:300]

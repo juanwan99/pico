@@ -201,7 +201,10 @@ GEN_PROMPT = """你是一名中小学老师，下面是学校知识库里的一�
 def _gpt_json(prompt: str, *, timeout_s: float = 120.0) -> dict[str, Any]:
     base = (os.environ.get("DEEPSEEK_BASE_URL") or "http://127.0.0.1:3000/v1").rstrip("/")
     key = probe_key()
-    model = (os.environ.get("KB_EVAL_MODEL") or os.environ.get("DEEPSEEK_MODEL") or "gpt-5.6-sol").strip()
+    model = (os.environ.get("KB_EVAL_MODEL") or os.environ.get("DEEPSEEK_MODEL") or "gemini-3.8-flash").strip()
+    long_only = os.environ.get("PICO_LONG_SESSION_MODELS", "gpt-5.6-sol").split(",")
+    if model in {m.strip() for m in long_only}:  # pico#1344: probes never use AIProxy
+        raise SystemExit(f"{model} 只给多轮会话用，评测不用它；换 KB_EVAL_MODEL")
     body = {
         "model": model,
         "input": [{"role": "user", "content": prompt}],

@@ -141,9 +141,19 @@ def pico_probe(token: str, lane: str, content, want: str, extra: dict | None = N
     return {"ok": not err and want in reply, "s": round(time.time() - t0, 1), "err": err, "reply": reply[:80]}
 
 
-def preflight(base: str, key: str, primary: str, fallbacks: list[str]) -> bool:
+def preflight(
+    base: str, key: str, primary: str, fallbacks: list[str], long_only: frozenset[str] = frozenset()
+) -> bool:
+    """``long_only``: AIProxy models (pico#1344) — kept in the list for Pi runs, never probed:
+    a probe is a one-shot call, and AIProxy is for long multi-round sessions only."""
+    if primary in long_only:
+        print("BLOCKED", f"主模型 {primary} 只给多轮会话用，不能当主模型", flush=True)
+        return False
     rows = {}
     for model in [primary, *fallbacks]:
+        if model in long_only:
+            print(json.dumps({"preflight": model, "skipped": "只给多轮会话用，不探"}, ensure_ascii=False), flush=True)
+            continue
         rows[model] = {
             "text": relay_probe(base, key, model, TEXT_ASK, TEXT_WANT),
             "image": relay_probe(base, key, model, image_content(IMAGE_ASK), IMAGE_WANT),
@@ -154,10 +164,11 @@ def preflight(base: str, key: str, primary: str, fallbacks: list[str]) -> bool:
         problems.append(f"主模型 {primary} 文字或读图不过")
     # A backup that is down now may stay listed: failover skips a dead channel or
     # key (#1261) and it comes back on its own. One backup must catch everything.
-    for m in fallbacks:
+    probed = [m for m in fallbacks if m in rows]
+    for m in probed:
         if not rows[m]["text"]["ok"]:
             print("DOWN", f"备用 {m} 现在不通，留在名单里，坏着会自动跳过", flush=True)
-    if fallbacks and not any(rows[m]["text"]["ok"] and rows[m]["image"]["ok"] for m in fallbacks):
+    if fallbacks and not any(rows[m]["text"]["ok"] and rows[m]["image"]["ok"] for m in probed):
         problems.append("备用里没有一个文字、读图都通的")
     for p in problems:
         print("BLOCKED", p, flush=True)
@@ -216,7 +227,10 @@ def main() -> int:
         return 2
     key = probe_key(env)  # preflight hits the relay on pico-probe, not production
     print(f"now primary={env.get('DEEPSEEK_MODEL')} fallbacks={env.get('PICO_BRAIN_FALLBACKS', '')}", flush=True)
-    if not preflight(base, key, args.primary, fallbacks):
+    long_only = frozenset(
+        m.strip() for m in env.get("PICO_LONG_SESSION_MODELS", "gpt-5.6-sol").split(",") if m.strip()
+    )
+    if not preflight(base, key, args.primary, fallbacks, long_only):
         print("NOT SWITCHED")
         return 1
     if args.dry_run:

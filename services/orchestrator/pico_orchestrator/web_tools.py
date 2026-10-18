@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from pico_orchestrator.brain_ha import one_shot_model
 from pico_orchestrator.gateway import Principal, ToolError
 from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.usage_hook import emit_search_usage
@@ -318,9 +319,21 @@ async def _deepseek_web_search(query: str) -> dict[str, Any]:
             "provider": provider.name,
             "teacher_sources_md": "未检索到可用来源",
         }
+    model = one_shot_model(provider.model or "deepseek-v4-flash")
+    if model is None:  # AIProxy is for long sessions only (pico#1344)
+        return {
+            "query": query,
+            "retrieved": False,
+            "honest_miss": True,
+            "message": "未检索：只剩多轮会话专用的模型，搜索这种一问的调用不用它。",
+            "sources": [],
+            "excerpt": "",
+            "provider": provider.name,
+            "teacher_sources_md": "未检索到可用来源",
+        }
     url = _responses_url(provider.base_url)
     payload = {
-        "model": provider.model or "deepseek-v4-flash",
+        "model": model,
         "input": query,
         "instructions": _DS_CITE_INSTRUCTIONS,
         "tools": [{"type": "web_search"}],
