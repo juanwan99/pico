@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import sqlite3
+import subprocess
 import sys
 import threading
 import time
@@ -250,3 +252,34 @@ def test_pressure_report_reads_new_api_log() -> None:
     assert rep.verdict(m) == ["带会话的请求 60.0% < 99%"]
     rows.append(_log(109, 20, 10, 0, "01a1...6aaa"))
     assert rep.verdict(rep.measure(rows))[0] == "同时请求峰值 5 > 4"
+
+
+def test_pressure_report_judges_only_picos_token(tmp_path: Path) -> None:
+    db = tmp_path / "one-api.db"
+    con = sqlite3.connect(db)
+    con.execute("create table channels (id integer, name text)")
+    con.execute(
+        "create table logs (created_at int, type int, channel_id int, token_name text,"
+        " use_time int, prompt_tokens int, other text)"
+    )
+    con.execute("insert into channels values (3, 'aiproxy-openai')")
+    now = int(time.time())
+    rows = [
+        ("pico-gateway", _log(now - 60, 5, 1000, 0, "01a1...6aaa")),
+        ("pico-gateway", _log(now - 50, 5, 1200, 900, "01a1...6aaa")),
+        ("pico-probe", _log(now - 40, 1, 26, 0, "pico...2521")),  # platform smoke check
+        ("pico-probe", _log(now - 30, 1, 26, 0, "pico...2521")),
+    ]
+    for token, (t, use, pt, other) in rows:
+        con.execute("insert into logs values (?, 2, 3, ?, ?, ?, ?)", (t, token, use, pt, other))
+    con.commit()
+    run = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/pico-upstream-pressure-report.py"), "--db", str(db)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stdout
+    assert "请求 2 " in run.stdout and "不判：pico-probe 2 次" in run.stdout
+    assert "✅ 三条都过" in run.stdout
+

@@ -179,3 +179,21 @@ def test_a_skill_without_hands_gets_none_after_open(tmp_path: Path) -> None:
         "web_search,sandbox_browser_open",
     )
     assert start == opened == ["web_search", "sandbox_browser_open"]
+
+
+@pytest.mark.skipif(not _node_strips_types(), reason="needs node >= 22.18 (type stripping)")
+def test_the_next_run_gets_the_same_tool_list_as_the_opening_run(tmp_path: Path) -> None:
+    """#1346: Pi sends the list (and rebuilds the system prompt) in list order, so
+    a different order in the next run loses the whole upstream prompt cache."""
+    visible = visible_tools_env(resolve_visible_tools(None))
+    _, opened = _bridge(
+        tmp_path, [["start", []], ["end", "sandbox_browser_open", False, {"url": "u"}]], visible
+    )
+    page = {
+        "type": "message",
+        "message": {"role": "toolResult", "toolName": "sandbox_browser_open", "details": {"url": "u"}},
+    }
+    (next_run,) = _bridge(tmp_path, [["start", [page]]], visible)
+    assert _hands(opened) == set(PAGE_HAND_TOOLS)
+    assert opened == next_run
+

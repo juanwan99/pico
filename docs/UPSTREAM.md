@@ -30,7 +30,7 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
 - **换模型最多一次**：主模型加一个备用（`brain_candidates(...)[:2]`）。直连、Pi、阅卷三条路都会换；429（如 Vertex 共享配额）、安全拦截、超时不换。
 - **按发出去的模型选线**：gpt-* / grok-* 走 Responses，Gemini 走 chat/completions。直连、Pi、阅卷三条路都看这一跳实际发的模型，不看主脑。阅卷原来看主脑，把 gpt-5.6-sol 发到 chat/completions，New API 回 400（pico#1288）。
 - **按 key 限并发**：同一把 key 同时最多 4 个请求（`PICO_UPSTREAM_KEY_MAX`），同一个老师同时最多 2 个（`PICO_UPSTREAM_MEMBER_MAX`），超了排队，最多等 120 s；先排老师自己的，排着的不占 key 的名额（pico#1344：现网 14 天同时运行最多 5 次、每人基本 1 次）。尺子栈只给 1 个，`pico-ruler.py` 在宿主上一次只跑一遍（锁 `/tmp/pico-ruler.lock`，后来的等着）。
-- **一个对话一个会话**（pico#1344）：AIProxy 10-18 封了 key，说每次请求都新开对话、并发高。New API 自带「codex cli trace」规则，把客户端的 `session_id` 等头原样转给上游；原先代理只转四个头，会话头被丢了。现在 Pi 的请求带 `session_id` = Pi 自己的 `prompt_cache_key`（会话文件按对话钉死，同一对话不变）；直连路在 `upstream.caller_scope` 里带 `pcs-<对话哈希>`，同时当 `prompt_cache_key`。对账：`python3 scripts/pico-upstream-pressure-report.py --days 1`（宿主上只读 New API 库：同时请求峰值 ≤ 4、带会话 ≥ 99%、同一对话第 2 步起命中缓存 ≥ 90%，不过退出 1）。
+- **一个对话一个会话**（pico#1344）：AIProxy 10-18 封了 key，说每次请求都新开对话、并发高。New API 自带「codex cli trace」规则，把客户端的 `session_id` 等头原样转给上游；原先代理只转四个头，会话头被丢了。现在 Pi 的请求带 `session_id` = Pi 自己的 `prompt_cache_key`（会话文件按对话钉死，同一对话不变）；直连路在 `upstream.caller_scope` 里带 `pcs-<对话哈希>`，同时当 `prompt_cache_key`。对账：`python3 scripts/pico-upstream-pressure-report.py --days 1`（宿主上只读 New API 库：同时请求峰值 ≤ 4、带会话 ≥ 99%、同一对话第 2 步起命中缓存 ≥ 90%，不过退出 1；只判令牌 `pico-gateway`，冒烟、探针等其他令牌另列次数，#1346）。
 - **本机 403 和上游 403 分开**：
   - 只有上游回的错误状态，才由 run proxy 记进 `upstream.note_upstream_error`。
   - brain 换模型时看的是这条记录（`should_failover(..., relay=...)`）。所以上游回一个光秃秃的 403 也会换模型；本机 proxy 自己回的 403（`proxy.no_run` / `auth.denied`）不会。
