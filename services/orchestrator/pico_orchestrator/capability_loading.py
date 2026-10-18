@@ -52,20 +52,30 @@ CORE_VISIBLE_TOOLS: tuple[str, ...] = (
     # AI looks at the page (#1209): Pi gets the PNG as image content.
     "sandbox_browser_screenshot",
     "sandbox_document_open",
-    "edu_catalog_find",
-    "edu_catalog_describe",
-    "edu_catalog_command",
-    "edu_run_pack",
+)
+
+# Registered with CORE, but the bridge keeps them off the model's tool list until
+# sandbox_browser_open succeeds in the session (#1342): no use before a page is
+# open, and their definitions were near half of the tool text on every turn.
+PAGE_HAND_TOOLS: tuple[str, ...] = tuple(
+    name
+    for name in CORE_VISIBLE_TOOLS
+    if name.startswith("sandbox_browser_") and name != "sandbox_browser_open"
 )
 
 # Same gateway, not registered unless a hung skill lists them — or, for
-# propose_page_mutation, the edu page in view reported affordances (#975).
+# propose_page_mutation, the edu page in view reported affordances (#975);
+# for the school catalog (edu_agent_tools), the run is the edu sidebar (#1342).
 EXTENDED_TOOLS: tuple[str, ...] = (
     "publish_html_page",
     "unpublish_html_page",
     "verify_html_document",
     "sandbox_preview_inspect",
     "propose_page_mutation",
+    "edu_catalog_find",
+    "edu_catalog_describe",
+    "edu_catalog_command",
+    "edu_run_pack",
 )
 
 # Never auto-apply. Catalog may name them; Pico does not hang them from keywords.

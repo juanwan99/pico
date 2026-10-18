@@ -90,9 +90,9 @@ def test_boot_patches_openai_compat_sidebar_route() -> None:
         assert skill is None
         assert plan.force_agent is False
         assert plan.min_artifacts == 0
-        assert oc._normalize_allowed_tools(None) is None
-        assert oc._normalize_allowed_tools([]) is None
-        assert oc._normalize_allowed_tools(["web_search", "web_fetch"]) is None
+        assert oc._normalize_allowed_tools(None) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
+        assert oc._normalize_allowed_tools([]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
+        assert oc._normalize_allowed_tools(["web_search", "web_fetch"]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
         assert "generate_html_document" in EDU_SIDEBAR_DEFAULT_TOOLS
         assert "generate_image" in EDU_SIDEBAR_DEFAULT_TOOLS
     finally:

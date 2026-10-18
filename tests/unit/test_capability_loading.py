@@ -34,14 +34,14 @@ def test_core_and_extended_partition_gateway():
     assert set(CORE_VISIBLE_TOOLS) & set(EXTENDED_TOOLS) == set()
     assert "bash" not in CORE_VISIBLE_TOOLS
     assert "bash" not in EXTENDED_TOOLS
-    assert len(CORE_VISIBLE_TOOLS) == 33  # 18 + 7 AI-hands verbs (#1207) + screenshot (#1209) + back/hover/tabs (#1217) + fill/upload (#1219) + page_file/page_fn (#1242)
+    assert len(CORE_VISIBLE_TOOLS) == 29  # 18 + 7 AI-hands verbs (#1207) + screenshot (#1209) + back/hover/tabs (#1217) + fill/upload (#1219) + page_file/page_fn (#1242) − edu catalog to the sidebar (#1342)
     assert "read_office_skill" in CORE_VISIBLE_TOOLS
     assert "inspect_document" not in CORE_VISIBLE_TOOLS
     assert "verify_document" not in CORE_VISIBLE_TOOLS
     assert "inspect_document" not in EXTENDED_TOOLS
     assert "verify_document" not in EXTENDED_TOOLS
     assert "read_office_skill" not in EXTENDED_TOOLS
-    assert len(EXTENDED_TOOLS) == 5  # +propose_page_mutation (#975) − screenshot to CORE (#1209)
+    assert len(EXTENDED_TOOLS) == 9  # +propose_page_mutation (#975) − screenshot to CORE (#1209) + edu catalog (#1342)
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS

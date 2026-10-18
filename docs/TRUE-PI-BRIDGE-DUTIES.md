@@ -30,7 +30,7 @@ v9（观察回执）：写/改/打开工具回 `observation`（落地事实，�
 
 ## 允许的工具
 
-**不要手抄本表当 CORE。** Pi 默认可见 = `CORE_VISIBLE_TOOLS`（`capability_loading.py`）。执行天花板 = `ALLOWED_GATEWAY_TOOLS`（`true_pi/config.py`）+ 隔离工作区 Pi 内建工具（业主 2026-09-28 A，实现走第 1 张卡）。成熟文档 skill 可常驻。
+**不要手抄本表当 CORE。** Pi 默认可见 = `CORE_VISIBLE_TOOLS`（`capability_loading.py`）。执行天花板 = `ALLOWED_GATEWAY_TOOLS`（`true_pi/config.py`）+ 隔离工作区 Pi 内建工具（业主 2026-09-28 A，实现走第 1 张卡）。成熟文档 skill 可常驻。网页手（`PAGE_HAND_TOOLS`，`sandbox_browser_*` 除 open）随 CORE 注册，但桥扩展开工时把它们移出模型工具表，`sandbox_browser_open` 成功（或本会话之前开过网页）后 `setActiveTools` 加回（#1342）；edu_catalog / edu_run_pack 只在 edu 侧栏的 Pi 运行里给（`edu_sidebar_tool_ceiling`）。
 
 ```text
 现行原则（2026-09-28 · #1090）：

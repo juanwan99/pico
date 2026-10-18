@@ -169,7 +169,54 @@ function registerTool(
   });
 }
 
+// #1342: page hands are no use before a page is open. They stay registered (the
+// gateway contract is unchanged) but off the model's tool list until
+// sandbox_browser_open succeeds in this session. Mirror of
+// capability_loading.PAGE_HAND_TOOLS.
+const BROWSER_OPEN = "sandbox_browser_open";
+
+function pageHand(name: string): boolean {
+  return name.startsWith("sandbox_browser_") && name !== BROWSER_OPEN;
+}
+
+// The gateway reports its own failures as a normal result with an error body.
+function opened(toolName: string, isError: boolean, details: unknown): boolean {
+  if (toolName !== BROWSER_OPEN || isError) return false;
+  const body = (details ?? {}) as Record<string, unknown>;
+  return !body.error;
+}
+
+function lazyPageHands(pi: ExtensionAPI) {
+  let open = false;
+  const withHands = () => {
+    const hands = pi.getAllTools().map((tool) => tool.name).filter(pageHand);
+    pi.setActiveTools([...new Set([...pi.getActiveTools(), ...hands])]);
+  };
+  // Every prompt of the run (the self-check round too). An earlier run of the
+  // same conversation that opened a page leaves it in the session.
+  pi.on("before_agent_start", async (_event, ctx) => {
+    open =
+      open ||
+      ctx.sessionManager.getBranch().some((entry) => {
+        if (entry.type !== "message") return false;
+        const msg = entry.message as { role?: string; toolName?: string; isError?: boolean; details?: unknown };
+        return msg.role === "toolResult" && opened(msg.toolName ?? "", !!msg.isError, msg.details);
+      });
+    if (open) withHands();
+    else pi.setActiveTools(pi.getActiveTools().filter((name) => !pageHand(name)));
+    return undefined;
+  });
+  // Pi reads the tool list again before each model call of the loop.
+  pi.on("tool_execution_end", async (event) => {
+    if (open || !opened(event.toolName, event.isError, event.result?.details)) return undefined;
+    open = true;
+    withHands();
+    return undefined;
+  });
+}
+
 export default function (pi: ExtensionAPI) {
+  lazyPageHands(pi);
   // Free-form object args — Pico gateway validates per tool.
   const AnyArgs = Type.Object({}, { additionalProperties: true });
 

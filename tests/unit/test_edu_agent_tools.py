@@ -22,15 +22,17 @@ from pico_orchestrator.edu_agent_tools import (
     run_pack,
     steward_public_corpus,
 )
+from pico_orchestrator.edu_sidebar import EDU_SIDEBAR_DEFAULT_TOOLS
 from pico_orchestrator.gateway import AllowlistGateway, ToolError
 from pico_orchestrator.page_mutations import PageMutationBook, register_propose_page_mutation
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 
-def test_tools_on_gateway_and_core():
+def test_tools_on_gateway_and_the_sidebar_not_the_workbench():
     for name in (CATALOG_DESCRIBE, RUN_PACK, "edu_catalog_find", "edu_catalog_command"):
         assert name in ALLOWED_GATEWAY_TOOLS
-        assert name in CORE_VISIBLE_TOOLS
+        assert name not in CORE_VISIBLE_TOOLS  # beside a school page only (#1342)
+        assert name in EDU_SIDEBAR_DEFAULT_TOOLS
     gw = AllowlistGateway()
     register_edu_agent_tools(gw)
     assert CATALOG_DESCRIBE in gw.tools
