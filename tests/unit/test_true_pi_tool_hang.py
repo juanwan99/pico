@@ -246,3 +246,37 @@ async def test_silent_head_model_is_cut_off_for_the_next_one() -> None:
     assert result.code == "model.unconfigured"
     assert "first token stall" in (result.error or "")
     assert any(c.get("type") == "abort" for c in transport.sent)
+
+
+@pytest.mark.asyncio
+async def test_thinking_head_model_is_not_cut_but_the_wall_clock_still_ends_it() -> None:
+    """#1339: sol streamed thinking and was cut at 25 s with no model left to try.
+    Thinking counts as working; a model that only ever thinks still stops at max_seconds."""
+    import time
+
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(kind: str, payload: dict[str, Any]) -> None:
+        events.append((kind, payload))
+
+    transport = AbortingTransport(
+        scripted=[{"type": "agent_start"}, {"type": "turn_start"}, {"type": "thinking_delta", "delta": "先看图…"}]
+    )
+    transport.mute = True
+    t0 = time.monotonic()
+    result = await runtime._run_true_pi_once(
+        prompt="光合作用的产物？",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=1),
+        transport=transport,
+        run_id="think-t",
+        stall_switch_s=0.3,
+    )
+    took = time.monotonic() - t0
+    assert any(k == "thinking.delta" for k, _ in events)
+    assert "first token stall" not in (result.error or "")
+    # The usual wall stop: the teacher is told it stopped at the time limit.
+    assert "时间上限" in result.final_text
+    assert 0.9 <= took < 10
