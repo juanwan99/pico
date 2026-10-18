@@ -77,6 +77,8 @@ class EventMapState:
     spent_calls: int = 0
     # A tool call Pico aborted for running too long; the resume prompt says so.
     tool_hung: str = ""
+    # pico#1322: the tool Pi called the same way, with the same result, 3 times in a row.
+    same_step: str = ""
     # Before any output, an upstream error that waiting will not fix: stop Pi's
     # retries and let brain-HA fail over to the next model.
     failover_error: str = ""

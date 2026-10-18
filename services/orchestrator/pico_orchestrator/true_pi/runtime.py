@@ -8,6 +8,7 @@ Never changes production default_runtime. Call only when:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -83,6 +84,58 @@ def track_open_tool(
         open_tools.pop(call_id, None)
     elif event_type == "agent_end":
         open_tools.clear()
+
+
+# pico#1322: the same tool, args and result this many times in a row is no progress.
+SAME_STEP_LIMIT = 3
+SAME_STEP_CODE = "true_pi.no_progress"
+
+
+def _same_key(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+
+
+class SameStep:
+    """Adjacent tool calls that change nothing: same tool, same args, same result.
+
+    Pi's end event carries no args; they come from the start of the same call.
+    A different call in between starts the count over, and so does anything the
+    model is told in between (a new prompt, a resume, a teacher's steer). Args
+    that change are never counted as the same step.
+    """
+
+    def __init__(self, limit: int = SAME_STEP_LIMIT) -> None:
+        self.limit = limit
+        self.args: dict[str, str] = {}
+        self.last: tuple[str, str, str] | None = None
+        self.count = 0
+
+    def see(self, event_type: str, raw: dict[str, Any]) -> bool:
+        """True when this event ends the ``limit``-th identical call in a row."""
+        msg = raw.get("message")
+        if event_type == "agent_start" or (
+            event_type == "message_start" and isinstance(msg, dict) and msg.get("role") == "user"
+        ):
+            self.last, self.count = None, 0
+            return False
+        call_id = str(raw.get("toolCallId") or raw.get("callId") or "")
+        if event_type == "tool_execution_start":
+            self.args[call_id] = _same_key(raw.get("args") or raw.get("arguments") or {})
+            return False
+        if event_type != "tool_execution_end":
+            return False
+        result = raw.get("result") if "result" in raw else raw.get("details")
+        if isinstance(result, dict) and "content" in result:
+            # What the model reads; details may hold a fresh temp path per call.
+            result = result["content"]
+        step = (
+            str(raw.get("toolName") or raw.get("tool") or ""),
+            self.args.pop(call_id, ""),
+            _same_key([result, bool(raw.get("isError"))]),
+        )
+        self.count = self.count + 1 if step == self.last else 1
+        self.last = step
+        return self.count >= self.limit
 
 
 def pi_accepts_image(images: Any, model: str | None) -> bool:
@@ -435,6 +488,7 @@ async def _run_true_pi_once(
     fuse_from = started
     hang_limit = tool_hang_seconds()
     open_tools: dict[str, tuple[str, float, float]] = {}
+    same_step = SameStep()
 
     async def _watcher() -> None:
         while not stop.is_set():
@@ -830,6 +884,8 @@ async def _run_true_pi_once(
                     # Leftovers of an aborted turn (dropped below until agent_start) open nothing.
                     if not state.awaiting_start or event.type == "agent_start":
                         track_open_tool(open_tools, event.type, event.raw, loop.time(), hang_limit)
+                        if same_step.see(event.type, event.raw):
+                            state.same_step = str(event.raw.get("toolName") or "tool")
                     await map_event(
                         event,
                         emit=emit,
@@ -875,7 +931,7 @@ async def _run_true_pi_once(
                             await emit("run.look_cap", {"capped": state.look_capped, **tag})
                         except Exception as exc:  # noqa: BLE001 — a missed reminder never fails a run
                             logger.warning("true_pi look cap steer failed: %s", type(exc).__name__)
-                    if state.settled:
+                    if state.settled or state.same_step:
                         if live is not None:
                             live.open = False
                         break
@@ -1006,6 +1062,23 @@ async def _run_true_pi_once(
                                 principal=principal,
                                 tag=tag,
                             )
+                    # Checked right before consumer.done(): no await in between, so a
+                    # consumer that stopped on the same step is never missed.
+                    if state.same_step:
+                        logger.warning(
+                            "true_pi same step run_id=%s tool=%s x%s", rid, state.same_step, SAME_STEP_LIMIT
+                        )
+                        await client.abort()
+                        await salvage_outputs()
+                        return await _failed(
+                            emit,
+                            code=SAME_STEP_CODE,
+                            reason=f"{state.same_step} 连续 {SAME_STEP_LIMIT} 次同样的调用、同样的结果",
+                            state=state,
+                            principal=principal,
+                            tag=tag,
+                            has_deliverable=count_write_tool_successes(state.tool_results) > 0,
+                        )
                     if consumer.done():
                         break
                     # Empty-plan Stay / no UI: first end already happened, Execute
@@ -1676,13 +1749,18 @@ async def _failed(
     state: EventMapState | None = None,
     principal: Principal | None = None,
     tag: dict[str, Any] | None = None,
+    has_deliverable: bool = False,
 ) -> RunResult:
     tag = tag or {"runtime": RUNTIME_LABEL}
-    await emit("run.error", enrich_fail_payload({"code": code, "error": reason, **tag}))
+    await emit(
+        "run.error",
+        enrich_fail_payload({"code": code, "error": reason, **tag}, has_deliverable=has_deliverable),
+    )
     await emit(
         "run.status",
         enrich_fail_payload(
-            {"status": "failed", "reason": reason, "code": code, **tag}
+            {"status": "failed", "reason": reason, "code": code, **tag},
+            has_deliverable=has_deliverable,
         ),
     )
     res = _result("failed", state or EventMapState(), error=reason, principal=principal)

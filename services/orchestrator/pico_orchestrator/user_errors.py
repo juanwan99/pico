@@ -128,6 +128,8 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
     low = text.lower()
     c = (code or "").lower()
 
+    if c == "true_pi.no_progress":
+        return "Pico 卡在同一步、反复得到同样的结果，已停下。"
     if "输入过长" in text or "too long" in low or "max_prompt" in low or c == "prompt_too_long":
         return "输入过长。请缩短问题后重试；系统不会静默截断后继续执行。"
     if c == "ask.timeout" or "超时未选" in text:
