@@ -7,6 +7,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -224,6 +225,20 @@ def test_told_the_teacher_is_not_a_fake_delivery():
     assert rep["summary"]["fake_delivery"] == 1 and rep["summary"]["honest_fail"] == 1
     text = ruler.render({**rep, "started": "t"})
     assert "假交付 1 · 如实没做成 1" in text and "如实没做成：R1 说交了但没有新文件" in text
+
+
+def test_turn_status_is_the_newest_turns():
+    # /v1/tasks is newest first; turn 2 failed after turn 1 succeeded.
+    runs = {"r1": "succeeded", "r2": "failed"}
+    pico = SimpleNamespace(
+        tasks=lambda _c: [
+            {"created_at": "2026-10-18T05:10:00", "latest_run": {"id": "r2", "status": "running"}},
+            {"created_at": "2026-10-18T05:09:00", "latest_run": {"id": "r1", "status": "succeeded"}},
+        ],
+        run=lambda rid: {"status": runs[rid]},
+    )
+    assert ruler.latest_turn_status(pico, "c") == "failed"
+    assert ruler.latest_turn_status(SimpleNamespace(tasks=lambda _c: []), "c") == "?"
 
 
 KNOWN_TOP = {

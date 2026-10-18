@@ -640,6 +640,16 @@ def grade(case: dict[str, Any], res: RulerResult, ctx: dict[str, Any]) -> None:
     )
 
 
+def latest_turn_status(pico: Any, conv: str) -> str:
+    """Status of the turn just sent. /v1/tasks lists newest first; lte._run_events keeps the
+    last one it walks, i.e. turn 1 (s4c sc R16: turn 2 failed, read as succeeded)."""
+    tasks = sorted(pico.tasks(conv), key=lambda t: str(t.get("created_at") or ""))
+    run = (tasks[-1].get("latest_run") or {}) if tasks else {}
+    if not run.get("id"):
+        return "?"
+    return str(pico.run(run["id"]).get("status") or run.get("status") or "?")
+
+
 def cancel_live_runs(pico: Any, conv: str) -> int:
     """Cancel every unfinished run of the conversation. The SSE stream keeps sending
     keep-alives, so an httpx read timeout never fires on a run that loops for hours."""
@@ -726,7 +736,7 @@ def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) 
             judged = [(str(a.get("title") or ""), _kind_of(a), raw_of(a)) for a in new if _kind_of(a) in {"pptx", "pdf"}]
             miss += [f"R{i + 1} {line}" for line in said_vs_files(reply, judged, titles)]
             if miss:
-                turn_status = lte._run_events(pico, conv)[2]
+                turn_status = latest_turn_status(pico, conv)
                 (res.fake_delivery if turn_status == "succeeded" else res.honest_fail).extend(miss)
             if res.fail_reason == "wall_clock":
                 break
