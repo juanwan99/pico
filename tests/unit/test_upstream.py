@@ -115,6 +115,8 @@ def _env(monkeypatch: pytest.MonkeyPatch, fallbacks: str = "gemini-3.8-flash") -
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.setenv("PICO_BRAIN_FALLBACKS", fallbacks)
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    # sol stands in for any Responses-wire model here; the AIProxy rule (#1344) has its own tests.
+    monkeypatch.setenv("PICO_LONG_SESSION_MODELS", "")
     for name in ("PICO_HEDGE_FAST_S", "PICO_HEDGE_MEDIUM_S"):
         monkeypatch.delenv(name, raising=False)
 

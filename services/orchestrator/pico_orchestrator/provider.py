@@ -864,12 +864,17 @@ async def stream_chat(
     # Same New API, next model when the primary's channel is down (#1248).
     models = [model_id]
     if cfg.name == "deepseek" and uses_new_api_openai_overlay(cfg):
-        from pico_orchestrator.brain_ha import brain_candidates
+        from pico_orchestrator.brain_ha import brain_candidates, long_session_models
         from pico_orchestrator.vision import model_accepts_image
 
+        # One call, one answer: never on AIProxy, which only takes long
+        # multi-round sessions (owner 10-18, pico#1344).
         models = [
             m for m in brain_candidates(model_id) if not images or model_accepts_image(m)
-        ] or [model_id]
+        ]
+        if not models and model_id in long_session_models():
+            raise RuntimeError(f"模型调用失败：{model_id} 只给多轮会话用，这次没有别的模型可用")
+        models = models or [model_id]
     from pico_orchestrator.brain_ha import is_failover_error, mark_down
 
     # One budget (pico#1271): the first try, one hedge at the relay's ~p95 first

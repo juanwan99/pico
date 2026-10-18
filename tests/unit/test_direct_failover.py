@@ -62,6 +62,8 @@ def _setup(monkeypatch: pytest.MonkeyPatch, fallbacks: str) -> None:
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.setenv("PICO_BRAIN_FALLBACKS", fallbacks)
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    # sol stands in for any Responses-wire model here; the AIProxy rule (#1344) has its own tests.
+    monkeypatch.setenv("PICO_LONG_SESSION_MODELS", "")
 
 
 class _Stream:

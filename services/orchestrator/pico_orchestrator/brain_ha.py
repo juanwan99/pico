@@ -68,6 +68,22 @@ FIRST_TOKEN_STALL = "first token stall"
 STALL_DOWN_S = 120.0
 
 
+# Models behind AIProxy, a coding subscription: it only takes what a coding
+# client does — one session, many rounds, context carried on (owner 10-18
+# 07:3x PDT「根本不是速率问题 是使用方式问题」, pico#1344). Only a Pi run (one
+# conversation, many steps) may use them; one-shot calls (direct answers,
+# grading, JSON, titles) never do. Unset = the AIProxy model; "" = no limit.
+LONG_SESSION_ENV = "PICO_LONG_SESSION_MODELS"
+_LONG_SESSION_DEFAULT = "gpt-5.6-sol"
+
+
+def long_session_models() -> set[str]:
+    raw = os.environ.get(LONG_SESSION_ENV)
+    if raw is None:
+        raw = _LONG_SESSION_DEFAULT
+    return {m.strip() for m in raw.split(",") if m.strip()}
+
+
 def configured_fallbacks() -> list[str]:
     raw = (os.environ.get("PICO_BRAIN_FALLBACKS") or "grok-4.6,gpt-5.6-sol").strip()
     out: list[str] = []
@@ -78,8 +94,12 @@ def configured_fallbacks() -> list[str]:
     return out
 
 
-def brain_candidates(primary: str | None) -> list[str]:
-    """Primary then fallbacks; a model marked down goes last (still a last resort)."""
+def brain_candidates(primary: str | None, *, long_session: bool = False) -> list[str]:
+    """Primary then fallbacks; a model marked down goes last (still a last resort).
+
+    Without ``long_session`` the AIProxy models are left out, the primary too:
+    the list can come back empty, and the caller says so instead of using them.
+    """
     head = (primary or "").strip()
     out: list[str] = []
     if head:
@@ -87,6 +107,9 @@ def brain_candidates(primary: str | None) -> list[str]:
     for mid in configured_fallbacks():
         if mid not in out:
             out.append(mid)
+    if not long_session:
+        only_long = long_session_models()
+        out = [m for m in out if m not in only_long]
     up = [m for m in out if not is_down(m)]
     return up + [m for m in out if m not in up]
 

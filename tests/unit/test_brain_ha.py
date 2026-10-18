@@ -10,7 +10,7 @@ class _Res:
 
 def test_candidates_primary_then_fallbacks(monkeypatch) -> None:
     monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "grok-4.6,gpt-5.6-sol")
-    assert brain_candidates("gemini-3.8-flash")[:3] == [
+    assert brain_candidates("gemini-3.8-flash", long_session=True)[:3] == [
         "gemini-3.8-flash",
         "grok-4.6",
         "gpt-5.6-sol",
@@ -125,7 +125,11 @@ def test_down_model_goes_last_then_returns(monkeypatch) -> None:
     now = [100.0]
     monkeypatch.setattr(brain_ha.time, "monotonic", lambda: now[0])
     brain_ha.mark_down("gemini-3.8-flash")
-    assert brain_candidates("gemini-3.8-flash") == ["grok-4.6", "gpt-5.6-sol", "gemini-3.8-flash"]
+    assert brain_candidates("gemini-3.8-flash", long_session=True) == [
+        "grok-4.6",
+        "gpt-5.6-sol",
+        "gemini-3.8-flash",
+    ]
     now[0] += 301
     assert brain_candidates("gemini-3.8-flash")[0] == "gemini-3.8-flash"
 

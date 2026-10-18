@@ -93,6 +93,7 @@ DATE: 2026-09-02
 103. **首 token 闸和换模型门要同一口径（pico#1339 · 2026-10-18）。** 快档头模型 25 s 没动静就换下一个（`stall_switch_s`），原来只认文字 / 工具；换模型的门（`_FailoverGate._LIVE_KINDS`）却把 `thinking.delta` 当老师已看到、不再换。头模型挂了后备用 `gpt-5.6-sol` 打头，它先流 thinking → 25 s 被掐、又不换下一个 → 失败，edu 服务端调用拿到 502（10-18 题库 8 次）。现在流过 thinking 就算有动静（`state.thinking_emitted`），只想不出字的照样被整轮 `max_seconds` 收住。对账：`pico-upstream-failure-report.py --days 3` 里 `first token stall` 且流过 thinking 的失败应为 0。
 104. **用不上的工具别开工就给（pico#1342 · 2026-10-18）。** 工具定义占第 1 步 input 的 88%（抓的真请求：系统 3032 字、工具 39 个 22094 字），网页手 15 个 + edu_catalog 4 个约一半，14 天只在约 60 次打开网页之后用到。现在网页手开工不在工具表，`sandbox_browser_open` 成功后桥里 `pi.setActiveTools` 加上（Pi 每次调模型前重读工具表，下一步就有；会话里开过网页的下一轮开工就带）；edu_catalog 只跟 edu 侧栏。量出来第 1 步 input sol −18%、grok −38%，到不了 50%：sol 自带约 3500 的固定开销。另：现网第 1 步 74% 缓存读为 0，记在 #1322。桥扩展单测用 Node 类型剥离直接跑真 ts（`tests/unit/test_lazy_page_hands.py`）。
 105. **测试也花的是现网 key（pico#1344 · 2026-10-18）。** AIProxy 封了 gpt-5.6-sol 的 key：每次请求都像新对话、并发高。查 New API 日志：24 小时 2719 次里 89% 是本线两个尺子栈并排跑 A/B 打的，现网自己 305 次。两处根因：① 代理只转四个头，Pi 的会话头被丢，上游看不出是同一个对话；② 测试栈和现网共用一把 key、两栈同时跑。现在会话头按对话带上，key 同时 4 个、每人 2 个，尺子栈同时 1 个、宿主上一次只跑一遍。量 AB 前先想清楚这一轮要打多少次上游。
+106. **AIProxy 不是限速问题，是用法问题（pico#1344 · 2026-10-18）。** 加了会话头、限了并发，测试还是把 AIProxy 当一问一答的接口打：主模型换成 gemini 以后，直连路和尺子的备用链最后一个仍是 gpt-5.6-sol，一挂就一问打到 AIProxy（`pcs-` 会话只一次）。业主：AIProxy 只给多轮长会话，一问的调用一律不去，测试不碰，并发上限只是兜底。现在「只给长会话的模型」单列（`PICO_LONG_SESSION_MODELS`），只有 Pi 运行时的候选里有；尺子栈起栈时摘掉，点名就不起。对账看「一问请求 = 0」，不再看带会话比例。
 
 ## D · Cloud Agent
 

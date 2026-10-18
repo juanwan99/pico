@@ -227,7 +227,8 @@ async def run_true_pi_agent(
         models = [primary]
     else:
         # One switch at most (pico#1271): the head model, then one backup.
-        models = ([m for m in brain_candidates(primary) if m] or [primary])[:2]
+        # A Pi run is one conversation of many steps: AIProxy models allowed (#1344).
+        models = ([m for m in brain_candidates(primary, long_session=True) if m] or [primary])[:2]
     last: RunResult | None = None
     gate: _FailoverGate | None = None
     rid = str(kwargs.get("run_id") or "")
