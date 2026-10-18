@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from pico_orchestrator.capability_loading import CORE_VISIBLE_TOOLS
+from pico_orchestrator.edu_agent_tools import EDU_AGENT_TOOLS
 
 JSON_ONLY_OUTPUT = "json_only_no_files"
 _JSON_KEY_COMPACT = '"output":"json_only_no_files"'
@@ -47,8 +48,9 @@ SIDEBAR_WORKBENCH_HINT = (
     "工具结果回来后再决定下一手。看不清、对不上、失败了就换手或问一句，不要一轮空口说完。"
 )
 
-# Same CORE hands as workbench. Not a second, smaller tool set.
-EDU_SIDEBAR_DEFAULT_TOOLS: tuple[str, ...] = CORE_VISIBLE_TOOLS
+# Same CORE hands as workbench, plus the school catalog: it only makes sense
+# beside a school page, so the workbench no longer carries it (#1342).
+EDU_SIDEBAR_DEFAULT_TOOLS: tuple[str, ...] = (*CORE_VISIBLE_TOOLS, *EDU_AGENT_TOOLS)
 EDU_SIDEBAR_ALLOWED_TOOLS = frozenset(EDU_SIDEBAR_DEFAULT_TOOLS)
 
 
@@ -62,9 +64,9 @@ def sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
 
 
 def edu_sidebar_tool_ceiling(request_tools: list[str] | None) -> list[str] | None:
-    """None = CORE (workbench default). Edu empty/web-only lists are not a castration."""
+    """Workbench CORE + school catalog. Edu empty/web-only lists are not a castration."""
     del request_tools
-    return None
+    return list(EDU_SIDEBAR_DEFAULT_TOOLS)
 
 
 def with_sidebar_workbench_hint(system: str | None) -> str:

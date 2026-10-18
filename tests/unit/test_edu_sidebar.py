@@ -101,9 +101,9 @@ def test_sidebar_web_hits_inject_and_honest_miss() -> None:
 def test_sidebar_enters_pi_helpers() -> None:
     assert sidebar_chat_only(edu_sidebar=True, json_only=False) is False
     assert sidebar_chat_only(edu_sidebar=True, json_only=True) is True
-    assert edu_sidebar_tool_ceiling(None) is None
-    assert edu_sidebar_tool_ceiling([]) is None
-    assert edu_sidebar_tool_ceiling(["web_search", "web_fetch"]) is None
+    assert edu_sidebar_tool_ceiling(None) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
+    assert edu_sidebar_tool_ceiling([]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
+    assert edu_sidebar_tool_ceiling(["web_search", "web_fetch"]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
     assert "generate_html_document" in EDU_SIDEBAR_DEFAULT_TOOLS
     assert "generate_image" in EDU_SIDEBAR_DEFAULT_TOOLS
     assert "sandbox_office_lib" in EDU_SIDEBAR_DEFAULT_TOOLS

@@ -100,10 +100,10 @@ def test_edu_sidebar_turns_thinking_off() -> None:
     assert _caps_with_sidebar_thinking(off, edu_sidebar=True).thinking_on is False
 
 
-def test_edu_sidebar_tool_ceiling_is_workbench_core() -> None:
-    assert edu_sidebar_tool_ceiling(None) is None
-    assert edu_sidebar_tool_ceiling([]) is None
-    assert edu_sidebar_tool_ceiling(["web_search"]) is None
+def test_edu_sidebar_tool_ceiling_is_workbench_core_plus_catalog() -> None:
+    assert edu_sidebar_tool_ceiling(None) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
+    assert edu_sidebar_tool_ceiling([]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
+    assert edu_sidebar_tool_ceiling(["web_search"]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
     assert "generate_html_document" in EDU_SIDEBAR_DEFAULT_TOOLS
     assert "generate_image" in EDU_SIDEBAR_DEFAULT_TOOLS
     assert "workspace_write_file" in EDU_SIDEBAR_DEFAULT_TOOLS
@@ -179,7 +179,7 @@ def test_true_pi_compose_uses_edu_system_override() -> None:
 if __name__ == "__main__":
     test_edu_sidebar_mark_detects_accessory()
     test_sidebar_json_only_skips_agent()
-    test_edu_sidebar_tool_ceiling_is_workbench_core()
+    test_edu_sidebar_tool_ceiling_is_workbench_core_plus_catalog()
     test_empty_allowed_tools_is_ceiling()
     test_client_system_from_first_system_message()
     test_normalize_allowed_tools_names_and_openai_shape()
