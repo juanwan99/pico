@@ -207,14 +207,23 @@ def _resolve_allowed_tools(
 
 
 def _turn_has_tools(
-    *, use_direct: bool, skill_snapshot: dict[str, Any] | None, request_tools: list[str] | None
+    *,
+    use_direct: bool,
+    skill_snapshot: dict[str, Any] | None,
+    request_tools: list[str] | None,
+    membership_id: str | None = None,
 ) -> bool:
-    """Direct chat has no tools; a Pi turn has whatever the request/skill leaves (#1334)."""
+    """Direct chat writes nothing; a Pi turn can if it has a writer tool or the box (#1334)."""
     if use_direct:
         return False
     from pico_orchestrator.capability_loading import resolve_visible_tools
 
-    return bool(resolve_visible_tools(_resolve_allowed_tools(skill_snapshot, request_tools)))
+    from app.delivery_gate import turn_writers
+
+    return turn_writers(
+        resolve_visible_tools(_resolve_allowed_tools(skill_snapshot, request_tools)),
+        membership_id=membership_id,
+    )
 
 
 def _model_preference_from_prompt(prompt: str) -> str | None:
@@ -1971,7 +1980,10 @@ async def chat_completions(
         use_direct = False
     mark_turn_writers(
         _turn_has_tools(
-            use_direct=use_direct, skill_snapshot=skill_snapshot, request_tools=request_tools
+            use_direct=use_direct,
+            skill_snapshot=skill_snapshot,
+            request_tools=request_tools,
+            membership_id=principal.membership_id,
         )
     )
     if use_direct and turn_images and personal_cfg is None:
@@ -2279,7 +2291,10 @@ async def chat_completions(
             use_direct = False
         mark_turn_writers(
             _turn_has_tools(
-                use_direct=use_direct, skill_snapshot=skill_snapshot, request_tools=request_tools
+                use_direct=use_direct,
+                skill_snapshot=skill_snapshot,
+                request_tools=request_tools,
+                membership_id=principal.membership_id,
             )
         )
         if use_direct:

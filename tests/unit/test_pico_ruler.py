@@ -259,3 +259,50 @@ def test_reconcile_flags_missing_pass_and_low_memory():
     b["results"] = b["results"][:10]
     ok, text = ruler.reconcile(cases, a, b)
     assert not ok and "❌ 基线第 2 遍跑完" in text and "❌ ECS 可用内存" in text
+
+
+def _deck(n: int) -> bytes:
+    p = pptx.Presentation()
+    for _ in range(n):
+        p.slides.add_slide(p.slide_layouts[1]).shapes.title.text = "页"
+    buf = io.BytesIO()
+    p.save(buf)
+    return buf.getvalue()
+
+
+def test_said_vs_files_names_and_counts():
+    # pico#1334 ③: ruler s13 R16 turn 2 — renamed in the reply, never written.
+    reply = "已修改，文件已保存到 `/workspace/outputs/高三（2）班班级公约.docx`。"
+    assert ruler.said_vs_files(reply, [], {"班级公约.docx"}) == ["提到的 高三（2）班班级公约.docx 不存在"]
+    assert ruler.said_vs_files("文件已保存到 `班级公约.docx`。", [], {"班级公约.docx"}) == []
+    deck = [("课件.pptx", "pptx", _deck(6))]
+    assert ruler.said_vs_files("已生成 10 张幻灯片。", deck, {"课件.pptx"}) == ["课件.pptx 有 6 张，回复说 10 张"]
+    assert ruler.said_vs_files("已生成六页 PPT。", deck, {"课件.pptx"}) == []
+    pdf = b"%PDF-1.4\n1 0 obj<</Type /Pages /Kids[2 0 R 3 0 R]>>\n2 0 obj<</Type /Page>>\n3 0 obj<</Type/Page>>"
+    assert ruler.said_vs_files("已导出 3 页 PDF。", [("卷.pdf", "pdf", pdf)], {"卷.pdf"}) == ["卷.pdf 有 2 页，回复说 3 页"]
+
+
+def test_replay_export_keeps_only_gate_failed_turns(tmp_path):
+    import sqlite3
+
+    db = tmp_path / "p.db"
+    con = sqlite3.connect(db)
+    con.executescript(
+        "CREATE TABLE tasks(id, school_id, conversation_id);"
+        "CREATE TABLE runs(id, task_id, created_at, model, prompt);"
+        "CREATE TABLE events(run_id, type, payload_json);"
+        "INSERT INTO tasks VALUES('t1','s-1',NULL),('t2','s-1','c-2'),('t3','smoke-school','c-3');"
+        "INSERT INTO runs VALUES('r1aaaaaaaa','t1','2026-10-07 15:32','pico-fast','细则'),"
+        "('r2bbbbbbbb','t2','2026-10-08 07:06','pico-fast','做通知'),('r3cccccccc','t3','2026-10-17','pico-fast','x'),"
+        "('r4dddddddd','t1','2026-10-07','pico-fast','ok');"
+        "INSERT INTO events VALUES('r1aaaaaaaa','run.status','{\"reason\":\"deliverable_missing_artifact\"}'),"
+        "('r2bbbbbbbb','run.status','{\"reason\":\"deliverable_missing_artifact\"}'),"
+        "('r3cccccccc','run.status','{\"reason\":\"deliverable_missing_artifact\"}'),"
+        "('r4dddddddd','run.status','{\"status\":\"succeeded\"}');"
+    )
+    con.commit()
+    out = tmp_path / "replay"
+    assert ruler.replay_export(str(db), str(out), "2026-10-03") == 0
+    items = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in out.glob("*.json")}
+    assert set(items) == {"r1aaaaaa", "r2bbbbbb"}
+    assert items["r1aaaaaa"]["kind"] == "server" and items["r2bbbbbb"]["kind"] == "chat"

@@ -37,8 +37,24 @@ _turn_writers_visible: ContextVar[bool | None] = ContextVar(
 
 
 def mark_turn_writers(visible: bool) -> None:
-    """Entry points call this once per turn: did the model get any tools?"""
+    """Entry points call this once per turn: could the model write a file?"""
     _turn_writers_visible.set(bool(visible))
+
+
+def turn_writers(visible_tools: Any, *, membership_id: str | None) -> bool:
+    """Can this Pi turn land a file (pico#1334 ②, by writer tools, not any tool)?
+
+    No tools at all (edu 细则 / 判分 / JSON calls) → no. A box turn has Pi's own
+    write / bash; otherwise one of the visible tools must write a file — a
+    search-only turn that says 「已生成」 makes no file claim.
+    """
+    names = {str(n) for n in (visible_tools or ())}
+    if not names:
+        return False
+    from pico_orchestrator.true_pi.runner import runner_enabled
+    from pico_orchestrator.workbench_progress import WRITE_TOOLS
+
+    return bool(names & WRITE_TOOLS) or (bool(membership_id) and runner_enabled(membership_id))
 
 
 def turn_can_write() -> bool:
