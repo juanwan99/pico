@@ -246,12 +246,16 @@ def test_pressure_report_reads_new_api_log() -> None:
     m = rep.measure(rows)
     assert m["peak"] == 4 and m["requests"] == 5
     assert m["kinds"] == {"pi_session": 2, "conversation": 1, "prompt_hash": 1, "none": 1}
-    assert m["session_share"] == pytest.approx(0.6)
     assert (m["later_steps"], m["later_hit"]) == (1, 1.0)
     assert m["cache_hit"] == pytest.approx(900 / 5200)
-    assert rep.verdict(m) == ["带会话的请求 60.0% < 99%"]
+    # AIProxy is for long Pi sessions only: the direct road's one-shot calls miss.
+    assert m["one_shot"] == 3
+    assert rep.verdict(m) == ["一问请求 3 次（应为 0）"]
     rows.append(_log(109, 20, 10, 0, "01a1...6aaa"))
-    assert rep.verdict(rep.measure(rows))[0] == "同时请求峰值 5 > 4"
+    rows.append(_log(110, 1, 10, 0, "01a1...7bbb"))  # a Pi run that ended in one step
+    m = rep.measure(rows)
+    assert m["single_request_sessions"] == 1
+    assert rep.verdict(m)[-1] == "同时请求峰值 5 > 4"
 
 
 def test_pressure_report_judges_only_picos_token(tmp_path: Path) -> None:
@@ -283,3 +287,80 @@ def test_pressure_report_judges_only_picos_token(tmp_path: Path) -> None:
     assert "请求 2 " in run.stdout and "不判：pico-probe 2 次" in run.stdout
     assert "✅ 三条都过" in run.stdout
 
+
+
+# --- AIProxy only for long multi-round sessions (owner 10-18 07:3x PDT) -------
+
+
+def test_aiproxy_model_is_left_out_unless_the_call_is_a_long_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pico_orchestrator import brain_ha
+
+    monkeypatch.delenv(brain_ha.LONG_SESSION_ENV, raising=False)
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "grok-4.6,gpt-5.6-sol")
+    assert brain_ha.brain_candidates("gemini-3.8-flash") == ["gemini-3.8-flash", "grok-4.6"]
+    assert brain_ha.brain_candidates("gpt-5.6-sol") == ["grok-4.6"]
+    assert brain_ha.brain_candidates("gemini-3.8-flash", long_session=True)[-1] == "gpt-5.6-sol"
+
+
+@pytest.mark.asyncio
+async def test_a_one_shot_call_never_reaches_aiproxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[dict] = []
+    _responses_stub(monkeypatch, seen)  # primary gpt-5.6-sol
+    monkeypatch.delenv("PICO_LONG_SESSION_MODELS", raising=False)
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "gpt-5.6-sol")
+    with pytest.raises(RuntimeError, match="只给多轮会话用"):
+        [p async for p in provider.stream_chat("hi", system="你是 Pico", model="pico-fast")]
+    assert seen == []  # said so, no request went out
+
+
+def test_a_ruler_stack_never_uses_aiproxy(tmp_path: Path) -> None:
+    guard = ROOT / "scripts/pico-ruler-env-guard.py"
+    env = tmp_path / "api.env"
+    env.write_text("DEEPSEEK_MODEL=gemini-3.8-flash\nPICO_BRAIN_FALLBACKS=grok-4.6,gpt-5.6-sol\n")
+    run = subprocess.run([sys.executable, str(guard), str(env)], capture_output=True, text=True, check=False)
+    assert run.returncode == 0, run.stderr
+    lines = env.read_text().splitlines()
+    assert "PICO_BRAIN_FALLBACKS=grok-4.6" in lines
+    assert "PICO_LONG_SESSION_MODELS=gpt-5.6-sol" in lines
+    # Fallbacks unset: the code default still names sol, so it is written out without it.
+    env.write_text("DEEPSEEK_MODEL=gemini-3.8-flash\n")
+    subprocess.run([sys.executable, str(guard), str(env)], check=True)
+    assert "PICO_BRAIN_FALLBACKS=grok-4.6" in env.read_text().splitlines()
+    # A sol-pinned stack does not start.
+    env.write_text("DEEPSEEK_MODEL=gpt-5.6-sol\n")
+    run = subprocess.run([sys.executable, str(guard), str(env)], capture_output=True, text=True, check=False)
+    assert run.returncode == 4 and "DEEPSEEK_MODEL" in run.stderr
+    assert env.read_text() == "DEEPSEEK_MODEL=gpt-5.6-sol\n"
+
+
+@pytest.mark.asyncio
+async def test_a_pi_run_may_fall_back_to_aiproxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator import brain_ha
+    from pico_orchestrator.run_types import RunCaps, RunResult
+    from pico_orchestrator.true_pi import runtime as rt
+
+    monkeypatch.delenv(brain_ha.LONG_SESSION_ENV, raising=False)
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "gpt-5.6-sol")
+    tried: list[str] = []
+
+    async def once(*, emit, **kwargs) -> RunResult:
+        tried.append(str(kwargs["caps"].backend_model))
+        return RunResult(status="failed", final_text="", error="boom", code="true_pi.assistant_error")
+
+    async def emit(kind: str, payload: dict) -> None:
+        return None
+
+    async def never() -> bool:
+        return False
+
+    monkeypatch.setattr(rt, "_run_true_pi_once", once)
+    await rt.run_true_pi_agent(
+        prompt="hi",
+        principal=SimpleNamespace(school_id="s", membership_id="m"),
+        emit=emit,
+        is_cancelled=never,
+        caps=RunCaps(backend_model="gemini-3.8-flash", ui_model="pico-fast"),
+    )
+    assert tried == ["gemini-3.8-flash", "gpt-5.6-sol"]

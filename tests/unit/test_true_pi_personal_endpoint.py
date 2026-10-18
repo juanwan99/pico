@@ -115,7 +115,7 @@ async def test_school_model_same_failure_does_retry_on_backup(
     # the patch target is the source module's attribute, not runtime's.
     from pico_orchestrator import brain_ha
 
-    monkeypatch.setattr(brain_ha, "brain_candidates", lambda primary: [primary, "grok-4.6-backup"])
+    monkeypatch.setattr(brain_ha, "brain_candidates", lambda primary, **_kw: [primary, "grok-4.6-backup"])
 
     async def emit(kind: str, payload: dict[str, Any]) -> None:
         return None

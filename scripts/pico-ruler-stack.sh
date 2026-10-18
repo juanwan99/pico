@@ -9,9 +9,11 @@
 #   bash scripts/pico-ruler-stack.sh info <name> [idx]          # ports + paths for scripts/pico-ruler.py
 #
 # idx (0-2) picks ports 188<idx>0..188<idx>6 and box subnet 172.30.(253+idx).0/24,
-# so two stacks (before / after) can stand side by side. They spend the live
-# key, so each sends one model request at a time and scripts/pico-ruler.py runs
-# one pass on the host at a time (pico#1344: AIProxy banned the key on 10-18).
+# so two stacks (before / after) can stand side by side. They use the live New
+# API token, so each sends one model request at a time and scripts/pico-ruler.py
+# runs one pass on the host at a time; AIProxy models are taken out and a stack
+# that would still use one refuses to start (pico#1344, scripts/pico-ruler-env-guard.py).
+# One stack up at a time, and only with >= 20 GB free on / (10-18 the disk filled).
 #
 # Why it looks like this (pico#1323 card comments):
 # - Boxes cannot use pico-ws: the host firewall lets only pico-ws reach the live
@@ -120,6 +122,8 @@ api_env() {
         printf '%s\n' "$line" >> "$D/api.env"
       done < "$PICO_RULER_API_ENV_EXTRA"
     fi
+    # pico#1344: tests never use AIProxy (coding subscription, long sessions only).
+    python3 "$HERE/scripts/pico-ruler-env-guard.py" "$D/api.env"
   )
 }
 

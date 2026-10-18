@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""How hard Pico leans on one upstream channel (pico#1344). Read-only, host side.
+"""Is Pico using one upstream channel the way it is meant to (pico#1344). Read-only, host side.
 
-AIProxy banned the key on 10-18: every request looked like a new conversation
-and too many ran at once. This reads New API's own log (sqlite, read-only) and
-prints, for one channel over a window:
+AIProxy banned the key on 10-18. Owner 10-18 07:3x PDT: not a rate problem but
+a usage problem — AIProxy (a coding subscription) is for long multi-round
+sessions only; one-shot calls never go there; caps are only a backstop. This
+reads New API's own log (sqlite, read-only) and prints, for one channel over a
+window:
 
 * requests, and the same-key peak of requests in flight at once;
 * prompt-cache hit rate and the share of requests with no cache at all;
@@ -12,13 +14,17 @@ prints, for one channel over a window:
   same value, so this is the share that carried the session header; the old
   per-prompt hash (``pico-…``) and no key carried none. New API logs only the
   key's first and last 4 characters, hence the prefixes;
-* from a conversation's second request on, the share that hit the cache.
+* from a conversation's second request on, the share that hit the cache;
+* one-shot requests: anything that is not a Pi run (``pcs-…``, ``pico-…``, no
+  key) — Pico's direct road answers in one call — and Pi sessions that sent
+  only one request in the window (listed, not judged: a short run may end in
+  one step).
 
 Only Pico's own token is judged (``--token``, default ``pico-gateway``); other
 tokens on the channel (smoke checks, probes) are counted on one line apart.
 
-Pass lines (card acceptance): peak <= 4, session share >= 99 %, second-step-on
-hit share >= 90 %. Exit 1 on a miss.
+Pass lines (card acceptance): one-shot requests 0, second-step-on hit share
+>= 90 %, peak <= 4 (backstop). Exit 1 on a miss.
 
     python3 scripts/pico-upstream-pressure-report.py --days 1
     python3 scripts/pico-upstream-pressure-report.py --since "2026-10-19 08:00" --until "2026-10-19 20:00"
@@ -37,7 +43,6 @@ from datetime import datetime, timedelta, timezone
 SH = timezone(timedelta(hours=8))
 DB = "/home/ops/new-api/data/one-api.db"
 PEAK_MAX = 4
-SESSION_MIN = 0.99
 LATER_HIT_MIN = 0.90
 
 
@@ -92,15 +97,17 @@ def measure(rows: list[tuple[int, int, int, str]]) -> dict:
                 later_hit += 1 if ca else 0
             seen[fp] += 1
     n = len(rows)
-    sessioned = kinds["pi_session"] + kinds["conversation"]
     return {
         "requests": n,
         "peak": peak(spans),
         "cache_hit": cached / prompt if prompt else 0.0,
         "zero_cache": zero / n if n else 0.0,
         "kinds": dict(kinds),
-        "session_share": sessioned / n if n else 0.0,
+        "one_shot": n - kinds["pi_session"],
         "sessions": len(seen),
+        "single_request_sessions": sum(
+            1 for fp, c in seen.items() if c == 1 and key_kind(fp) == "pi_session"
+        ),
         "later_steps": later,
         "later_hit": later_hit / later if later else 0.0,
     }
@@ -108,12 +115,12 @@ def measure(rows: list[tuple[int, int, int, str]]) -> dict:
 
 def verdict(m: dict) -> list[str]:
     miss = []
-    if m["peak"] > PEAK_MAX:
-        miss.append(f"同时请求峰值 {m['peak']} > {PEAK_MAX}")
-    if m["session_share"] < SESSION_MIN:
-        miss.append(f"带会话的请求 {m['session_share']:.1%} < {SESSION_MIN:.0%}")
+    if m["one_shot"]:
+        miss.append(f"一问请求 {m['one_shot']} 次（应为 0）")
     if m["later_steps"] and m["later_hit"] < LATER_HIT_MIN:
         miss.append(f"同一对话第 2 步起命中缓存 {m['later_hit']:.1%} < {LATER_HIT_MIN:.0%}")
+    if m["peak"] > PEAK_MAX:
+        miss.append(f"同时请求峰值 {m['peak']} > {PEAK_MAX}")
     return miss
 
 
@@ -164,7 +171,8 @@ def main() -> int:
         f" · 零缓存 {m['zero_cache']:.0%}"
     )
     print(
-        f"带会话 {m['session_share']:.1%}（{m['kinds']}）· 会话 {m['sessions']} 个"
+        f"一问请求 {m['one_shot']}（{m['kinds']}）· 会话 {m['sessions']} 个"
+        f"（只发一次的 Pi 会话 {m['single_request_sessions']} 个，不判）"
         f" · 第 2 步起 {m['later_steps']} 次、命中缓存 {m['later_hit']:.0%}"
     )
     if not rows:

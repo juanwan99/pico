@@ -128,6 +128,8 @@ async def test_stream_chat_gpt_uses_responses_not_completions(
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://superaichao.xin/openai")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    # sol stands in for any Responses-wire model here; the AIProxy rule (#1344) has its own tests.
+    monkeypatch.setenv("PICO_LONG_SESSION_MODELS", "")
 
     captured: dict[str, object] = {}
 
