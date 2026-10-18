@@ -84,7 +84,14 @@ for dp, _ds, fs in os.walk(os.path.join(root, "outputs"), followlinks=False):
         except Exception as exc:
             row["error"] = type(exc).__name__
         files.append(row)
-print(json.dumps({"files": files, "names": names}, ensure_ascii=False))
+# Files already in the box outside outputs/ (attachments, materials): naming one is not a claim.
+others = set()
+for dp, ds, fs in os.walk(root, followlinks=False):
+    ds[:] = [d for d in ds if not d.startswith(".") and os.path.join(dp, d) != os.path.join(root, "outputs")]
+    others.update(f for f in fs if not f.startswith("."))
+    if len(others) > 5000:
+        break
+print(json.dumps({"files": files, "names": names, "others": sorted(others)}, ensure_ascii=False))
 """
 
 
@@ -136,6 +143,7 @@ def self_check_facts(answer: str, report: Mapping[str, Any], *, had_files_before
         return []
     files = [f for f in report.get("files") or [] if isinstance(f, Mapping)]
     names = {str(n) for n in report.get("names") or []}
+    others = {str(n) for n in report.get("others") or []}
     facts: list[str] = []
     # Same reading as the API delivery gate (#1167): restating earlier files is fine,
     # saying they were made (again) this turn with nothing new is not.
@@ -143,9 +151,14 @@ def self_check_facts(answer: str, report: Mapping[str, Any], *, had_files_before
         (looks_like_delivery_claim(text) and not had_files_before) or looks_like_redelivery_claim(text)
     ):
         facts.append("回答说交了文件，但这一轮 outputs 里没有新文件，也没有改过的文件。")
-    for name in dict.fromkeys(m.group(1) or m.group(2) for m in _NAMED_FILE.finditer(text)):
-        if os.path.basename(name) not in names:
-            facts.append(f"回答提到的 {os.path.basename(name)} 在 outputs 里没有。")
+    # An outputs/ path must be in outputs; a quoted name may also be a file the teacher gave (attachments/).
+    named: dict[str, bool] = {}
+    for m in _NAMED_FILE.finditer(text):
+        name = os.path.basename(m.group(1) or m.group(2))
+        named[name] = named.get(name, False) or bool(m.group(1))
+    for name, in_outputs in named.items():
+        if name not in names and (in_outputs or name not in others):
+            facts.append(f"回答提到的 {name} 在 outputs 里没有。")
     for f in files:
         name = str(f.get("name") or "")
         if f.get("error"):

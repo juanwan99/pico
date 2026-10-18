@@ -40,6 +40,18 @@ def test_named_file_missing_is_a_fact() -> None:
     assert facts == ["回答提到的 高三（2）班班级公约.docx 在 outputs 里没有。"]
 
 
+def test_naming_the_teachers_upload_is_not_a_miss() -> None:
+    # Ruler s4b R10 / R11: the answer named the uploaded input; the old check sent the model
+    # to copy it into outputs/ (R10) or failed the run (R11).
+    report = {**_report([{"name": "期中考试通知.docx", "ext": ".docx", "chars": 300}]), "others": ["r11_notice.pdf"]}
+    text = "已根据 `r11_notice.pdf` 转成 Word：`/workspace/outputs/期中考试通知.docx`。"
+    assert self_check_facts(text, report, had_files_before=False) == []
+    # An outputs/ path still has to be in outputs.
+    assert self_check_facts("见 outputs/r11_notice.pdf", report, had_files_before=False) == [
+        "回答提到的 r11_notice.pdf 在 outputs 里没有。"
+    ]
+
+
 def test_claim_without_new_file_same_as_delivery_gate() -> None:
     claim = "通知已生成，请下载。"
     assert self_check_facts(claim, _report(), had_files_before=False)
@@ -118,6 +130,10 @@ def test_box_script_reads_outputs(tmp_path: Path) -> None:
     p.save(out / "课件.pptx")
     (out / "坏.xlsx").write_bytes(b"not a zip")
     (out / "旧.md").write_text("old")
+    (tmp_path / "attachments").mkdir()
+    (tmp_path / "attachments" / "r11_notice.pdf").write_bytes(b"%PDF")
+    (tmp_path / ".pico").mkdir()
+    (tmp_path / ".pico" / "session.jsonl").write_text("{}")
     import hashlib
 
     before = {"outputs/旧.md": {"sha256": hashlib.sha256(b"old").hexdigest()}}
@@ -133,6 +149,7 @@ def test_box_script_reads_outputs(tmp_path: Path) -> None:
     assert rows["课件.pptx"]["slides"] == 3 and rows["课件.pptx"]["titled"] == 3
     assert rows["坏.xlsx"]["error"]
     assert "旧.md" in report["names"]
+    assert report["others"] == ["r11_notice.pdf"]
     assert box_check_command(before).startswith("echo ")
 
 
