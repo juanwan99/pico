@@ -4,6 +4,7 @@
 # container, no host firewall rule, no live meili.
 #
 #   bash scripts/pico-ruler-stack.sh up   <name> <src> [idx]   # src: dir or git:<ref> (archived from /opt/pico)
+#   Boxes run pico-workspace:v1 with <src>'s true_pi_bridge laid on top (tag pico-workspace:ruler-<name>).
 #   bash scripts/pico-ruler-stack.sh down <name> [idx]
 #   bash scripts/pico-ruler-stack.sh info <name> [idx]          # ports + paths for scripts/pico-ruler.py
 #
@@ -62,6 +63,7 @@ down() {
   boxes=$(docker ps -aq --filter "label=pico.ws=$LABEL")
   [[ -n "$boxes" ]] && docker rm -f $boxes >/dev/null
   docker network rm "$NET" >/dev/null 2>&1 || true
+  docker rmi "pico-workspace:$LABEL" >/dev/null 2>&1 || true
   if [[ -d "$D" ]]; then
     # Box and runner files are root/65532-owned; remove them with a container.
     docker run --rm --network none -v "$ROOT_DIR:/r" --entrypoint rm alpine/socat -rf "/r/$name"
@@ -115,6 +117,16 @@ api_env() {
   )
 }
 
+# The box runs the bridge baked into pico-workspace:v1 (prod rebuilds it each
+# deploy). Lay <src>'s bridge on top, or a branch that changes the bridge is
+# measured with the live one (pico#1342).
+ws_image() {
+  docker build -q -t "pico-workspace:$LABEL" -f - "$D/src/services" >/dev/null <<'EOF'
+FROM pico-workspace:v1
+COPY true_pi_bridge /opt/pico/true_pi_bridge
+EOF
+}
+
 envval() { grep "^$1=" "$D/api.env" | head -1 | cut -d= -f2-; }
 
 up() {
@@ -131,6 +143,7 @@ up() {
   cp "$HERE/testdata/pico-ruler/www/"* "$D/www/"
   # Containers run as uid 65532; this host's umask (027) would hide the source.
   chmod -R a+rX "$D/src" "$D/pi_runner" "$D/www"
+  ws_image
   local sbtok rtok s="$D/src/services"
   sbtok=$(envval PICO_SANDBOX_TOKEN); rtok=$(envval PICO_RUNNER_TOKEN)
 
@@ -164,7 +177,7 @@ up() {
   docker run -d --name "ruler-$name-runner" --network host --memory 1536m --cpus 1 --read-only --tmpfs /tmp:size=64m \
     -v /var/run/docker.sock:/var/run/docker.sock -v "$D/ws:$D/ws" -v "$D/pi_runner:/app/services/pi_runner:ro" \
     -e PICO_RUNNER_TOKEN="$rtok" -e PICO_RUNNER_UPSTREAM="http://127.0.0.1:$API" -e PICO_RUNNER_WS_ROOT="$D/ws" \
-    -e PICO_RUNNER_IMAGE=pico-workspace:v1 -e PICO_RUNNER_NETWORK="$NET" -e PICO_RUNNER_RUNTIME=runsc \
+    -e PICO_RUNNER_IMAGE="pico-workspace:$LABEL" -e PICO_RUNNER_NETWORK="$NET" -e PICO_RUNNER_RUNTIME=runsc \
     -e PICO_RUNNER_CONTROL_PORT="$CTL" -e PICO_RUNNER_PROXY_HOST=127.0.0.1 -e PICO_RUNNER_PROXY_PORT="$PX" \
     -e PICO_RUNNER_MAX_SESSIONS=2 -e PICO_RUNNER_MAX_PER_SCHOOL=2 -e PICO_RUNNER_CGROUP_PARENT= \
     -e PICO_RUNNER_MEM=1536m -e PICO_RUNNER_CPUS=1.5 -e PICO_RUNNER_MIN_AVAIL_MB="$MIN_AVAIL_MB" \
