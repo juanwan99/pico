@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -1125,6 +1126,53 @@ async def _run_true_pi_once(
             early = await _drive("\n\n".join(said), [])
             if early is not None:
                 return early
+        # pico#1334 ②: before landing, while the box is alive (the runner will
+        # not read outputs/ under a running box), check the answer against what
+        # is really there. Facts → one more round; still off → fail on them.
+        from pico_orchestrator.true_pi.self_check import (
+            self_check_failure,
+            self_check_prompt,
+            self_check_teacher_note,
+        )
+
+        async def _turn_healthy() -> bool:
+            return (
+                state.settled
+                and not state.provider_error
+                and not timed_out.is_set()
+                and not wall_expired(loop.time(), deadline)
+                and not _hitl_ask_timed_out(transport)
+                and not await is_cancelled()
+            )
+
+        check_facts: list[str] = []
+        if ws_on and not toolless and await _turn_healthy():
+            check_facts = await _self_check_now(client, state, ws_before, rid)
+            if check_facts:
+                state.event_kinds.append("run.resume")
+                await emit(
+                    "run.resume",
+                    {
+                        "attempt": 1,
+                        "max": 1,
+                        "reason": "self_check",
+                        "facts": check_facts,
+                        "text": self_check_teacher_note(check_facts),
+                        **tag,
+                    },
+                )
+                state.settled = False
+                state.awaiting_start = True
+                if hasattr(transport, "plan_agent_ends"):
+                    transport.plan_agent_ends = 0
+                    transport.plan_first_held_at = None
+                steps_before = state.step
+                written = await _write_self_check(client, check_facts, rid)
+                early = await _drive(self_check_prompt(check_facts, written=written), [])
+                if early is not None:
+                    return early
+                if state.step != steps_before and await _turn_healthy():
+                    check_facts = await _self_check_now(client, state, ws_before, rid)
         if state.visual_output:
             logger.info(
                 "true_pi look run_id=%s steered=%s reads=%s",
@@ -1276,6 +1324,16 @@ async def _run_true_pi_once(
                 tag=tag,
             )
 
+        if check_facts:
+            return await _failed(
+                emit,
+                code="delivery.self_check",
+                reason=self_check_failure(check_facts),
+                state=state,
+                principal=principal,
+                tag=tag,
+            )
+
         from pico_orchestrator.human_package import (
             sanitize_user_facing_text,
             titles_from_tool_results,
@@ -1369,6 +1427,49 @@ def _box_attachments(
         if name and data:
             out[str(name)] = bytes(data)
     return list(out.items())
+
+
+async def _write_self_check(client: Any, facts: list[str], rid: str) -> bool:
+    from pico_orchestrator.true_pi.self_check import CHECK_TIMEOUT_S, write_facts_command
+
+    try:
+        data = await asyncio.wait_for(client.bash(write_facts_command(facts)), CHECK_TIMEOUT_S + 2)
+    except Exception as exc:  # noqa: BLE001 — then the facts go as plain text
+        logger.info("true_pi self_check write skipped run_id=%s: %s", rid, type(exc).__name__)
+        return False
+    return data.get("exitCode") in (0, None)
+
+
+async def _self_check_now(
+    client: Any, state: EventMapState, before: dict[str, Any] | None, rid: str
+) -> list[str]:
+    """Run the read-only outputs check in the live box; [] when fine or unknown."""
+    from pico_orchestrator.true_pi.self_check import (
+        CHECK_TIMEOUT_S,
+        box_check_command,
+        parse_box_report,
+        self_check_facts,
+    )
+
+    answer = state.final_parts[-1] if state.final_parts else ""
+    try:
+        if not answer:
+            answer = await client.get_last_assistant_text()
+        data = await asyncio.wait_for(
+            client.bash(box_check_command(before), timeout=CHECK_TIMEOUT_S),
+            CHECK_TIMEOUT_S + 2.0,
+        )
+    except Exception as exc:  # noqa: BLE001 — a check that cannot run never blocks delivery
+        logger.info("true_pi self_check skipped run_id=%s: %s", rid, type(exc).__name__)
+        return []
+    report = parse_box_report(str(data.get("output") or ""))
+    if report is None:
+        logger.info("true_pi self_check unreadable run_id=%s", rid)
+        return []
+    had = any(not os.path.basename(p).startswith(".") for p in (before or {}))
+    facts = self_check_facts(answer, report, had_files_before=had)
+    logger.info("true_pi self_check run_id=%s files=%s facts=%s", rid, len(report["files"]), len(facts))
+    return facts
 
 
 async def _land_workspace_outputs(

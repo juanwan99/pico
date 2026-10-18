@@ -81,7 +81,10 @@ class RulerResult:
     model_calls: int = 0
     first_input_tokens: int = 0
     asks: int = 0
+    # Said / files mismatch on a turn that ended succeeded = 假交付; on a turn that
+    # failed or was cancelled (the teacher was told) = 如实没做成 (#1334, 统筹窗 10-18).
     fake_delivery: list[str] = field(default_factory=list)
+    honest_fail: list[str] = field(default_factory=list)
     status: str = ""
     fail_reason: str = ""
     files: list[str] = field(default_factory=list)
@@ -425,6 +428,51 @@ def opens(kind: str, raw: bytes) -> bool:
     return True
 
 
+# pico#1334 ③: what the reply says vs what landed. Same reading as the runtime
+# self-check (services/orchestrator/pico_orchestrator/true_pi/self_check.py):
+# only names the reply marks off, counts only against a single deck / PDF.
+_EXT = r"\.(?:docx|pptx|xlsx|pdf|html|png|jpg|csv|zip|md|txt)"
+NAMED_FILE = re.compile(
+    r"outputs/([^\s`'\"<>|]+?" + _EXT + r")(?![\w.])|[`「《“\"]([^`」》”\"\n/]+?" + _EXT + r")[`」》”\"]",
+    re.IGNORECASE,
+)
+_CN = {"一": 1, "两": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+_N = r"(\d{1,3}|[一两二三四五六七八九十])"
+SAID_SLIDES = re.compile(_N + r"\s*(?:张\s*(?:幻灯片|PPT|课件)?|页\s*(?:幻灯片|PPT|课件))", re.IGNORECASE)
+SAID_PDF_PAGES = re.compile(_N + r"\s*页\s*(?:的\s*)?PDF", re.IGNORECASE)
+
+
+def _said(rx: re.Pattern[str], text: str) -> int | None:
+    nums = {int(m.group(1)) if m.group(1).isdigit() else _CN.get(m.group(1), 0) for m in rx.finditer(text)} - {0}
+    return nums.pop() if len(nums) == 1 else None
+
+
+def said_vs_files(reply: str, new: list[tuple[str, str, bytes]], all_titles: set[str]) -> list[str]:
+    """Fake-delivery lines: a named file that is not there, or a count that is off."""
+    out: list[str] = []
+    for name in dict.fromkeys(m.group(1) or m.group(2) for m in NAMED_FILE.finditer(reply or "")):
+        if os.path.basename(name) not in all_titles:
+            out.append(f"提到的 {os.path.basename(name)} 不存在")
+    decks = [(t, raw) for t, kind, raw in new if kind == "pptx"]
+    said = _said(SAID_SLIDES, reply or "")
+    if len(decks) == 1 and said:
+        try:
+            from pptx import Presentation
+
+            have = len(Presentation(io.BytesIO(decks[0][1])).slides)
+        except Exception:  # noqa: BLE001 — opens() already reports it
+            have = None
+        if have is not None and have != said:
+            out.append(f"{decks[0][0]} 有 {have} 张，回复说 {said} 张")
+    pdfs = [(t, raw) for t, kind, raw in new if kind == "pdf"]
+    said = _said(SAID_PDF_PAGES, reply or "")
+    if len(pdfs) == 1 and said:
+        have = len(re.findall(rb"/Type\s*/Page(?![s\w])", pdfs[0][1]))
+        if have and have != said:
+            out.append(f"{pdfs[0][0]} 有 {have} 页，回复说 {said} 页")
+    return out
+
+
 # --------------------------------------------------------------- reply checks
 
 
@@ -592,6 +640,16 @@ def grade(case: dict[str, Any], res: RulerResult, ctx: dict[str, Any]) -> None:
     )
 
 
+def latest_turn_status(pico: Any, conv: str) -> str:
+    """Status of the turn just sent. /v1/tasks lists newest first; lte._run_events keeps the
+    last one it walks, i.e. turn 1 (s4c sc R16: turn 2 failed, read as succeeded)."""
+    tasks = sorted(pico.tasks(conv), key=lambda t: str(t.get("created_at") or ""))
+    run = (tasks[-1].get("latest_run") or {}) if tasks else {}
+    if not run.get("id"):
+        return "?"
+    return str(pico.run(run["id"]).get("status") or run.get("status") or "?")
+
+
 def cancel_live_runs(pico: Any, conv: str) -> int:
     """Cancel every unfinished run of the conversation. The SSE stream keeps sending
     keep-alives, so an httpx read timeout never fires on a run that loops for hours."""
@@ -667,12 +725,19 @@ def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) 
             new = [a for a in now if str(a.get("id")) not in seen and _kind_of(a) in PRODUCED]
             seen |= {str(a.get("id")) for a in now}
             turn_new.append(new)
+            miss: list[str] = []
             for a in new:
                 kind = _kind_of(a)
                 if kind in FILE_CHECKS and not opens(kind, raw_of(a)):
-                    res.fake_delivery.append(f"R{i + 1} {a.get('title')} 打不开")
+                    miss.append(f"R{i + 1} {a.get('title')} 打不开")
             if DELIVERY_CLAIM.search(reply or "") and not new:
-                res.fake_delivery.append(f"R{i + 1} 说交了但没有新文件")
+                miss.append(f"R{i + 1} 说交了但没有新文件")
+            titles = {str(a.get("title") or "") for a in now}
+            judged = [(str(a.get("title") or ""), _kind_of(a), raw_of(a)) for a in new if _kind_of(a) in {"pptx", "pdf"}]
+            miss += [f"R{i + 1} {line}" for line in said_vs_files(reply, judged, titles)]
+            if miss:
+                turn_status = latest_turn_status(pico, conv)
+                (res.fake_delivery if turn_status == "succeeded" else res.honest_fail).extend(miss)
             if res.fail_reason == "wall_clock":
                 break
             # A plain-text question (not an ask_user card) gets the same answer once.
@@ -681,6 +746,7 @@ def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) 
                 res.asks += 1
                 turns.insert(i + 1, {"prompt": case["ask_answer"]})
                 res.fake_delivery = [f for f in res.fake_delivery if not f.startswith(f"R{i + 1} 说交了")]
+                res.honest_fail = [f for f in res.honest_fail if not f.startswith(f"R{i + 1} 说交了")]
             i += 1
         _, steps, status, error, _ = lte._run_events(pico, conv)
         res.agent_steps = steps
@@ -735,6 +801,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "wall_median_s": round(statistics.median(walls), 1) if walls else 0.0,
         "wall_p90_s": round(p90(walls), 1),
         "fake_delivery": sum(1 for r in tasks if r["fake_delivery"]),
+        "honest_fail": sum(1 for r in tasks if r.get("honest_fail")),
         "probe_input_tokens": probe["first_input_tokens"] if probe else 0,
         "tool_calls_median": statistics.median([r["tool_calls"] for r in tasks]) if tasks else 0,
         "input_tokens_total": sum(r["input_tokens"] for r in results),
@@ -750,7 +817,7 @@ def render(report: dict[str, Any]) -> str:
         "",
         (
             f"成功 {s['ok']}/{s['cases']}（{s['success_rate']:.0%}）· 墙钟中位 {s['wall_median_s']} s · p90 {s['wall_p90_s']} s · "
-            f"假交付 {s['fake_delivery']} · 探针输入 {s['probe_input_tokens']} token · 工具往返中位 {s['tool_calls_median']} · "
+            f"假交付 {s['fake_delivery']} · 如实没做成 {s.get('honest_fail', 0)} · 探针输入 {s['probe_input_tokens']} token · 工具往返中位 {s['tool_calls_median']} · "
             f"输入 / 输出共 {s['input_tokens_total']} / {s['output_tokens_total']} token · 追问 {s['asks_total']}"
         ),
         "",
@@ -758,7 +825,8 @@ def render(report: dict[str, Any]) -> str:
         "|---|---|---|---:|---:|---:|---:|---:|---:|---|",
     ]
     for r in report["results"]:
-        why = "；".join(r["failed"] + r["fake_delivery"] + ([r["fail_reason"]] if r["fail_reason"] else []))[:160]
+        honest = [f"如实没做成：{h}" for h in r.get("honest_fail") or []]
+        why = "；".join(r["failed"] + r["fake_delivery"] + honest + ([r["fail_reason"]] if r["fail_reason"] else []))[:160]
         lines.append(
             f"| {r['case']} | {r['title']} | {'✅' if r['ok'] else '❌'} | {r['passed']}/{r['checks']} | {r['wall_s']:.0f} | "
             f"{r['tool_calls']} | {r['input_tokens']} | {r['output_tokens']} | {r['asks']} | {why or '—'} |"
@@ -775,6 +843,7 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
         ("墙钟中位 s", sa["wall_median_s"], sb["wall_median_s"]),
         ("墙钟 p90 s", sa["wall_p90_s"], sb["wall_p90_s"]),
         ("假交付", sa["fake_delivery"], sb["fake_delivery"]),
+        ("如实没做成", sa.get("honest_fail", 0), sb.get("honest_fail", 0)),
         ("探针输入 token", sa["probe_input_tokens"], sb["probe_input_tokens"]),
         ("工具往返中位", sa["tool_calls_median"], sb["tool_calls_median"]),
         ("输入 token 合计", sa["input_tokens_total"], sb["input_tokens_total"]),
@@ -855,6 +924,80 @@ def load_cases(wanted: str) -> list[dict[str, Any]]:
     return [c for c in cases if not ids or c["id"] in ids]
 
 
+# ------------------------------------------------------------------ replay
+# pico#1334 ③: the live turns the delivery gate failed, sent again to a throwaway
+# stack. Inputs are school text: export them on ECS into a local dir, never into
+# the repo or off the server.
+MISFIRE = ("声称已交文件", "说已重新交付", "交付前核对没通过")
+
+
+def replay_export(db: str, out: str, since: str) -> int:
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    rows = con.execute(
+        "SELECT r.id, r.created_at, r.model, r.prompt, COALESCE(t.conversation_id, ''), t.school_id FROM runs r "
+        "JOIN tasks t ON t.id = r.task_id WHERE r.created_at >= ? AND EXISTS (SELECT 1 FROM events e "
+        "WHERE e.run_id = r.id AND e.type = 'run.status' AND e.payload_json LIKE '%deliverable_missing_artifact%') "
+        "ORDER BY r.created_at",
+        (since,),
+    ).fetchall()
+    Path(out).mkdir(parents=True, exist_ok=True)
+    n = 0
+    for rid, at, model, prompt, conv, school in rows:
+        if str(school).startswith("smoke-"):
+            continue
+        item = {"id": rid, "at": at, "model": model, "kind": "chat" if conv else "server", "prompt": prompt}
+        (Path(out) / f"{rid[:8]}.json").write_text(json.dumps(item, ensure_ascii=False), encoding="utf-8")
+        n += 1
+    print(f"{n} 条 → {out}")
+    return 0
+
+
+def replay_one(pico: Any, item: dict[str, Any], stamp: str) -> dict[str, Any]:
+    conv = f"replay-{item['id'][:8]}-{stamp}"
+    before = {str(a.get("id")) for a in pico.artifacts(conv)}
+    reply = ""
+    if item["kind"] == "server":
+        # edu servers ask for text / JSON and send no tools (#1335).
+        body = {"model": pico.model, "stream": False, "tools": [],
+                "messages": [{"role": "user", "content": item["prompt"]}]}
+        resp = pico.client.post(f"{pico.base}/v1/chat/completions", json=body,
+                                headers={**pico.headers, "X-Conversation-Id": conv}, timeout=600)
+        if resp.status_code == 200:
+            reply = str(((resp.json().get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+    else:
+        reply, _ = pico.chat(conv, item["prompt"], timeout_s=900)
+    _, _, status, error, _ = lte._run_events(pico, conv)
+    new = [a for a in pico.artifacts(conv) if str(a.get("id")) not in before and _kind_of(a) in PRODUCED]
+    bad_files = [str(a.get("title")) for a in new if _kind_of(a) in FILE_CHECKS and not opens(_kind_of(a), pico.download(str(a["id"])))]
+    misfire = any(m in (error or "") for m in MISFIRE)
+    fake = bool(bad_files) or (status == "succeeded" and not new and bool(DELIVERY_CLAIM.search(reply)))
+    return {"id": item["id"][:8], "kind": item["kind"], "status": status, "misfire": misfire, "fake": fake,
+            "files": [str(a.get("title")) for a in new], "bad_files": bad_files, "error": (error or "")[:120]}
+
+
+def replay(pico: Any, src: str) -> int:
+    items = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(Path(src).glob("*.json"))]
+    stamp = f"{int(time.time())}"
+    rows = []
+    for item in items:
+        try:
+            r = replay_one(pico, item, stamp)
+        except Exception as exc:  # noqa: BLE001 — one input never kills the replay
+            r = {"id": item["id"][:8], "kind": item["kind"], "status": "error", "misfire": False, "fake": False,
+                 "files": [], "bad_files": [], "error": f"{type(exc).__name__}"}
+        rows.append(r)
+        print(f"{r['id']} {r['kind']:6} {r['status']:9} 误拦={r['misfire']} 假交付={r['fake']} 文件={r['files']} {r['error']}", flush=True)
+    server = [r for r in rows if r["kind"] == "server"]
+    chat = [r for r in rows if r["kind"] == "chat"]
+    misfires = sum(1 for r in server if r["misfire"])
+    fakes = sum(1 for r in rows if r["fake"])
+    # A chat turn passes with a file that opens, or by failing / not claiming one (= not fake).
+    ok = misfires == 0 and fakes == 0
+    print(f"{'✅' if ok else '❌'} 重放 {len(rows)} 条：服务端调用 {len(server)} 条里被判「说交了没文件」{misfires} 条；"
+          f"对话 {len(chat)} 条；假交付 {fakes} 条")
+    return 0 if ok else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stack", default="", help="throwaway stack name (pico-ruler-stack.sh)")
@@ -872,7 +1015,13 @@ def main() -> int:
     ap.add_argument("--compare", nargs=2, metavar=("A", "B"))
     ap.add_argument("--reconcile", nargs=2, metavar=("PASS1", "PASS2"), help="card acceptance check, exit 1 on a miss")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--replay", default="", metavar="DIR", help="send the exported live inputs again (pico#1334)")
+    ap.add_argument("--replay-export", nargs=2, metavar=("DB", "DIR"), help="export gate-failed live turns (ECS only)")
+    ap.add_argument("--since", default="2026-10-03")
     args = ap.parse_args()
+
+    if args.replay_export:
+        return replay_export(*args.replay_export, args.since)
 
     if args.reconcile:
         a, b = (json.loads(Path(p).read_text(encoding="utf-8")) for p in args.reconcile)
@@ -903,6 +1052,8 @@ def main() -> int:
         "page": f"http://login.pico-ruler.cn:{port + 4}/",
         "page_container": f"ruler-{args.stack}-page",
     }
+    if args.replay:
+        return replay(lte.Pico(f"http://127.0.0.1:{port}", key, args.membership, args.model, 900.0), args.replay)
     revision = (d / "src" / "REVISION").read_text().strip() if (d / "src" / "REVISION").exists() else "?"
     stamp = f"{int(time.time())}-{uuid.uuid4().hex[:6]}"
     meta = {"stack": args.stack, "label": args.label, "revision": revision, "model": args.model,
@@ -926,7 +1077,7 @@ def main() -> int:
             r = RulerResult(case=case["id"], title=case.get("title") or "", fail_reason="other",
                             notes=[f"exception {type(exc).__name__}: {str(exc)[:200]}"])
         print(f"DONE {r.case} ok={r.ok} {r.passed}/{r.checks} wall={r.wall_s:.0f}s tools={r.tool_calls} "
-              f"in={r.input_tokens} out={r.output_tokens} failed={r.failed} fake={r.fake_delivery}", flush=True)
+              f"in={r.input_tokens} out={r.output_tokens} failed={r.failed} fake={r.fake_delivery} honest={r.honest_fail}", flush=True)
         return r.__dict__
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:

@@ -281,6 +281,8 @@ class FakeTransport(TruePiTransport):
     scripted_after_prompt: list[list[dict[str, Any]]] = field(default_factory=list)
     sent: list[dict[str, Any]] = field(default_factory=list)
     assistant_text: str = "已写入 notes.md，请从产物列表下载。"
+    # Pi RPC ``bash`` outputs, popped in order (pico#1334 self-check).
+    bash_outputs: list[str] = field(default_factory=list)
     _event_q: asyncio.Queue[RpcEvent | None] = field(default_factory=asyncio.Queue)
     _resp_q: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
     _closed: bool = False
@@ -307,6 +309,11 @@ class FakeTransport(TruePiTransport):
             ack["id"] = req_id
         if ctype == "get_last_assistant_text":
             ack["data"] = {"text": self.assistant_text}
+        if ctype == "bash":
+            out = self.bash_outputs.pop(0) if self.bash_outputs else ""
+            # Real Pi (0.84) also streams the output as an event before the response.
+            await self._event_q.put(RpcEvent({"type": "bash_execution_update", "id": cmd.get("id"), "delta": out}))
+            ack["data"] = {"output": out, "exitCode": 0}
         await self._resp_q.put(ack)
 
     async def events(self) -> AsyncIterator[RpcEvent]:
@@ -798,6 +805,18 @@ class TruePiRpcClient:
         data = resp.get("data") or {}
         text = data.get("text")
         return str(text or "")
+
+    async def bash(self, command: str, *, timeout: float = 10.0) -> dict[str, Any]:
+        """Pi RPC ``bash`` kept out of the model's context and session (pico#1334)."""
+        rid = f"b-{uuid.uuid4().hex[:8]}"
+        await self.transport.send(
+            {"id": rid, "type": "bash", "command": command, "excludeFromContext": True}
+        )
+        resp = await self.transport.wait_response("bash", req_id=rid, timeout=timeout)
+        if not resp.get("success"):
+            raise TruePiClientError(f"bash rejected: {str(resp)[:200]}")
+        data = resp.get("data")
+        return data if isinstance(data, dict) else {}
 
     def events(self) -> AsyncIterator[RpcEvent]:
         return self.transport.events()

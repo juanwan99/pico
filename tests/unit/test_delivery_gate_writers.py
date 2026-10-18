@@ -85,6 +85,22 @@ def test_turn_has_tools_rule() -> None:
     assert not _turn_has_tools(use_direct=True, skill_snapshot=None, request_tools=None)
     # edu server sends tools: [] → Pi turn with nothing visible.
     assert not _turn_has_tools(use_direct=False, skill_snapshot=None, request_tools=[])
-    # No list = CORE; any listed tool counts.
+    # No list = CORE, which has writer tools.
     assert _turn_has_tools(use_direct=False, skill_snapshot=None, request_tools=None)
-    assert _turn_has_tools(use_direct=False, skill_snapshot=None, request_tools=["web_search"])
+    # #1334 ②: judged by writer tools — search only cannot land a file …
+    assert not _turn_has_tools(use_direct=False, skill_snapshot=None, request_tools=["web_search"])
+    assert _turn_has_tools(
+        use_direct=False, skill_snapshot=None, request_tools=["web_search", "sandbox_office_lib"]
+    )
+
+
+def test_box_turn_can_write_with_any_tool(monkeypatch) -> None:
+    from app.delivery_gate import turn_writers
+
+    monkeypatch.delenv("PICO_RUNNER_URL", raising=False)
+    assert not turn_writers(["web_search"], membership_id="m-1")
+    monkeypatch.setenv("PICO_RUNNER_URL", "http://runner:8790")
+    # … unless the turn runs in the box, which has Pi's own write / bash.
+    assert turn_writers(["web_search"], membership_id="m-1")
+    # Toolless stays no even in the box: edu 细则 / JSON calls (#1335's 19 misfires).
+    assert not turn_writers([], membership_id="m-1")

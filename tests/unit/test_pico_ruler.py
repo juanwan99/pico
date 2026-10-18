@@ -7,6 +7,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -215,6 +216,31 @@ def test_summary_and_compare_flags_flips():
     assert "R01 ✅→❌" in text and "R02 ❌→✅" in text
 
 
+def test_told_the_teacher_is_not_a_fake_delivery():
+    # 统筹窗 10-18: a mismatch on a turn that ended succeeded is 假交付; failed / cancelled = 如实没做成.
+    rep = _report([("R00", True), ("R01", True), ("R02", False), ("R03", False)])
+    rep["results"][2]["honest_fail"] = ["R1 说交了但没有新文件"]
+    rep["results"][3]["fake_delivery"] = ["R2 提到的 a.docx 不存在"]
+    rep["summary"] = ruler.summarize(rep["results"])
+    assert rep["summary"]["fake_delivery"] == 1 and rep["summary"]["honest_fail"] == 1
+    text = ruler.render({**rep, "started": "t"})
+    assert "假交付 1 · 如实没做成 1" in text and "如实没做成：R1 说交了但没有新文件" in text
+
+
+def test_turn_status_is_the_newest_turns():
+    # /v1/tasks is newest first; turn 2 failed after turn 1 succeeded.
+    runs = {"r1": "succeeded", "r2": "failed"}
+    pico = SimpleNamespace(
+        tasks=lambda _c: [
+            {"created_at": "2026-10-18T05:10:00", "latest_run": {"id": "r2", "status": "running"}},
+            {"created_at": "2026-10-18T05:09:00", "latest_run": {"id": "r1", "status": "succeeded"}},
+        ],
+        run=lambda rid: {"status": runs[rid]},
+    )
+    assert ruler.latest_turn_status(pico, "c") == "failed"
+    assert ruler.latest_turn_status(SimpleNamespace(tasks=lambda _c: []), "c") == "?"
+
+
 KNOWN_TOP = {
     "reply_len", "reply_has", "reply_any", "reply_regex", "reply_links_min", "reply_numbered_min", "reply_facts",
     "tool_calls_max", "asks_max", "page_hit", "ask_or_placeholder", "files_named", "file",
@@ -259,3 +285,50 @@ def test_reconcile_flags_missing_pass_and_low_memory():
     b["results"] = b["results"][:10]
     ok, text = ruler.reconcile(cases, a, b)
     assert not ok and "❌ 基线第 2 遍跑完" in text and "❌ ECS 可用内存" in text
+
+
+def _deck(n: int) -> bytes:
+    p = pptx.Presentation()
+    for _ in range(n):
+        p.slides.add_slide(p.slide_layouts[1]).shapes.title.text = "页"
+    buf = io.BytesIO()
+    p.save(buf)
+    return buf.getvalue()
+
+
+def test_said_vs_files_names_and_counts():
+    # pico#1334 ③: ruler s13 R16 turn 2 — renamed in the reply, never written.
+    reply = "已修改，文件已保存到 `/workspace/outputs/高三（2）班班级公约.docx`。"
+    assert ruler.said_vs_files(reply, [], {"班级公约.docx"}) == ["提到的 高三（2）班班级公约.docx 不存在"]
+    assert ruler.said_vs_files("文件已保存到 `班级公约.docx`。", [], {"班级公约.docx"}) == []
+    deck = [("课件.pptx", "pptx", _deck(6))]
+    assert ruler.said_vs_files("已生成 10 张幻灯片。", deck, {"课件.pptx"}) == ["课件.pptx 有 6 张，回复说 10 张"]
+    assert ruler.said_vs_files("已生成六页 PPT。", deck, {"课件.pptx"}) == []
+    pdf = b"%PDF-1.4\n1 0 obj<</Type /Pages /Kids[2 0 R 3 0 R]>>\n2 0 obj<</Type /Page>>\n3 0 obj<</Type/Page>>"
+    assert ruler.said_vs_files("已导出 3 页 PDF。", [("卷.pdf", "pdf", pdf)], {"卷.pdf"}) == ["卷.pdf 有 2 页，回复说 3 页"]
+
+
+def test_replay_export_keeps_only_gate_failed_turns(tmp_path):
+    import sqlite3
+
+    db = tmp_path / "p.db"
+    con = sqlite3.connect(db)
+    con.executescript(
+        "CREATE TABLE tasks(id, school_id, conversation_id);"
+        "CREATE TABLE runs(id, task_id, created_at, model, prompt);"
+        "CREATE TABLE events(run_id, type, payload_json);"
+        "INSERT INTO tasks VALUES('t1','s-1',NULL),('t2','s-1','c-2'),('t3','smoke-school','c-3');"
+        "INSERT INTO runs VALUES('r1aaaaaaaa','t1','2026-10-07 15:32','pico-fast','细则'),"
+        "('r2bbbbbbbb','t2','2026-10-08 07:06','pico-fast','做通知'),('r3cccccccc','t3','2026-10-17','pico-fast','x'),"
+        "('r4dddddddd','t1','2026-10-07','pico-fast','ok');"
+        "INSERT INTO events VALUES('r1aaaaaaaa','run.status','{\"reason\":\"deliverable_missing_artifact\"}'),"
+        "('r2bbbbbbbb','run.status','{\"reason\":\"deliverable_missing_artifact\"}'),"
+        "('r3cccccccc','run.status','{\"reason\":\"deliverable_missing_artifact\"}'),"
+        "('r4dddddddd','run.status','{\"status\":\"succeeded\"}');"
+    )
+    con.commit()
+    out = tmp_path / "replay"
+    assert ruler.replay_export(str(db), str(out), "2026-10-03") == 0
+    items = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in out.glob("*.json")}
+    assert set(items) == {"r1aaaaaa", "r2bbbbbb"}
+    assert items["r1aaaaaa"]["kind"] == "server" and items["r2bbbbbb"]["kind"] == "chat"
