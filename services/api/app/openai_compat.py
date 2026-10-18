@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from pico_orchestrator import upstream
 from pico_orchestrator.edu_sidebar import (
     SIDEBAR_PROPOSE_HINT,
     SIDEBAR_WEB_SYSTEM,
@@ -2111,19 +2112,22 @@ async def chat_completions(
                 if json_only and sidebar_web_hits and sidebar_web_hits.get("honest_miss"):
                     return honest_miss_json(sidebar_web_hits)
                 parts: list[str] = []
-                async for piece in stream_chat(
-                    prompt,
-                    max_tokens=effective_max_tokens,
-                    history=history,
-                    system=system,
-                    model=model,
-                    thinking=_direct_thinking(json_only=json_only, override=thinking_override),
-                    usage_out=direct_usage,
-                    finish_out=direct_finish,
-                    images=turn_images,
+                with upstream.caller_scope(
+                    conversation_id=conversation_id, run_id=run_id, membership_id=principal.membership_id
                 ):
-                    if piece:
-                        parts.append(piece)
+                    async for piece in stream_chat(
+                        prompt,
+                        max_tokens=effective_max_tokens,
+                        history=history,
+                        system=system,
+                        model=model,
+                        thinking=_direct_thinking(json_only=json_only, override=thinking_override),
+                        usage_out=direct_usage,
+                        finish_out=direct_finish,
+                        images=turn_images,
+                    ):
+                        if piece:
+                            parts.append(piece)
                 return "".join(parts)
 
             async def _direct_reply() -> dict[str, Any] | Response:
@@ -2339,7 +2343,12 @@ async def chat_completions(
                 # generator's body only runs during __anext__, not at
                 # creation, and contextvars follow the current task's live
                 # scope, not the generator object.
-                with personal_provider_scope(personal_cfg):
+                with (
+                    personal_provider_scope(personal_cfg),
+                    upstream.caller_scope(
+                        conversation_id=conversation_id, run_id=run_id, membership_id=principal.membership_id
+                    ),
+                ):
                     async for piece in iter_with_idle_ticks(
                         stream_chat(
                             prompt,

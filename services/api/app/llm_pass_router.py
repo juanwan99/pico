@@ -10,7 +10,7 @@ from pico_orchestrator.llm_file_pass import splice_responses_body, turn_files
 
 from app.loopback import is_loopback_host, request_on_loopback_socket
 from app.settings import Settings, get_settings
-from app.ws_proxy_router import DOOR_HEADER, _stream, model_hedge
+from app.ws_proxy_router import DOOR_HEADER, _stream, model_hedge, session_of
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -62,6 +62,11 @@ async def llm_pass(run_id: str, path: str, request: Request) -> Response:
                 )
         except Exception:
             logger.exception("llm-pass splice skipped run_id=%s", run_id)
+    if "session_id" not in headers:
+        # Pi talking here without the run proxy: same session rule (pico#1344).
+        session = session_of(raw)
+        if session:
+            headers["session_id"] = session
     auth = headers.get("authorization") or headers.get("Authorization") or ""
     # One door, one retry layer (pico#1271): the run proxy already raced this
     # step and marked it; Pi talking here directly (no box) is raced here.

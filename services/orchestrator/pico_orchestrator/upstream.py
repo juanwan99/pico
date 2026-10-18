@@ -18,7 +18,12 @@ Every request Pico sends to New API goes through here: direct chat
   connection, after a 2 s then 6 s pause (or the relay's ``Retry-After``). A
   dead key or a missing channel switches model instead, at once.
 * **Per-key concurrency cap**: requests on one key wait for a slot instead of
-  piling onto the relay (``PICO_UPSTREAM_KEY_MAX``).
+  piling onto the relay (``PICO_UPSTREAM_KEY_MAX``), and one teacher's
+  requests wait for one of their own slots first (``PICO_UPSTREAM_MEMBER_MAX``).
+* **One conversation, one session** (pico#1344): a call made inside
+  ``caller_scope`` carries a ``session_id`` that stays the same for the whole
+  conversation. AIProxy banned the key when every request looked like a new
+  conversation.
 * **Counters** for ``/health``: requests by purpose and outcome, in-flight and
   peak per key.
 """
@@ -30,8 +35,9 @@ import hashlib
 import os
 import time
 from collections import Counter, OrderedDict
-from collections.abc import Awaitable, Callable, Sequence
-from contextlib import suppress
+from collections.abc import Awaitable, Callable, Iterator, Sequence
+from contextlib import contextmanager, suppress
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
 
@@ -41,7 +47,10 @@ HEDGE_S = 25.0
 # High effort legitimately holds the first token for tens of seconds.
 DEEP_HEDGE_S = 60.0
 KEY_MAX_ENV = "PICO_UPSTREAM_KEY_MAX"
-_KEY_MAX_DEFAULT = 16
+# 14 days live (10-18): at most 5 runs at once, one per teacher (pico#1344).
+_KEY_MAX_DEFAULT = 4
+MEMBER_MAX_ENV = "PICO_UPSTREAM_MEMBER_MAX"
+_MEMBER_MAX_DEFAULT = 2
 SLOT_WAIT_S = 120.0
 
 HEDGE_FAST_ENV = "PICO_HEDGE_FAST_S"
@@ -359,14 +368,71 @@ def key_id(key: str) -> str:
     return hashlib.sha256((key or "").encode()).hexdigest()[:8] if key else "nokey"
 
 
-def key_max() -> int:
+def _env_max(name: str, default: int) -> int:
     try:
-        return max(1, int(os.environ.get(KEY_MAX_ENV) or _KEY_MAX_DEFAULT))
+        return max(1, int(os.environ.get(name) or default))
     except ValueError:
-        return _KEY_MAX_DEFAULT
+        return default
+
+
+def key_max() -> int:
+    return _env_max(KEY_MAX_ENV, _KEY_MAX_DEFAULT)
+
+
+def member_max() -> int:
+    return _env_max(MEMBER_MAX_ENV, _MEMBER_MAX_DEFAULT)
+
+
+@dataclass(frozen=True)
+class Caller:
+    """Who a model call is for: ``session`` goes upstream, ``member`` waits for a teacher slot."""
+
+    session: str = ""
+    member: str = ""
+
+
+_NOBODY = Caller()
+CALLER: ContextVar[Caller] = ContextVar("pico_upstream_caller", default=_NOBODY)
+
+
+def _h(value: str, *, salt: str) -> str:
+    # Same hash as the runner's WorkspaceKey, so a teacher is one member on both roads.
+    return hashlib.sha256(f"{salt}:{value}".encode()).hexdigest()[:32]
+
+
+# New API logs only the first and last 4 characters of the key: "pcs-" keeps a
+# conversation session apart from the old per-prompt "pico-" hash there.
+SESSION_PREFIX = "pcs-"
+
+
+def conversation_session(conversation_id: str) -> str:
+    """``session_id`` / ``prompt_cache_key`` for one conversation (≤64 chars, no raw id)."""
+    return SESSION_PREFIX + _h(conversation_id, salt="conv")
+
+
+def member_key(membership_id: str) -> str:
+    return _h(membership_id, salt="member") if membership_id else ""
+
+
+@contextmanager
+def caller_scope(*, conversation_id: str | None, run_id: str, membership_id: str = "") -> Iterator[Caller]:
+    """Calls made inside carry this conversation's session and wait on this teacher's slots.
+
+    No conversation → the run is its own conversation (same rule as the box workspace).
+    """
+    who = Caller(
+        session=conversation_session(conversation_id or f"run:{run_id}"),
+        member=member_key(membership_id),
+    )
+    token = CALLER.set(who)
+    try:
+        yield who
+    finally:
+        CALLER.reset(token)
 
 
 _SLOTS: dict[str, asyncio.Semaphore] = {}
+_MEMBER_SLOTS: dict[str, asyncio.Semaphore] = {}
 _INFLIGHT: Counter[str] = Counter()
 _PEAK: Counter[str] = Counter()
 _COUNTS: Counter[tuple[str, str]] = Counter()
@@ -382,13 +448,31 @@ def count(purpose: str, outcome: str, n: int = 1) -> None:
 
 
 async def acquire(key: str, purpose: str) -> Callable[[], None]:
-    """Take a slot on ``key`` and count one request; returns the release (call it once)."""
+    """Take this teacher's slot, then a slot on ``key``, and count one request.
+
+    Returns the release (call it once). The teacher slot comes first so one
+    teacher's queue never holds a key slot others could use.
+    """
     kid = key_id(key)
     sem = _SLOTS.get(kid)
     if sem is None:
         sem = _SLOTS[kid] = asyncio.Semaphore(key_max())
+    member = CALLER.get().member
+    own = None
+    if member:
+        own = _MEMBER_SLOTS.get(member)
+        if own is None:
+            own = _MEMBER_SLOTS[member] = asyncio.Semaphore(member_max())
+    deadline = time.monotonic() + SLOT_WAIT_S
     try:
-        await asyncio.wait_for(sem.acquire(), timeout=SLOT_WAIT_S)
+        if own is not None:
+            await asyncio.wait_for(own.acquire(), timeout=SLOT_WAIT_S)
+        try:
+            await asyncio.wait_for(sem.acquire(), timeout=max(0.0, deadline - time.monotonic()))
+        except BaseException:
+            if own is not None:
+                own.release()
+            raise
     except TimeoutError:
         count(purpose, "busy")
         raise UpstreamBusy(f"upstream key {kid} busy") from None
@@ -404,6 +488,8 @@ async def acquire(key: str, purpose: str) -> Callable[[], None]:
         released = True
         _INFLIGHT[kid] -= 1
         sem.release()
+        if own is not None:
+            own.release()
 
     return release
 
@@ -420,6 +506,7 @@ def stats() -> dict[str, object]:
     return {
         "since": int(_STARTED),
         "key_max": key_max(),
+        "member_max": member_max(),
         "calls": by_purpose,
         "inflight": {k: v for k, v in _INFLIGHT.items() if v},
         "peak": dict(_PEAK),
@@ -430,6 +517,7 @@ def reset() -> None:
     """Tests: forget slots, counters and runs."""
     global _STARTED
     _SLOTS.clear()
+    _MEMBER_SLOTS.clear()
     _INFLIGHT.clear()
     _PEAK.clear()
     _COUNTS.clear()

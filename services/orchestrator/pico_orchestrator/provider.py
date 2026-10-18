@@ -641,9 +641,14 @@ async def _iter_openai_responses(
     if instructions:
         kwargs["instructions"] = instructions
     kwargs["user"] = upstream.caller(purpose)
-    prompt_key = upstream.cache_key(instructions)
+    # One conversation = one session upstream (pico#1344): New API passes
+    # ``session_id`` through to the Codex-style relay with the cache key.
+    session = upstream.CALLER.get().session
+    prompt_key = session or upstream.cache_key(instructions)
     if prompt_key:
         kwargs["prompt_cache_key"] = prompt_key
+    if session:
+        kwargs["extra_headers"] = {"session_id": session}
     # One try: resending belongs to the race in stream_chat (pico#1271).
     yielded = False
     stream = await client.responses.create(**kwargs)
