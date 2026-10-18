@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react';
+import legacy from '@vitejs/plugin-legacy';
 import fs from 'fs';
 import path from 'path';
 import { defineConfig } from 'vite';
@@ -67,6 +68,10 @@ export default defineConfig(({ command }) => ({
   envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
   plugins: [
     react(),
+    // Old Android WebViews (e.g. MIUI on the 教职工 App's in-app Pico page, edu-core#3330) can't parse the
+    // modern bundle. Browsers without import.meta.resolve (< Chrome 105) load a SystemJS legacy build with
+    // core-js polyfills (structuredClone, Object.hasOwn, …); desktop browsers keep loading the modern bundle only.
+    legacy({ targets: ['chrome >= 61', 'safari >= 12'] }),
     {
       name: 'node-polyfills-shims-resolver',
       resolveId(id) {
@@ -113,6 +118,7 @@ export default defineConfig(({ command }) => ({
           'assets/rum.*.js',
           'assets/locale-*.js',
           'assets/query-devtools*.js',
+          '**/*-legacy*.js',
         ],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         /** LibreChat mutates index.html per request for subpath and language support. */
