@@ -311,6 +311,8 @@ class FakeTransport(TruePiTransport):
             ack["data"] = {"text": self.assistant_text}
         if ctype == "bash":
             out = self.bash_outputs.pop(0) if self.bash_outputs else ""
+            # Real Pi (0.84) also streams the output as an event before the response.
+            await self._event_q.put(RpcEvent({"type": "bash_execution_update", "id": cmd.get("id"), "delta": out}))
             ack["data"] = {"output": out, "exitCode": 0}
         await self._resp_q.put(ack)
 
