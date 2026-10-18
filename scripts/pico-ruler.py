@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import fcntl
 import importlib.util
 import io
 import json
@@ -998,6 +999,21 @@ def replay(pico: Any, src: str) -> int:
     return 0 if ok else 1
 
 
+def hold_upstream_turn(path: str) -> Any:
+    """One ruler run on the host at a time (pico#1344): stacks share the live key.
+
+    AIProxy banned that key on 10-18 after two stacks ran side by side; the
+    second run now waits here until the first one ends (the lock dies with it).
+    """
+    fh = open(path, "a+")  # noqa: SIM115 — held for the life of the process
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print(f"WAIT another ruler run holds {path}", flush=True)
+        fcntl.flock(fh, fcntl.LOCK_EX)
+    return fh
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stack", default="", help="throwaway stack name (pico-ruler-stack.sh)")
@@ -1018,6 +1034,7 @@ def main() -> int:
     ap.add_argument("--replay", default="", metavar="DIR", help="send the exported live inputs again (pico#1334)")
     ap.add_argument("--replay-export", nargs=2, metavar=("DB", "DIR"), help="export gate-failed live turns (ECS only)")
     ap.add_argument("--since", default="2026-10-03")
+    ap.add_argument("--lock", default="/tmp/pico-ruler.lock", help="host-wide: one ruler run at a time")
     args = ap.parse_args()
 
     if args.replay_export:
@@ -1052,6 +1069,7 @@ def main() -> int:
         "page": f"http://login.pico-ruler.cn:{port + 4}/",
         "page_container": f"ruler-{args.stack}-page",
     }
+    turn = hold_upstream_turn(args.lock)  # noqa: F841 — released when the process exits
     if args.replay:
         return replay(lte.Pico(f"http://127.0.0.1:{port}", key, args.membership, args.model, 900.0), args.replay)
     revision = (d / "src" / "REVISION").read_text().strip() if (d / "src" / "REVISION").exists() else "?"

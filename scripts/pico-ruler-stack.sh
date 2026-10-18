@@ -9,7 +9,9 @@
 #   bash scripts/pico-ruler-stack.sh info <name> [idx]          # ports + paths for scripts/pico-ruler.py
 #
 # idx (0-2) picks ports 188<idx>0..188<idx>6 and box subnet 172.30.(253+idx).0/24,
-# so two stacks (before / after) can run side by side.
+# so two stacks (before / after) can stand side by side. They spend the live
+# key, so each sends one model request at a time and scripts/pico-ruler.py runs
+# one pass on the host at a time (pico#1344: AIProxy banned the key on 10-18).
 #
 # Why it looks like this (pico#1323 card comments):
 # - Boxes cannot use pico-ws: the host firewall lets only pico-ws reach the live
@@ -102,6 +104,10 @@ api_env() {
       | grep -vE '^(PICO_DATABASE_URL|PICO_SANDBOX_URL|PICO_OFFICE_URL|PICO_RUNNER_URL|PICO_RUNNER_TOKEN|PICO_RUNNER_PROXY_URL|PICO_HOOK_SERVICE_TOKEN|PICO_EDU_BASE_URL|PICO_EDU_SERVICE_TOKEN|PICO_EDU_HANDOFF_ENABLED|PICO_API_PORT|PICO_SANDBOX_DISK|PICO_GIT_SHA|PICO_MEILI_URL|MEILI_MASTER_KEY|PICO_SANDBOX_URL)=' \
       | grep -v '^$' > "$D/api.env"
     printf 'PICO_RUNNER_TOKEN=%s\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> "$D/api.env"
+    # pico#1344: the stack spends the live key; one model request at a time.
+    grep -v '^PICO_UPSTREAM_KEY_MAX=' "$D/api.env" > "$D/api.env.tmp" || true
+    mv "$D/api.env.tmp" "$D/api.env"
+    printf 'PICO_UPSTREAM_KEY_MAX=1\n' >> "$D/api.env"
     # pico#1336: KEY=VALUE lines that replace the live value (e.g. point
     # DEEPSEEK_BASE_URL at scripts/pico-fault-upstream.py).
     if [[ -n "${PICO_RULER_API_ENV_EXTRA:-}" ]]; then

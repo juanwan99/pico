@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pico_orchestrator import upstream
 from pico_orchestrator.true_pi.client import (
     PI_AGENT_HOME_ENV,
     PI_MODELS_JSON,
@@ -200,6 +201,9 @@ class ProxyEntry:
     tool_url: str
     tool_token: str
     model: str = ""
+    # Hashed teacher (their upstream slots) and this conversation's session (pico#1344).
+    member: str = ""
+    session: str = ""
     # Concurrent model calls one box may hold open through the proxy.
     slots: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(4))
 
@@ -360,6 +364,8 @@ class RunnerTransport(SubprocessTransport):
                 tool_url=self.tool_url,
                 tool_token=self.tool_token,
                 model=self.model,
+                member=self.runner.key.member,
+                session=upstream.SESSION_PREFIX + self.runner.key.conv,
             )
         )
         try:

@@ -297,6 +297,7 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
     body = await request.body()
     if len(body) > MAX_BODY:
         return _deny("proxy.too_large", 413)
+    session = entry.session
     if request.method == "POST":
         # The box may only spend on this run's model (curl in the box can call
         # the proxy directly; it must not pick another model or endpoint).
@@ -304,7 +305,13 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
         if payload is None:
             return _deny("proxy.model_denied")
         body = payload
+        session = session_of(body) or session
     headers = {k: v for k, v in request.headers.items() if k.lower() in _KEEP}
+    # One conversation = one session upstream (pico#1344). Pi keys its prompt
+    # cache by its session file, pinned per conversation; New API passes
+    # ``session_id`` on to the relay. Without it every step looked like a new chat.
+    if session:
+        headers["session_id"] = session
     headers["authorization"] = f"Bearer {entry.llm_key}"
     headers["content-type"] = (
         "application/json"
@@ -326,17 +333,30 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
     hedge = model_hedge(body, run_id) if request.method == "POST" else []
     if is_llm_pass(target):
         headers[DOOR_HEADER] = "raced"
-    return await _stream(
-        request.method,
-        target,
-        headers,
-        body,
-        on_done=entry.slots.release,
-        hedge=hedge,
-        call=upstream.Call("pi_step", run_id=run_id),
-        key="" if is_llm_pass(target) else entry.llm_key,
-        run_id=run_id,
-    )
+    token = upstream.CALLER.set(upstream.Caller(session=session, member=entry.member))
+    try:
+        return await _stream(
+            request.method,
+            target,
+            headers,
+            body,
+            on_done=entry.slots.release,
+            hedge=hedge,
+            call=upstream.Call("pi_step", run_id=run_id),
+            key="" if is_llm_pass(target) else entry.llm_key,
+            run_id=run_id,
+        )
+    finally:
+        upstream.CALLER.reset(token)
+
+
+def session_of(body: bytes) -> str:
+    """Pi's ``prompt_cache_key`` (its session id), so header and cache key agree."""
+    try:
+        key = json.loads(body.decode("utf-8") or "{}").get("prompt_cache_key")
+    except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+        return ""
+    return key if isinstance(key, str) and 0 < len(key) <= 64 else ""
 
 
 # Set on a step the run proxy already raced when it goes on to our llm-pass hop:
