@@ -6,6 +6,7 @@
 每条失败运行分四个维度：错误类（密钥暂停 / 502 / 429·繁忙 / 断流 / 403 无正文）、
 Pi 还是直答、失败前有没有输出、老师对话还是服务端调用（有没有对话 id）。
 老师对话里出现上游失败 → ❌（列出 run id 前 8 位），退出 1；只有服务端调用或没有 → ✅。
+首 token 卡住却已流过 thinking（模型在想就被掐，#1339）应为 0，否则 ❌、退出 1。
 smoke / regress 测试校不算老师。
 """
 
@@ -33,6 +34,8 @@ def classify(reason: str) -> str | None:
         return "断流"
     if "403" in r:
         return "403 无正文"
+    if "first token stall" in r:
+        return "首 token 卡住"
     return None
 
 
@@ -54,6 +57,7 @@ def main() -> int:
     total = con.execute("select count(*) from runs where created_at >= ?", (since,)).fetchone()[0]
     agg: Counter = Counter()
     teacher: list[str] = []
+    cut_thinking: list[str] = []
     for run_id, payload, school, conv in rows:
         kind = classify(str(json.loads(payload or "{}").get("reason") or ""))
         if kind is None:
@@ -64,16 +68,24 @@ def main() -> int:
         test = str(school).startswith(TEST_SCHOOLS)
         who = "测试校" if test else ("老师对话" if conv else "服务端调用")
         agg[(kind, path, out, who)] += 1
+        if kind == "首 token 卡住" and "thinking.delta" in types:
+            cut_thinking.append(run_id[:8])
         if who == "老师对话":
             teacher.append(run_id[:8])
     print(f"近 {args.days:g} 天（{since} UTC 起）共 {total} 次运行，上游原因失败 {sum(agg.values())} 次")
     for (kind, path, out, who), n in agg.most_common():
         print(f"  {n:4d}  {kind} · {path} · {out} · {who}")
+    bad = 0
+    if cut_thinking:
+        print(f"❌ 流过 thinking 仍按首 token 卡住掐掉 {len(cut_thinking)} 次：{', '.join(cut_thinking[:20])}")
+        bad = 1
+    else:
+        print("✅ 流过 thinking 仍按首 token 卡住掐掉 0 次")
     if teacher:
         print(f"❌ 老师对话里看到上游报错 {len(teacher)} 次：{', '.join(teacher[:20])}")
         return 1
     print("✅ 老师对话里上游报错 0 次")
-    return 0
+    return bad
 
 
 if __name__ == "__main__":

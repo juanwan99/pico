@@ -344,8 +344,9 @@ async def _run_true_pi_once(
 ) -> RunResult:
     """Run one multi-step turn on true Pi (or fake transport).
 
-    ``stall_switch_s`` > 0 (fast lane, head model only): no visible output that
-    many seconds after the prompt → fail over to the next model (#1261).
+    ``stall_switch_s`` > 0 (fast lane, head model only): no output (text, tools
+    or thinking) that many seconds after the prompt → fail over to the next
+    model (#1261, #1339).
     """
     caps = caps or RunCaps()
     rid = run_id or f"tp-{uuid.uuid4().hex[:12]}"
@@ -945,6 +946,10 @@ async def _run_true_pi_once(
                         stall_switch_s > 0
                         and not thinking_on
                         and not state.has_output
+                        # Thinking streamed = the model is working; the failover gate
+                        # already counts it as live, so cutting here failed the run
+                        # with no next model (#1339). The wall clock still bounds it.
+                        and not state.thinking_emitted
                         and not state.failover_error
                         and loop.time() - prompt_at >= stall_switch_s
                     ):
