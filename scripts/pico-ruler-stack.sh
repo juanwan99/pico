@@ -8,7 +8,7 @@
 #   bash scripts/pico-ruler-stack.sh down <name> [idx]
 #   bash scripts/pico-ruler-stack.sh info <name> [idx]          # ports + paths for scripts/pico-ruler.py
 #
-# idx (0-4) picks ports 188<idx>0..188<idx>6 and box subnet 172.30.(253+idx).0/24,
+# idx (0-2) picks ports 188<idx>0..188<idx>6 and box subnet 172.30.(253+idx).0/24,
 # so two stacks (before / after) can run side by side.
 #
 # Why it looks like this (pico#1323 card comments):
@@ -37,7 +37,7 @@ MIN_AVAIL_MB=8192
 cmd="${1:-}"; name="${2:-}"
 [[ "$name" =~ ^[a-z0-9-]{1,20}$ ]] || { echo "usage: $0 up|down|info <name> ..." >&2; exit 2; }
 if [[ "$cmd" == up ]]; then src="${3:-}"; idx="${4:-0}"; else idx="${3:-0}"; fi
-[[ "$idx" =~ ^[0-4]$ ]] || { echo "idx must be 0-4" >&2; exit 2; }
+[[ "$idx" =~ ^[0-2]$ ]] || { echo "idx must be 0-2 (box subnet 172.30.253-255)" >&2; exit 2; }
 
 D="$ROOT_DIR/$name"
 P=$((18800 + idx * 10))
