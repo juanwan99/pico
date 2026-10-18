@@ -230,31 +230,61 @@
           true,
         );
         /* Script errors before the app mounts (old WebView: syntax / missing API in both the modern and the
-         * legacy bundle, edu-core#3330) would leave #pico-boot spinning forever. The legacy fallback itself
-         * starts with an expected syntax error, so only give up if the boot screen is still up well after load. */
+         * legacy bundle, edu-core#3330) would leave #pico-boot spinning forever. Old browsers that understand
+         * modules hit an expected error first (plugin-legacy's modern check) and only then fetch the SystemJS
+         * legacy build — on a slow network that takes long. So errors from before SystemJS is up don't count
+         * once it is up, and nothing is judged while a legacy script is still downloading. */
         var bootErrors = [];
+        function noteBootError(message) {
+          bootErrors.push({ message: String(message).slice(0, 200), afterLegacy: Boolean(window.System) });
+        }
         window.addEventListener('error', function (event) {
           if (event.target && event.target !== window && event.target.tagName) {
             return;
           }
-          bootErrors.push(String(event.message || 'error').slice(0, 200));
+          noteBootError(event.message || 'error');
         });
         window.addEventListener('unhandledrejection', function (event) {
-          bootErrors.push(String((event.reason && event.reason.message) || 'rejection').slice(0, 200));
+          noteBootError((event.reason && event.reason.message) || 'rejection');
         });
+        function bootFailure() {
+          /* plugin-legacy's fallback adds the polyfill script at runtime (no nomodule attribute). */
+          if (!window.System && document.querySelector('script[src*="-legacy"]:not([nomodule])')) {
+            return '';
+          }
+          for (var i = bootErrors.length - 1; i >= 0; i--) {
+            if (!window.System || bootErrors[i].afterLegacy) {
+              return bootErrors[i].message;
+            }
+          }
+          return '';
+        }
         window.addEventListener('load', function () {
-          setTimeout(function () {
-            var boot = document.getElementById('pico-boot');
-            if (!boot || !bootErrors.length) {
+          var started = Date.now();
+          var timer = setInterval(function () {
+            var waited = Date.now() - started;
+            if (!document.getElementById('pico-boot') || waited > 180000) {
+              clearInterval(timer);
               return;
             }
-            window.__lcRumPush('boot-too-old', { message: bootErrors[bootErrors.length - 1] });
-            boot.innerHTML =
-              '<h1 style="font-size:1.25rem;font-weight:600;margin:0">浏览器太旧，Pico 打不开</h1>' +
-              '<p style="margin:0;opacity:.75;font-size:.95rem;max-width:22rem">请在应用商店更新「Android System WebView」或手机浏览器后再试，也可以在电脑上打开 pico.aivia.asia</p>' +
-              '<button type="button" onclick="location.reload()" style="margin-top:8px;padding:8px 20px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;font-size:.95rem">重新加载</button>';
-          }, 15000);
+            var failure = waited >= 14000 ? bootFailure() : '';
+            if (failure) {
+              clearInterval(timer);
+              showTooOld(failure);
+            }
+          }, 5000);
         });
+        function showTooOld(failure) {
+          var boot = document.getElementById('pico-boot');
+          if (!boot) {
+            return;
+          }
+          window.__lcRumPush('boot-too-old', { message: failure });
+          boot.innerHTML =
+            '<h1 style="font-size:1.25rem;font-weight:600;margin:0">浏览器太旧，Pico 打不开</h1>' +
+            '<p style="margin:0;opacity:.75;font-size:.95rem;max-width:22rem">请在应用商店更新「Android System WebView」或手机浏览器后再试，也可以在电脑上打开 pico.aivia.asia</p>' +
+            '<button type="button" onclick="location.reload()" style="margin-top:8px;padding:8px 20px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;font-size:.95rem">重新加载</button>';
+        }
         window.addEventListener('unhandledrejection', function (event) {
           var message = event.reason && event.reason.message;
           if (
