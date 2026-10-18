@@ -108,7 +108,10 @@ def test_counts_against_the_files() -> None:
 
 def test_prompt_is_facts_only_and_failure_fits_user_errors() -> None:
     facts = ["回答提到的 a.docx 在 outputs 里没有。", "b.pptx 有 6 张幻灯片，回答说 10 张。"]
-    assert self_check_prompt(facts) == "系统核对：\n- 回答提到的 a.docx 在 outputs 里没有。\n- b.pptx 有 6 张幻灯片，回答说 10 张。"
+    plain = "系统核对：\n- 回答提到的 a.docx 在 outputs 里没有。\n- b.pptx 有 6 张幻灯片，回答说 10 张。"
+    # A command receipt, not the teacher talking (s4c R06: 「你核对得对」).
+    assert self_check_prompt(facts) == f"Ran `cat /workspace/.pico/self-check.txt`\n```\n{plain}\n```"
+    assert self_check_prompt(facts, written=False) == plain
     msg = self_check_failure(facts)
     assert msg.startswith("交付前核对没通过：回答提到的 a.docx") and "另有 1 处" in msg
     assert len(self_check_failure(["很长" * 200])) <= 180
@@ -215,15 +218,17 @@ async def test_one_extra_round_on_facts_then_succeeds(monkeypatch) -> None:
     transport = FakeTransport(
         scripted=_turn(_CLAIM),
         scripted_after_prompt=[_turn(_CLAIM)],
-        bash_outputs=[_MISSING, _FIXED],
+        bash_outputs=[_MISSING, "", _FIXED],
         assistant_text="",
     )
     result, events = await _run(monkeypatch, transport)
     assert result.status == "succeeded"
     prompts = [c["message"] for c in transport.sent if c.get("type") == "prompt"]
-    assert prompts[-1] == "系统核对：\n- 回答提到的 高三（2）班班级公约.docx 在 outputs 里没有。"
+    assert prompts[-1].startswith("Ran `cat /workspace/.pico/self-check.txt`\n```\n系统核对：\n- 回答提到的 高三（2）班班级公约.docx")
     bash = [c for c in transport.sent if c.get("type") == "bash"]
-    assert len(bash) == 2 and all(c["excludeFromContext"] is True for c in bash)
+    # check → write the facts file → check again; none of them enters the model's context.
+    assert len(bash) == 3 and all(c["excludeFromContext"] is True for c in bash)
+    assert "/workspace/.pico/self-check.txt" in bash[1]["command"]
     resume = [p for k, p in events if k == "run.resume"]
     assert len(resume) == 1 and resume[0]["reason"] == "self_check"
     assert resume[0]["text"].startswith("交付前自查：")
@@ -234,7 +239,7 @@ async def test_still_wrong_after_the_round_fails_on_the_fact(monkeypatch) -> Non
     transport = FakeTransport(
         scripted=_turn(_CLAIM),
         scripted_after_prompt=[_turn(_CLAIM)],
-        bash_outputs=[_MISSING, _MISSING],
+        bash_outputs=[_MISSING, "", _MISSING],
         assistant_text="",
     )
     result, _events = await _run(monkeypatch, transport)

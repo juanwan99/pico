@@ -1167,7 +1167,8 @@ async def _run_true_pi_once(
                     transport.plan_agent_ends = 0
                     transport.plan_first_held_at = None
                 steps_before = state.step
-                early = await _drive(self_check_prompt(check_facts), [])
+                written = await _write_self_check(client, check_facts, rid)
+                early = await _drive(self_check_prompt(check_facts, written=written), [])
                 if early is not None:
                     return early
                 if state.step != steps_before and await _turn_healthy():
@@ -1426,6 +1427,17 @@ def _box_attachments(
         if name and data:
             out[str(name)] = bytes(data)
     return list(out.items())
+
+
+async def _write_self_check(client: Any, facts: list[str], rid: str) -> bool:
+    from pico_orchestrator.true_pi.self_check import CHECK_TIMEOUT_S, write_facts_command
+
+    try:
+        data = await asyncio.wait_for(client.bash(write_facts_command(facts)), CHECK_TIMEOUT_S + 2)
+    except Exception as exc:  # noqa: BLE001 — then the facts go as plain text
+        logger.info("true_pi self_check write skipped run_id=%s: %s", rid, type(exc).__name__)
+        return False
+    return data.get("exitCode") in (0, None)
 
 
 async def _self_check_now(

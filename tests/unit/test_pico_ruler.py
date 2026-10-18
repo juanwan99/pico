@@ -215,6 +215,17 @@ def test_summary_and_compare_flags_flips():
     assert "R01 ✅→❌" in text and "R02 ❌→✅" in text
 
 
+def test_told_the_teacher_is_not_a_fake_delivery():
+    # 统筹窗 10-18: a mismatch on a turn that ended succeeded is 假交付; failed / cancelled = 如实没做成.
+    rep = _report([("R00", True), ("R01", True), ("R02", False), ("R03", False)])
+    rep["results"][2]["honest_fail"] = ["R1 说交了但没有新文件"]
+    rep["results"][3]["fake_delivery"] = ["R2 提到的 a.docx 不存在"]
+    rep["summary"] = ruler.summarize(rep["results"])
+    assert rep["summary"]["fake_delivery"] == 1 and rep["summary"]["honest_fail"] == 1
+    text = ruler.render({**rep, "started": "t"})
+    assert "假交付 1 · 如实没做成 1" in text and "如实没做成：R1 说交了但没有新文件" in text
+
+
 KNOWN_TOP = {
     "reply_len", "reply_has", "reply_any", "reply_regex", "reply_links_min", "reply_numbered_min", "reply_facts",
     "tool_calls_max", "asks_max", "page_hit", "ask_or_placeholder", "files_named", "file",

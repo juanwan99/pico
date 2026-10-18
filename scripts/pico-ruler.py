@@ -81,7 +81,10 @@ class RulerResult:
     model_calls: int = 0
     first_input_tokens: int = 0
     asks: int = 0
+    # Said / files mismatch on a turn that ended succeeded = 假交付; on a turn that
+    # failed or was cancelled (the teacher was told) = 如实没做成 (#1334, 统筹窗 10-18).
     fake_delivery: list[str] = field(default_factory=list)
+    honest_fail: list[str] = field(default_factory=list)
     status: str = ""
     fail_reason: str = ""
     files: list[str] = field(default_factory=list)
@@ -712,16 +715,19 @@ def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) 
             new = [a for a in now if str(a.get("id")) not in seen and _kind_of(a) in PRODUCED]
             seen |= {str(a.get("id")) for a in now}
             turn_new.append(new)
+            miss: list[str] = []
             for a in new:
                 kind = _kind_of(a)
                 if kind in FILE_CHECKS and not opens(kind, raw_of(a)):
-                    res.fake_delivery.append(f"R{i + 1} {a.get('title')} 打不开")
+                    miss.append(f"R{i + 1} {a.get('title')} 打不开")
             if DELIVERY_CLAIM.search(reply or "") and not new:
-                res.fake_delivery.append(f"R{i + 1} 说交了但没有新文件")
+                miss.append(f"R{i + 1} 说交了但没有新文件")
             titles = {str(a.get("title") or "") for a in now}
             judged = [(str(a.get("title") or ""), _kind_of(a), raw_of(a)) for a in new if _kind_of(a) in {"pptx", "pdf"}]
-            for line in said_vs_files(reply, judged, titles):
-                res.fake_delivery.append(f"R{i + 1} {line}")
+            miss += [f"R{i + 1} {line}" for line in said_vs_files(reply, judged, titles)]
+            if miss:
+                turn_status = lte._run_events(pico, conv)[2]
+                (res.fake_delivery if turn_status == "succeeded" else res.honest_fail).extend(miss)
             if res.fail_reason == "wall_clock":
                 break
             # A plain-text question (not an ask_user card) gets the same answer once.
@@ -730,6 +736,7 @@ def run_case(pico: Any, case: dict[str, Any], stamp: str, opts: dict[str, Any]) 
                 res.asks += 1
                 turns.insert(i + 1, {"prompt": case["ask_answer"]})
                 res.fake_delivery = [f for f in res.fake_delivery if not f.startswith(f"R{i + 1} 说交了")]
+                res.honest_fail = [f for f in res.honest_fail if not f.startswith(f"R{i + 1} 说交了")]
             i += 1
         _, steps, status, error, _ = lte._run_events(pico, conv)
         res.agent_steps = steps
@@ -784,6 +791,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "wall_median_s": round(statistics.median(walls), 1) if walls else 0.0,
         "wall_p90_s": round(p90(walls), 1),
         "fake_delivery": sum(1 for r in tasks if r["fake_delivery"]),
+        "honest_fail": sum(1 for r in tasks if r.get("honest_fail")),
         "probe_input_tokens": probe["first_input_tokens"] if probe else 0,
         "tool_calls_median": statistics.median([r["tool_calls"] for r in tasks]) if tasks else 0,
         "input_tokens_total": sum(r["input_tokens"] for r in results),
@@ -799,7 +807,7 @@ def render(report: dict[str, Any]) -> str:
         "",
         (
             f"成功 {s['ok']}/{s['cases']}（{s['success_rate']:.0%}）· 墙钟中位 {s['wall_median_s']} s · p90 {s['wall_p90_s']} s · "
-            f"假交付 {s['fake_delivery']} · 探针输入 {s['probe_input_tokens']} token · 工具往返中位 {s['tool_calls_median']} · "
+            f"假交付 {s['fake_delivery']} · 如实没做成 {s.get('honest_fail', 0)} · 探针输入 {s['probe_input_tokens']} token · 工具往返中位 {s['tool_calls_median']} · "
             f"输入 / 输出共 {s['input_tokens_total']} / {s['output_tokens_total']} token · 追问 {s['asks_total']}"
         ),
         "",
@@ -807,7 +815,8 @@ def render(report: dict[str, Any]) -> str:
         "|---|---|---|---:|---:|---:|---:|---:|---:|---|",
     ]
     for r in report["results"]:
-        why = "；".join(r["failed"] + r["fake_delivery"] + ([r["fail_reason"]] if r["fail_reason"] else []))[:160]
+        honest = [f"如实没做成：{h}" for h in r.get("honest_fail") or []]
+        why = "；".join(r["failed"] + r["fake_delivery"] + honest + ([r["fail_reason"]] if r["fail_reason"] else []))[:160]
         lines.append(
             f"| {r['case']} | {r['title']} | {'✅' if r['ok'] else '❌'} | {r['passed']}/{r['checks']} | {r['wall_s']:.0f} | "
             f"{r['tool_calls']} | {r['input_tokens']} | {r['output_tokens']} | {r['asks']} | {why or '—'} |"
@@ -824,6 +833,7 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
         ("墙钟中位 s", sa["wall_median_s"], sb["wall_median_s"]),
         ("墙钟 p90 s", sa["wall_p90_s"], sb["wall_p90_s"]),
         ("假交付", sa["fake_delivery"], sb["fake_delivery"]),
+        ("如实没做成", sa.get("honest_fail", 0), sb.get("honest_fail", 0)),
         ("探针输入 token", sa["probe_input_tokens"], sb["probe_input_tokens"]),
         ("工具往返中位", sa["tool_calls_median"], sb["tool_calls_median"]),
         ("输入 token 合计", sa["input_tokens_total"], sb["input_tokens_total"]),
@@ -1057,7 +1067,7 @@ def main() -> int:
             r = RulerResult(case=case["id"], title=case.get("title") or "", fail_reason="other",
                             notes=[f"exception {type(exc).__name__}: {str(exc)[:200]}"])
         print(f"DONE {r.case} ok={r.ok} {r.passed}/{r.checks} wall={r.wall_s:.0f}s tools={r.tool_calls} "
-              f"in={r.input_tokens} out={r.output_tokens} failed={r.failed} fake={r.fake_delivery}", flush=True)
+              f"in={r.input_tokens} out={r.output_tokens} failed={r.failed} fake={r.fake_delivery} honest={r.honest_fail}", flush=True)
         return r.__dict__
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.parallel)) as pool:

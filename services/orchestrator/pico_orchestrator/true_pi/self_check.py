@@ -189,9 +189,30 @@ def self_check_facts(answer: str, report: Mapping[str, Any], *, had_files_before
     return facts
 
 
-def self_check_prompt(facts: list[str]) -> str:
-    """What the model gets for its one extra round: the facts, nothing else."""
+SELF_CHECK_FILE = "/workspace/.pico/self-check.txt"
+
+
+def facts_text(facts: list[str]) -> str:
     return "系统核对：\n" + "\n".join(f"- {f}" for f in facts)
+
+
+def write_facts_command(facts: list[str]) -> str:
+    """Put the facts in the box, so the receipt below is what ``cat`` really prints."""
+    data = base64.b64encode(facts_text(facts).encode()).decode()
+    return f"mkdir -p {os.path.dirname(SELF_CHECK_FILE)} && echo {data} | base64 -d > {SELF_CHECK_FILE}"
+
+
+def self_check_prompt(facts: list[str], *, written: bool = True) -> str:
+    """What the model gets for its one extra round: the facts, nothing else.
+
+    Shaped as Pi's own command receipt (``bashExecutionToText``), not as the
+    teacher talking: sent as plain text, sol answered 「你核对得对」 to the
+    teacher (ruler s4c R06). Pi turns every message into a user turn, so the
+    shape is what tells the model where the facts came from.
+    """
+    if not written:
+        return facts_text(facts)
+    return f"Ran `cat {SELF_CHECK_FILE}`\n```\n{facts_text(facts)}\n```"
 
 
 def self_check_teacher_note(facts: list[str]) -> str:
