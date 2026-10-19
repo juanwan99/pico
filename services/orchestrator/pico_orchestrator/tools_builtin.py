@@ -382,15 +382,59 @@ async def _office_lib_input(
     return raw, str(row.get("artifact_id") or aid), title
 
 
-def _make_read_office_skill():
+_ARTIFACT_ID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def _file_ref(args: dict[str, Any]) -> tuple[str | None, str | None]:
+    """(artifact_id, title) from the call. Models used to Pi's own ``read`` pass
+    ``path`` (pico#1322: one run sent ``path=<artifact id>`` seven times)."""
+    aid = str(args.get("artifact_id") or "").strip() or None
+    title = str(args.get("title") or "").strip() or None
+    if aid or title:
+        return aid, title
+    for key in ("path", "id", "file", "file_id", "name"):
+        raw = str(args.get(key) or "").strip()
+        if not raw:
+            continue
+        if _ARTIFACT_ID_RE.fullmatch(raw):
+            return raw, None
+        return None, raw.replace("\\", "/").rsplit("/", 1)[-1]
+    return None, None
+
+
+async def _readable_files(store: ArtifactStore, principal: Principal) -> str:
+    """The files this call could have named, for an error the model can act on."""
+    try:
+        rows = await with_io_timeout(store.list(principal, limit=10), what="workspace_list_files")
+    except Exception:  # noqa: BLE001 — the hint never hides the real error
+        rows = []
+    items = [
+        f"{r.get('artifact_id')} ({r.get('title')})" for r in rows or [] if r.get("artifact_id")
+    ]
+    return "Readable files: " + "; ".join(items) if items else "No readable files yet."
+
+
+def _suffix_kind(name: str) -> str | None:
+    return normalize_office_skill_id(name.rsplit(".", 1)[-1]) if "." in name else None
+
+
+def _make_read_office_skill(store: ArtifactStore):
     async def read_office_skill(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        del principal
         raw_id = args.get("id") or args.get("skill") or args.get("kind")
-        sid = normalize_office_skill_id(str(raw_id) if raw_id is not None else "")
+        token = str(raw_id).strip() if raw_id is not None else ""
+        sid = normalize_office_skill_id(token) or _suffix_kind(token)
+        if sid is None and _ARTIFACT_ID_RE.fullmatch(token):
+            # pico#1322: the teacher's file id instead of its kind; its title says the kind.
+            try:
+                row = await store.read(principal, artifact_id=token, title=None)
+            except Exception:  # noqa: BLE001 — fall through to the plain error
+                row = None
+            sid = _suffix_kind(str((row or {}).get("title") or ""))
         if sid is None:
             raise ToolError(
                 "office_skill.unknown",
-                "id must be docx, xlsx, or pptx",
+                "id must be docx, xlsx, or pptx (the kind of document, not a file id). "
+                "To read a file's content use workspace_read_file(artifact_id=...).",
             )
         body = load_office_skill_body(sid)
         return {
@@ -805,13 +849,11 @@ def _workspace_handlers(
         return result
 
     async def read_file(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
-        artifact_id = args.get("artifact_id")
-        title = args.get("title")
-        artifact_id = str(artifact_id).strip() if artifact_id is not None else None
-        title = str(title).strip() if title is not None else None
+        artifact_id, title = _file_ref(args)
         if not artifact_id and not title:
             raise ToolError(
-                "tool.invalid_arguments", "artifact_id or title is required"
+                "tool.invalid_arguments",
+                "artifact_id or title is required. " + await _readable_files(store, principal),
             )
         result = await with_io_timeout(
             store.read(
@@ -822,7 +864,9 @@ def _workspace_handlers(
             what="workspace_read_file",
         )
         if result is None:
-            raise ToolError("artifact.not_found", "Artifact not found")
+            raise ToolError(
+                "artifact.not_found", "Artifact not found. " + await _readable_files(store, principal)
+            )
         result = _read_file_for_model(result)
         return {"artifact": result}
 
@@ -2850,7 +2894,7 @@ def build_default_gateway(
                 "Presentation when artifact_id is set. "
                 "Args: id=docx|xlsx|pptx"
             ),
-            handler=_make_read_office_skill(),
+            handler=_make_read_office_skill(store),
             school_scoped=False,
         )
     )
