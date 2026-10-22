@@ -12,6 +12,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+import itertools
+
 from pico_orchestrator.true_pi.client import RpcEvent, SubprocessTransport
 from pico_orchestrator.true_pi.events import EventMapState, map_event
 from pico_orchestrator.true_pi.thinking import toolcall_progress_from_update
@@ -45,9 +47,26 @@ def test_progress_throttled_and_counts_chars() -> None:
     seen: dict[int, dict[str, Any]] = {}
     first = toolcall_progress_from_update(_update("toolcall_start"), seen, 100.0)
     assert first == {"type": "toolcall_progress", "tool": "write", "chars": 0}
-    assert toolcall_progress_from_update(_update("toolcall_delta", delta="x" * 3000), seen, 102.0) is None
-    later = toolcall_progress_from_update(_update("toolcall_delta", delta="y" * 2000), seen, 105.5)
+    assert toolcall_progress_from_update(_update("toolcall_delta", delta="x" * 3000), seen, 100.5) is None
+    later = toolcall_progress_from_update(_update("toolcall_delta", delta="y" * 2000), seen, 101.0)
     assert later == {"type": "toolcall_progress", "tool": "write", "chars": 5000}
+
+
+def test_progress_at_most_three_seconds_apart() -> None:
+    # pico#1332: teacher sees a fresh「已写 N KB」at least every 3 s while a long call streams.
+    from pico_orchestrator.true_pi.thinking import TOOLCALL_PROGRESS_EVERY_S
+
+    assert TOOLCALL_PROGRESS_EVERY_S <= 1.0
+    seen: dict[int, dict[str, Any]] = {}
+    toolcall_progress_from_update(_update("toolcall_start"), seen, 0.0)
+    emitted = [0.0]
+    t = 0.0
+    while t < 30.0:
+        # Ruler s13c (10-18): Gemini argument deltas can pause ~2 s; a 2 s throttle then gave 4 s gaps.
+        t = round(t + 1.9, 1)
+        if toolcall_progress_from_update(_update("toolcall_delta", delta="z" * 40), seen, t):
+            emitted.append(t)
+    assert max(b - a for a, b in itertools.pairwise(emitted)) < 3.0
 
 
 def test_progress_ignores_text_and_thinking() -> None:

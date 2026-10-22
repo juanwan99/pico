@@ -115,7 +115,7 @@ def thinking_from_message(msg: Mapping[str, Any] | None) -> str:
     return thinking_snapshot(msg).strip()
 
 
-TOOLCALL_PROGRESS_EVERY_S = 5.0
+TOOLCALL_PROGRESS_EVERY_S = 1.0
 
 
 def toolcall_progress_from_update(
