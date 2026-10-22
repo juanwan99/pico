@@ -17,6 +17,14 @@ def test_candidates_primary_then_fallbacks(monkeypatch) -> None:
     ]
 
 
+def test_deepseek_is_the_first_backup_by_default(monkeypatch) -> None:
+    """edu-core#3509 (owner 10-21): DeepSeek is the backup now, a primary later."""
+    monkeypatch.delenv("PICO_BRAIN_FALLBACKS", raising=False)
+    monkeypatch.setenv("PICO_LONG_SESSION_MODELS", "gpt-5.6-sol")
+    assert brain_candidates("gemini-3.8-flash") == ["gemini-3.8-flash", "deepseek-flash", "grok-4.6"]
+    assert brain_candidates("gemini-3.8-flash", long_session=True)[1] == "deepseek-flash"
+
+
 def test_failover_only_on_channel_death() -> None:
     assert should_failover(_Res("failed", "Failed to get available channel for model x"))
     assert not should_failover(_Res("succeeded", "ok"))

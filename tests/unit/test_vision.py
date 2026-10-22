@@ -141,6 +141,16 @@ def test_models_json_text_only_unless_vision() -> None:
     assert vision["providers"]["deepseek"]["models"][0]["input"] == ["text", "image"]
 
 
+def test_deepseek_flash_reads_images() -> None:
+    """edu-core#3509: DeepSeek official /models lists deepseek-flash input text+image."""
+    from pico_orchestrator.vision import model_accepts_image, vision_model_for_images
+
+    assert model_accepts_image("deepseek-flash")
+    assert vision_model_for_images("deepseek-flash") == "deepseek-flash"
+    assert not model_accepts_image("deepseek-v4-pro")
+    assert not model_accepts_image("deepseek-v4-flash")
+
+
 def test_png_bytes_and_merge_and_conversation_remember() -> None:
     raw = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="

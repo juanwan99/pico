@@ -15,6 +15,8 @@ from typing import Any
 from pico_orchestrator.run_types import RunCaps
 
 DEFAULT_DEEPSEEK_VISION = "deepseek-v4-flash-vision-exp"
+# DeepSeek official ids whose /models input_modalities include image (edu-core#3509)
+_DEEPSEEK_IMAGE_MODELS = frozenset({"deepseek-flash"})
 MAX_CHAT_IMAGES = 32
 _MAX_IMAGES = MAX_CHAT_IMAGES
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -37,7 +39,7 @@ _MIME_BY_EXT = {
 
 def model_accepts_image(model: str | None) -> bool:
     mid = (model or "").strip().lower()
-    if mid.startswith(("gpt-", "grok-", "gemini-")):
+    if mid.startswith(("gpt-", "grok-", "gemini-")) or mid in _DEEPSEEK_IMAGE_MODELS:
         return True
     return "vision" in mid or mid.endswith("-vl")
 

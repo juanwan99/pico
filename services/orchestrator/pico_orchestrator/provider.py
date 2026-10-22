@@ -363,6 +363,10 @@ def thinking_extra_body(
     if thinking is None:
         thinking = bool(policy.get("thinking", False))
     backend = str(policy.get("backend_model") or model or "")
+    # A backup on the wire is named as itself: deepseek-flash's lane policy still
+    # names the Gemini primary as backend (edu-core#3509).
+    if is_deepseek_model(model):
+        return {"thinking": {"type": "enabled" if thinking else "disabled"}}
     if is_gemini_model(backend) or is_gemini_model(model):
         # pico#1320 (owner 10-16): fast lane thinks lightly, deep lane thinks hard.
         effort = "high" if thinking else "low"

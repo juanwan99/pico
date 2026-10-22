@@ -146,6 +146,9 @@ def test_thinking_extra_body_gemini_reasoning_effort_low_high(
     assert thinking_extra_body("gemini-3.8-flash", thinking=False) == low
     monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.1-pro")
     assert thinking_extra_body("pico-fast") == low
+    # edu-core#3509: the DeepSeek backup under a Gemini primary gets its own wire
+    assert thinking_extra_body("deepseek-flash", thinking=False) == {"thinking": {"type": "disabled"}}
+    assert thinking_extra_body("deepseek-flash", thinking=True) == {"thinking": {"type": "enabled"}}
 
 
 def test_gemini_thinking_wire_levels() -> None:
