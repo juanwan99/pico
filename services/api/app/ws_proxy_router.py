@@ -25,6 +25,7 @@ import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pico_orchestrator import upstream
+from pico_orchestrator.provider import gemini_thinking_wire, is_gemini_model
 from pico_orchestrator.true_pi.runner import proxy_entry, runner_token
 
 from app.loopback import request_on_loopback_socket
@@ -304,7 +305,7 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
         payload = pinned_model_body(body, entry.model)
         if payload is None:
             return _deny("proxy.model_denied")
-        body = payload
+        body = gemini_thinking_body(path, payload)
         session = session_of(body) or session
     headers = {k: v for k, v in request.headers.items() if k.lower() in _KEEP}
     # One conversation = one session upstream (pico#1344). Pi keys its prompt
@@ -367,6 +368,33 @@ DOOR_HEADER = "x-pico-door"
 def is_llm_pass(target: str) -> bool:
     """Our own loopback hop (paperclip splice): it goes through the door itself."""
     return "/internal/llm-pass/" in target
+
+
+def gemini_thinking_body(path: str, body: bytes) -> bytes:
+    """Pi's ``reasoning_effort`` on a Gemini chat call, also as the level New API forwards.
+
+    New API drops ``reasoning_effort`` for gemini-3 ids, so Gemini 3 thought at its
+    default (high) on every Pi step (edu-core#3508). A call that already names a
+    thinking_config, any other model or path, or a body we cannot read goes as is.
+    """
+    if path.strip("/") != "chat/completions":
+        return body
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return body
+    if not isinstance(payload, dict) or not is_gemini_model(str(payload.get("model") or "")):
+        return body
+    extra = payload.get("extra_body") or {}
+    google = (extra.get("google") or {}) if isinstance(extra, dict) else None
+    if not isinstance(google, dict) or "thinking_config" in google:
+        return body
+    wire = gemini_thinking_wire(payload.get("reasoning_effort"))
+    if not wire:
+        return body
+    config = wire["extra_body"]["google"]["thinking_config"]
+    payload["extra_body"] = {**extra, "google": {**google, "thinking_config": config}}
+    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
 def pinned_model_body(body: bytes, model: str) -> bytes | None:

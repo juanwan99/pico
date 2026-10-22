@@ -1929,3 +1929,130 @@ async def test_stalled_page_read_is_hedged_inside_extract_pages(monkeypatch):
     result = await asyncio.wait_for(ex.extract_pages([_page(1), _page(2)], complete=complete), timeout=5)
     assert [q["number"] for q in result["questions"]] == [1, 2]
     assert sent == {1: 1, 2: 2}
+
+
+def _fake_brain(finish_reason: str, usage: dict, content: str = "[]"):
+    from types import SimpleNamespace
+
+    sent: list[dict] = []
+
+    class _Completions:
+        async def create(self, **kwargs):
+            sent.append(kwargs)
+            return SimpleNamespace(
+                usage=usage,
+                choices=[SimpleNamespace(finish_reason=finish_reason, message=SimpleNamespace(content=content))],
+            )
+
+    async def call_once(_cfg, _purpose, fn, budget=None):
+        return await fn()
+
+    P = SimpleNamespace(
+        uses_openai_responses_brain=lambda _cfg: False,
+        _llm_client=lambda _cfg: SimpleNamespace(chat=SimpleNamespace(completions=_Completions())),
+        thinking_extra_body=lambda _mid, thinking=None: {"reasoning_effort": "low"},
+        call_once=call_once,
+    )
+    return P, sent
+
+
+@pytest.mark.asyncio
+async def test_thinking_that_eats_the_output_is_a_failed_read():
+    """edu-core#3508: 15358 of 16000 spent thinking, JSON cut after question 4 — not a read to build on."""
+    from dataclasses import dataclass
+
+    @dataclass
+    class _Cfg:
+        model: str = "gemini-3.8-flash"
+
+    cfg = _Cfg()
+    P, _ = _fake_brain("length", {"completion_tokens": 15996, "completion_tokens_details": {"reasoning_tokens": 15358}}, '[{"number": 1')
+    usage: dict = {}
+    with pytest.raises(ex.ThinkingRanOut):
+        await ex._complete_once(P, cfg, "gemini-3.8-flash", [], [0], budget=3, max_tokens=16000,
+                                thinking=False, usage_out=usage)
+    assert usage["reasoning_tokens"] == 15358, "spent tokens still billed"
+    # a long answer that hits the cap without thinking is the continue loop's job, not a failure
+    P, _ = _fake_brain("length", {"completion_tokens": 16000, "completion_tokens_details": {"reasoning_tokens": 0}}, '[{"number": 1')
+    assert await ex._complete_once(P, cfg, "gemini-3.8-flash", [], [0], budget=3, max_tokens=16000,
+                                   thinking=False, usage_out={}) == '[{"number": 1'
+    P, _ = _fake_brain("stop", {"completion_tokens": 9000, "completion_tokens_details": {"reasoning_tokens": 8000}})
+    assert await ex._complete_once(P, cfg, "gemini-3.8-flash", [], [0], budget=3, max_tokens=32000,
+                                   thinking=True, usage_out={}) == "[]"
+
+
+@pytest.mark.asyncio
+async def test_structure_reads_that_ran_out_fail_instead_of_guessing():
+    async def ran_out(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        raise ex.ThinkingRanOut("模型思考用完了输出上限")
+
+    with pytest.raises(ex.ExtractError) as caught:
+        await ex.extract_text("1. 题\n17.（24分）大题\n（1）……", task="structure", complete=ran_out)
+    assert caught.value.code == "model.failed"
+
+
+def test_thought_out_rule():
+    assert ex.thought_out("length", {"reasoning_tokens": 8000, "completion_tokens": 16000}, 16000)
+    assert not ex.thought_out("length", {"reasoning_tokens": 7999, "completion_tokens": 16000}, 16000)
+    assert not ex.thought_out("stop", {"reasoning_tokens": 15000, "completion_tokens": 15500}, 16000)
+    assert ex.thought_out("length", {"reasoning_tokens": 9000}, 16000), "no completion count → the cap"
+    assert not ex.thought_out("length", {}, 16000)
+
+
+@pytest.mark.asyncio
+async def test_text_solve_that_ran_out_thinking_reads_again_without():
+    seen: list = []
+
+    async def complete(messages, *, thinking=None, usage_out=None, model_out=None, **_):
+        seen.append(thinking)
+        if thinking:
+            raise ex.ThinkingRanOut("模型思考用完了输出上限")
+        return json.dumps([_solve_item(1, "A")])
+
+    result = await ex.extract_text("1. 题 A. 甲 B. 乙", task="solve", complete=complete)
+    assert seen == [True, False]
+    assert result["questions"][0]["answer"] == "A"
+
+
+@pytest.mark.asyncio
+async def test_exam_read_body_on_the_wire_to_new_api(monkeypatch: pytest.MonkeyPatch):
+    """edu-core#3508: the exact JSON New API gets. New API drops reasoning_effort for gemini-3 and
+    forwards only extra_body.google.thinking_config. Google's own OpenAI-compatible endpoint refuses
+    both at once, and Gemini 2.5 has no thinking_level: a brain that skips New API or a 2.5 model
+    must change thinking_extra_body (send only one of them) — this test says where."""
+    import httpx
+    from openai import AsyncOpenAI
+    from pico_orchestrator import provider as P
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "id": "x", "object": "chat.completion", "created": 0, "model": "gemini-3.8-flash",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "[]"}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        })
+
+    client = AsyncOpenAI(api_key="sk-test", base_url="http://127.0.0.1:3000/v1",
+                         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    monkeypatch.setattr(P, "_llm_client", lambda _cfg: client)
+
+    async def call_once(_cfg, _purpose, fn, budget=None):
+        return await fn()
+
+    monkeypatch.setattr(P, "call_once", call_once)
+
+    cfg = P.resolve_provider()
+    for thinking, level in ((False, "low"), (True, "high")):
+        await ex._complete_once(P, cfg, "gemini-3.8-flash", [{"role": "user", "content": "x"}], [0],
+                                budget=3, max_tokens=16000, thinking=thinking, usage_out={})
+        body = bodies[-1]
+        assert body["reasoning_effort"] == level
+        assert body["extra_body"] == {"google": {"thinking_config": {"thinking_level": level}}}
+        assert "thinking" not in body and "google" not in body

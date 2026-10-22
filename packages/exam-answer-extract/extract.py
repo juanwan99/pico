@@ -42,6 +42,14 @@ class ExtractError(RuntimeError):
         self.code = code
 
 
+class ThinkingRanOut(RuntimeError):
+    """The call stopped at its output cap with most of it spent thinking: the answer is cut.
+
+    Not an ExtractError: callers treat it as a failed read (a page re-reads without
+    thinking, a structure read just does not vote) instead of building a card from it.
+    """
+
+
 # --------------------------------------------------------------------------- prompts
 
 
@@ -1104,15 +1112,35 @@ async def _complete_once(
 
     resp = await P.call_once(cfg, "exam", create, budget=budget)
     usage = getattr(resp, "usage", None)
-    if usage is not None and usage_out is not None:
+    spent: dict[str, Any] = {}
+    if usage is not None:
         from pico_orchestrator.usage_parse import add_usage, parse_usage_blob
 
-        merged = add_usage(dict(usage_out) if usage_out else None, parse_usage_blob(usage))
-        usage_out.clear()
-        if merged:
-            usage_out.update(merged)
+        spent = parse_usage_blob(usage) or {}
+        if usage_out is not None:
+            merged = add_usage(dict(usage_out) if usage_out else None, spent)
+            usage_out.clear()
+            if merged:
+                usage_out.update(merged)
     choices = getattr(resp, "choices", None) or []
+    if choices and thought_out(getattr(choices[0], "finish_reason", None), spent, max_tokens):
+        # Gemini 3 behind New API thought 15.4k of 16k on a structure read and cut the paper
+        # after question 4; the "continue" reads then guessed 17 / 21 as one sub each (edu-core#3508).
+        logger.warning(
+            "exam extract %s thinking ate the output: reasoning=%s completion=%s cap=%s thinking=%s",
+            mid, spent.get("reasoning_tokens"), spent.get("completion_tokens"), max_tokens, thinking,
+        )
+        raise ThinkingRanOut(f"模型思考用完了输出上限（{spent.get('reasoning_tokens')} / {max_tokens}），这次没读全")
     return str(choices[0].message.content or "") if choices else ""
+
+
+def thought_out(finish_reason: Any, spent: dict[str, Any], max_tokens: int) -> bool:
+    """Stopped at the cap and thinking took at least half of the output."""
+    if str(finish_reason or "") != "length":
+        return False
+    reasoning = int(spent.get("reasoning_tokens") or 0)
+    output = int(spent.get("completion_tokens") or 0) or max_tokens
+    return reasoning > 0 and reasoning * 2 >= output
 
 
 # --------------------------------------------------------------------------- pipeline
@@ -1524,6 +1552,18 @@ async def _extract_text_once(
     reports: list[dict[str, Any]] = []
     last_text = ""
     errors: list[BaseException] = []
+    think = task_thinking(task, False)
+
+    async def ask(messages: list[dict[str, Any]]) -> str:
+        try:
+            return await _complete_with_retry(complete, messages, thinking=think, usage=usage, model_out=model_out)
+        except ThinkingRanOut:
+            if not think:
+                raise
+            # same rule as a page: thinking ran out, read again without (edu-core#3508)
+            logger.warning("exam extract text thinking ran out, reading without")
+            return await _complete_with_retry(complete, messages, thinking=False, usage=usage, model_out=model_out)
+
     for idx, chunk in enumerate(chunks, start=1):
         user = _fill_user_template(prompts["user_text"], subject=tag, text=chunk, roster=roster)
         messages = [
@@ -1531,9 +1571,7 @@ async def _extract_text_once(
             {"role": "user", "content": user},
         ]
         try:
-            out = await _complete_with_retry(
-                complete, messages, thinking=task_thinking(task, False), usage=usage, model_out=model_out
-            )
+            out = await ask(messages)
         except ExtractError:
             raise
         except Exception as exc:  # noqa: BLE001 — surfaced as model.failed below
@@ -1568,9 +1606,7 @@ async def _extract_text_once(
             {"role": "user", "content": cont},
         ]
         try:
-            out = await _complete_with_retry(
-                complete, messages, thinking=task_thinking(task, False), usage=usage, model_out=model_out
-            )
+            out = await ask(messages)
         except ExtractError:
             raise
         except Exception as exc:  # noqa: BLE001

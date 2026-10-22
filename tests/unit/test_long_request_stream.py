@@ -256,7 +256,10 @@ async def test_stream_chat_reports_upstream_finish(monkeypatch: pytest.MonkeyPat
     assert finish == {"finish_reason": "length"}
     # pico#1320: fast lane now thinks lightly via reasoning_effort, not the
     # flash thinking-budget-0 override.
-    assert captured["extra_body"] == {"reasoning_effort": "low"}
+    assert captured["extra_body"] == {
+        "reasoning_effort": "low",
+        "extra_body": {"google": {"thinking_config": {"thinking_level": "low"}}},
+    }
 
 
 @pytest.mark.asyncio

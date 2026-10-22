@@ -451,6 +451,31 @@ def test_pinned_model_body_refuses_case_tricks() -> None:
     assert pinned_model_body(b"[]", m) is None
 
 
+def test_gemini_thinking_body_carries_pi_effort() -> None:
+    """edu-core#3508: New API drops reasoning_effort for gemini-3; Pi's level rides extra_body.google."""
+    from app.ws_proxy_router import gemini_thinking_body
+
+    def run(payload, path="chat/completions"):
+        raw = json.dumps(payload).encode()
+        out = gemini_thinking_body(path, raw)
+        return None if out is raw else json.loads(out)
+
+    got = run({"model": "gemini-3.8-flash", "reasoning_effort": "low", "messages": []})
+    assert got["reasoning_effort"] == "low"
+    assert got["extra_body"] == {"google": {"thinking_config": {"thinking_level": "low"}}}
+    got = run({"model": "gemini-3.8-flash", "reasoning_effort": "none", "extra_body": {"google": {"x": 1}, "y": 2}})
+    assert got["extra_body"] == {"google": {"x": 1, "thinking_config": {"thinking_level": "minimal"}}, "y": 2}
+    # left as is: own thinking_config, no effort, other model / path, unreadable shapes
+    assert run({"model": "gemini-3.8-flash", "reasoning_effort": "low",
+                "extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}}) is None
+    assert run({"model": "gemini-3.8-flash"}) is None
+    assert run({"model": "grok-4.6", "reasoning_effort": "low"}) is None
+    assert run({"model": "gemini-3.8-flash", "reasoning_effort": "low"}, path="responses") is None
+    assert run({"model": "gemini-3.8-flash", "reasoning_effort": "low", "extra_body": "x"}) is None
+    assert run({"model": "gemini-3.8-flash", "reasoning_effort": "low", "extra_body": {"google": 1}}) is None
+    assert gemini_thinking_body("chat/completions", b"not json") == b"not json"
+
+
 def test_member_quota_blocks_new_box(tmp_path: Path) -> None:
     import asyncio
 
