@@ -36,6 +36,8 @@ RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ \
 
 # Chromium + OS deps baked into the sidecar image (not host Chrome).
 # Rewrite Debian apt to Aliyun so China ECS can install --with-deps.
+# Browsers from npmmirror: cdn.playwright.dev → Google storage stalls at 0% from
+# ECS (edu-core#3509 deploy, 10-21); the mirror serves the same paths at ~13 MB/s.
 RUN set -eux; \
     if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
@@ -44,7 +46,8 @@ RUN set -eux; \
       sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
       sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
     fi; \
-    playwright install --with-deps chromium; \
+    PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright \
+      playwright install --with-deps chromium; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
       xvfb scrot xdotool \
