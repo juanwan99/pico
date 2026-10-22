@@ -61,8 +61,12 @@ def test_pi_caps_honor_request_and_sidebar_still_wins() -> None:
 
 def test_fast_lane_thinks_low_on_both_wires() -> None:
     """pico#1320 (owner 10-16): fast lane thinks lightly, deep lane thinks hard."""
-    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == {"reasoning_effort": "low"}
-    assert thinking_extra_body("gemini-3.8-flash", thinking=True) == {"reasoning_effort": "high"}
+    assert thinking_extra_body("gemini-3.8-flash", thinking=False)["reasoning_effort"] == "low"
+    assert thinking_extra_body("gemini-3.8-flash", thinking=True)["reasoning_effort"] == "high"
+    # edu-core#3508: the level New API forwards to Gemini 3
+    assert thinking_extra_body("gemini-3.8-flash", thinking=False)["extra_body"] == {
+        "google": {"thinking_config": {"thinking_level": "low"}}
+    }
     doc = true_pi_models_document(
         provider="openai",
         model="gemini-3.8-flash",

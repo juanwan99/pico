@@ -138,11 +138,26 @@ def test_thinking_extra_body_gemini_reasoning_effort_low_high(
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
-    assert thinking_extra_body("pico-fast") == {"reasoning_effort": "low"}
-    assert thinking_extra_body("pico-deep") == {"reasoning_effort": "high"}
-    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == {"reasoning_effort": "low"}
+    # edu-core#3508: New API drops reasoning_effort for gemini-3; the level rides extra_body.google.
+    low = {"reasoning_effort": "low", "extra_body": {"google": {"thinking_config": {"thinking_level": "low"}}}}
+    high = {"reasoning_effort": "high", "extra_body": {"google": {"thinking_config": {"thinking_level": "high"}}}}
+    assert thinking_extra_body("pico-fast") == low
+    assert thinking_extra_body("pico-deep") == high
+    assert thinking_extra_body("gemini-3.8-flash", thinking=False) == low
     monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.1-pro")
-    assert thinking_extra_body("pico-fast") == {"reasoning_effort": "low"}
+    assert thinking_extra_body("pico-fast") == low
+
+
+def test_gemini_thinking_wire_levels() -> None:
+    from pico_orchestrator.provider import gemini_thinking_wire
+
+    def level(effort):
+        return gemini_thinking_wire(effort)["extra_body"]["google"]["thinking_config"]["thinking_level"]
+
+    assert [level(e) for e in ("none", "minimal", "low", "medium", "high", "xhigh")] == [
+        "minimal", "minimal", "low", "medium", "high", "high",
+    ]
+    assert gemini_thinking_wire("") == gemini_thinking_wire(None) == gemini_thinking_wire("max") == {}
 
 
 def test_circuit_breaker_only_in_thinking_on_lane() -> None:

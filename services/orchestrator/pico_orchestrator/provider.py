@@ -365,8 +365,35 @@ def thinking_extra_body(
     backend = str(policy.get("backend_model") or model or "")
     if is_gemini_model(backend) or is_gemini_model(model):
         # pico#1320 (owner 10-16): fast lane thinks lightly, deep lane thinks hard.
-        return {"reasoning_effort": "high" if thinking else "low"}
+        effort = "high" if thinking else "low"
+        return {"reasoning_effort": effort, **gemini_thinking_wire(effort)}
     return {"thinking": {"type": "enabled" if thinking else "disabled"}}
+
+
+# reasoning_effort → Gemini 3 thinking_level ("none" cannot switch Gemini 3 off; minimal is the floor)
+_GEMINI_THINKING_LEVEL = {
+    "none": "minimal",
+    "minimal": "minimal",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "xhigh": "high",
+}
+
+
+def gemini_thinking_wire(effort: str | None) -> dict[str, object]:
+    """``extra_body`` that carries a Gemini thinking level through New API.
+
+    New API turns OpenAI chat into Gemini and drops ``reasoning_effort`` for
+    gemini-3 ids; only ``extra_body.google.thinking_config`` reaches Vertex.
+    Without it Gemini 3 thinks at its default (high): one exam structure read
+    thought 15.4k of 16k output and cut the paper after question 4
+    (edu-core#3508). {} when the effort is unknown.
+    """
+    level = _GEMINI_THINKING_LEVEL.get(str(effort or "").strip().lower())
+    if not level:
+        return {}
+    return {"extra_body": {"google": {"thinking_config": {"thinking_level": level}}}}
 
 
 def should_circuit_break(
