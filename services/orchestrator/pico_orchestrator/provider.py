@@ -181,13 +181,33 @@ def product_backend_model(*, deep: bool) -> str:
         # One model, no fast/deep split: the teacher configured exactly what
         # they want to pay for (#1331).
         return cfg.model
-    if cfg is not None and is_gemini_model(cfg.model):
+    # DeepSeek behind New API names its own ids (deepseek-flash, edu-core#3522); the
+    # legacy deepseek-v4-flash / deepseek-reasoner names map onto Gemini in channel 4.
+    if cfg is not None and (
+        is_gemini_model(cfg.model)
+        or (is_deepseek_model(cfg.model) and uses_new_api_openai_overlay(cfg))
+    ):
         flash = (cfg.model or "").strip() or DEFAULT_GEMINI_FLASH
         deep_id = (os.environ.get("PICO_BRAIN_DEEP_MODEL") or "").strip() or flash
         return deep_id if deep else flash
     if cfg is not None and uses_openai_responses_brain(cfg):
         return cfg.model
     return DEFAULT_DEEPSEEK_REASONER if deep else DEFAULT_DEEPSEEK_MODEL
+
+
+OCR_LANE = "pico-ocr"
+
+
+def ocr_backend_model() -> str:
+    """Handwriting transcription lane: ``PICO_OCR_MODEL``, else the fast lane.
+
+    Owner 10-22: DeepSeek is the brain, Gemini only reads handwriting for
+    marking (edu-core#3522). Edu asks for ``pico-ocr`` on exactly those calls.
+    """
+    cfg = resolve_provider()
+    if cfg is not None and cfg.name == PERSONAL_PROVIDER_NAME:
+        return cfg.model
+    return (os.environ.get("PICO_OCR_MODEL") or "").strip() or product_backend_model(deep=False)
 
 
 def _deepseek_config() -> ProviderConfig | None:
@@ -298,6 +318,8 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
             return product_backend_model(deep=False)
         if low == "pico-deep":
             return product_backend_model(deep=True)
+        if low == OCR_LANE:
+            return ocr_backend_model()
         return cfg.model
 
     bare = _bare_model(requested)
@@ -311,6 +333,8 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
             return product_backend_model(deep=False)
         if bare == "pico-deep":
             return product_backend_model(deep=True)
+        if bare == OCR_LANE:
+            return ocr_backend_model()
         # Kimi / other labels remounted onto DeepSeek → use product default
         return cfg.model
 
@@ -337,14 +361,19 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
     deep = low in {"pico-deep", "pico-agent", "pico"}
     ui = "pico-agent" if low in {"pico-agent", "pico"} else (low or "pico-fast")
     thinking = bool(deep)
+    if low == OCR_LANE:
+        backend = fallback = ocr_backend_model()
+    else:
+        backend = product_backend_model(deep=deep)
+        fallback = product_backend_model(deep=bool(gpt_brain or deep))
     return {
         "ui_model": ui if ui.startswith("pico-") else (low or "pico-fast"),
-        "backend_model": product_backend_model(deep=deep),
+        "backend_model": backend,
         "thinking": thinking,
         "max_steps": 60,
         "max_tokens": 32000,
         "max_context": 256000,
-        "fallback": product_backend_model(deep=bool(gpt_brain or deep)),
+        "fallback": fallback,
     }
 
 

@@ -105,13 +105,24 @@ def test_last_user_images_only_current_turn() -> None:
     assert last_user_images([current, prior])
 
 
-def test_apply_images_switches_to_vision_model() -> None:
-    caps = apply_images_to_caps(
-        RunCaps(backend_model="deepseek-v4-flash"),
-        [{"type": "image", "data": PNG_B64, "mimeType": "image/png"}],
-    )
-    assert caps.backend_model == DEFAULT_DEEPSEEK_VISION
+def test_apply_images_switches_to_vision_model(monkeypatch) -> None:
+    """A text-only backend moves to a configured model that reads images; the
+    channel-less vision-exp id is the last resort only (edu-core#3522)."""
+    img = [{"type": "image", "data": PNG_B64, "mimeType": "image/png"}]
+    monkeypatch.delenv("PICO_OCR_MODEL", raising=False)
+    monkeypatch.delenv("PICO_BRAIN_FALLBACKS", raising=False)
+    caps = apply_images_to_caps(RunCaps(backend_model="deepseek-v4-flash"), img)
+    assert caps.backend_model == "deepseek-flash"
     assert caps.images
+    monkeypatch.setenv("PICO_OCR_MODEL", "gemini-3.8-flash")
+    assert apply_images_to_caps(RunCaps(backend_model="deepseek-v4-flash"), img).backend_model == (
+        "gemini-3.8-flash"
+    )
+    monkeypatch.delenv("PICO_OCR_MODEL")
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "deepseek-chat")
+    assert apply_images_to_caps(RunCaps(backend_model="deepseek-v4-flash"), img).backend_model == (
+        DEFAULT_DEEPSEEK_VISION
+    )
     assert is_deepseek_model(DEFAULT_DEEPSEEK_VISION)
 
 

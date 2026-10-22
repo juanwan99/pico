@@ -10,10 +10,10 @@ blind:
    turn, one image turn. Primary must pass both; at least one fallback must pass
    both (image work needs a landing). A fallback that is down now stays listed
    (failover skips it, #1261) with a DOWN line.
-2. Back up /opt/pico/.env, write DEEPSEEK_MODEL + PICO_BRAIN_FALLBACKS, recreate
-   pico-api (the only service that reads them).
-3. Post-check through Pico itself (text lane + image lane). Any failure → restore
-   the backup and recreate again.
+2. Back up /opt/pico/.env, write DEEPSEEK_MODEL + PICO_BRAIN_FALLBACKS (and
+   PICO_OCR_MODEL with --ocr), recreate pico-api (the only service that reads them).
+3. Post-check through Pico itself (text lane + image lane, + pico-ocr with --ocr).
+   Any failure, pico-api not coming up included → restore the backup and recreate again.
 4. Write (and on rollback write again) one trail line to ~/pico-env-changes.log
    with --card / --why (pico_ops_watch.py env-record, pico#1273).
 
@@ -142,15 +142,24 @@ def pico_probe(token: str, lane: str, content, want: str, extra: dict | None = N
 
 
 def preflight(
-    base: str, key: str, primary: str, fallbacks: list[str], long_only: frozenset[str] = frozenset()
+    base: str,
+    key: str,
+    primary: str,
+    fallbacks: list[str],
+    long_only: frozenset[str] = frozenset(),
+    ocr: str = "",
 ) -> bool:
     """``long_only``: AIProxy models (pico#1344) — kept in the list for Pi runs, never probed:
-    a probe is a one-shot call, and AIProxy is for long multi-round sessions only."""
+    a probe is a one-shot call, and AIProxy is for long multi-round sessions only.
+    ``ocr``: the handwriting lane model (edu-core#3522) must read the probe image."""
     if primary in long_only:
         print("BLOCKED", f"主模型 {primary} 只给多轮会话用，不能当主模型", flush=True)
         return False
+    if ocr and ocr in long_only:
+        print("BLOCKED", f"转写模型 {ocr} 只给多轮会话用，不能做转写", flush=True)
+        return False
     rows = {}
-    for model in [primary, *fallbacks]:
+    for model in dict.fromkeys([primary, *fallbacks, *([ocr] if ocr else [])]):
         if model in long_only:
             print(json.dumps({"preflight": model, "skipped": "只给多轮会话用，不探"}, ensure_ascii=False), flush=True)
             continue
@@ -170,6 +179,8 @@ def preflight(
             print("DOWN", f"备用 {m} 现在不通，留在名单里，坏着会自动跳过", flush=True)
     if fallbacks and not any(rows[m]["text"]["ok"] and rows[m]["image"]["ok"] for m in probed):
         problems.append("备用里没有一个文字、读图都通的")
+    if ocr and not rows[ocr]["image"]["ok"]:
+        problems.append(f"转写模型 {ocr} 读图不过")
     for p in problems:
         print("BLOCKED", p, flush=True)
     return not problems
@@ -192,14 +203,14 @@ def recreate_api() -> None:
     raise RuntimeError("pico-api not healthy after recreate")
 
 
-def postcheck(token: str) -> bool:
+def postcheck(token: str, *, ocr: bool = False) -> bool:
+    exam = {"web_search": False, "allowed_tools": [], "force_agent": False, "reasoning_effort": "none"}
     checks = {
         "text": pico_probe(token, "pico-fast", TEXT_ASK, TEXT_WANT),
-        "image": pico_probe(
-            token, "pico-fast", image_content(IMAGE_ASK), IMAGE_WANT,
-            {"web_search": False, "allowed_tools": [], "force_agent": False, "reasoning_effort": "none"},
-        ),
+        "image": pico_probe(token, "pico-fast", image_content(IMAGE_ASK), IMAGE_WANT, exam),
     }
+    if ocr:  # edu exam handwriting transcription lane (edu-core#3522)
+        checks["ocr"] = pico_probe(token, "pico-ocr", image_content(IMAGE_ASK), IMAGE_WANT, exam)
     for name, row in checks.items():
         print(json.dumps({"postcheck": name, **row}, ensure_ascii=False), flush=True)
     return all(row["ok"] for row in checks.values())
@@ -215,6 +226,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--primary", required=True)
     ap.add_argument("--fallbacks", default="", help="comma list, order = try order")
+    ap.add_argument("--ocr", default="", help="PICO_OCR_MODEL: model for the pico-ocr lane (exam handwriting)")
     ap.add_argument("--dry-run", action="store_true", help="preflight only, touch nothing")
     ap.add_argument("--card", required=True, help="card asking for the switch, e.g. pico#1261")
     ap.add_argument("--why", required=True, help="one line for pico-env-changes.log")
@@ -230,7 +242,8 @@ def main() -> int:
     long_only = frozenset(
         m.strip() for m in env.get("PICO_LONG_SESSION_MODELS", "gpt-5.6-sol").split(",") if m.strip()
     )
-    if not preflight(base, key, args.primary, fallbacks, long_only):
+    ocr = args.ocr.strip()
+    if not preflight(base, key, args.primary, fallbacks, long_only, ocr):
         print("NOT SWITCHED")
         return 1
     if args.dry_run:
@@ -241,19 +254,29 @@ def main() -> int:
     PICO_ENV.write_text(
         rewrite_env(
             PICO_ENV.read_text(encoding="utf-8"),
-            {"DEEPSEEK_MODEL": args.primary, "PICO_BRAIN_FALLBACKS": ",".join(fallbacks)},
+            {
+                "DEEPSEEK_MODEL": args.primary,
+                "PICO_BRAIN_FALLBACKS": ",".join(fallbacks),
+                **({"PICO_OCR_MODEL": ocr} if ocr else {}),
+            },
         ),
         encoding="utf-8",
     )
     PICO_ENV.chmod(0o600)
     print("env written, backup", backup.name, flush=True)
     trail(args.card, f"brain-switch: {args.why} (backup {backup.name})")
-    recreate_api()
-    if postcheck(token):
-        print(f"SWITCHED primary={args.primary} fallbacks={','.join(fallbacks)}")
+    try:
+        recreate_api()
+        ok = postcheck(token, ocr=bool(ocr))
+        why = "postcheck failed"
+    except Exception as exc:  # noqa: BLE001 — pico-api not up on the new env: roll back
+        print("SWITCH FAILED", f"{type(exc).__name__}: {str(exc)[:200]}", flush=True)
+        ok, why = False, "pico-api did not come up"
+    if ok:
+        print(f"SWITCHED primary={args.primary} fallbacks={','.join(fallbacks)} ocr={ocr or '-'}")
         return 0
     shutil.copy2(backup, PICO_ENV)
-    trail(args.card, f"brain-switch rolled back: postcheck failed (restored {backup.name})")
+    trail(args.card, f"brain-switch rolled back: {why} (restored {backup.name})")
     recreate_api()
     print("ROLLED_BACK to", backup.name)
     return 1

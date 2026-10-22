@@ -385,3 +385,69 @@ def test_deepseek_url_does_not_count_as_openai_responses(
     cfg = resolve_provider()
     assert cfg is not None
     assert not uses_openai_responses_brain(cfg)
+
+
+@pytest.fixture
+def deepseek_brain_gemini_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live shape after edu-core#3522: DeepSeek official behind New API is the brain."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-newapi-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.setenv("PICO_OCR_MODEL", "gemini-3.8-flash")
+    monkeypatch.delenv("PICO_BRAIN_DEEP_MODEL", raising=False)
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+
+
+def test_deepseek_brain_lanes_name_deepseek_not_legacy_ids(deepseek_brain_gemini_ocr: None) -> None:
+    """New API channel 4 maps deepseek-v4-flash / deepseek-reasoner onto Gemini:
+    the lanes must name deepseek-flash itself or the switch silently stays on Gemini."""
+    from pico_orchestrator.provider import product_backend_model
+
+    cfg = resolve_provider()
+    assert cfg is not None
+    assert product_backend_model(deep=False) == "deepseek-flash"
+    assert product_backend_model(deep=True) == "deepseek-flash"
+    assert resolve_model_id("pico-fast", cfg) == "deepseek-flash"
+    assert resolve_model_id("pico-deep", cfg) == "deepseek-flash"
+    assert runtime_policy_for_model("pico-deep")["backend_model"] == "deepseek-flash"
+    # DeepSeek's own thinking switch on the brain lanes
+    assert thinking_extra_body("pico-fast", thinking=False) == {"thinking": {"type": "disabled"}}
+    assert thinking_extra_body("pico-deep") == {"thinking": {"type": "enabled"}}
+
+
+def test_ocr_lane_runs_on_ocr_model_with_gemini_wire(deepseek_brain_gemini_ocr: None) -> None:
+    from pico_orchestrator.provider import gemini_thinking_wire, ocr_backend_model
+
+    cfg = resolve_provider()
+    assert cfg is not None
+    assert ocr_backend_model() == "gemini-3.8-flash"
+    assert resolve_model_id("pico-ocr", cfg) == "gemini-3.8-flash"
+    policy = runtime_policy_for_model("pico-ocr")
+    assert policy["backend_model"] == "gemini-3.8-flash"
+    assert policy["thinking"] is False
+    # Gemini must not get DeepSeek's thinking object (empty content)
+    assert thinking_extra_body("pico-ocr", thinking=False) == {
+        "reasoning_effort": "low",
+        **gemini_thinking_wire("low"),
+    }
+
+
+def test_ocr_lane_without_env_follows_fast_lane(
+    deepseek_brain_gemini_ocr: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pico_orchestrator.provider import ocr_backend_model
+
+    monkeypatch.delenv("PICO_OCR_MODEL")
+    assert ocr_backend_model() == "deepseek-flash"
+
+
+def test_ocr_lane_candidates_keep_deepseek_as_backup(
+    deepseek_brain_gemini_ocr: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pico_orchestrator.brain_ha import brain_candidates
+
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "gemini-3.8-flash,deepseek-flash,grok-4.6,gpt-5.6-sol")
+    assert brain_candidates("deepseek-flash") == ["deepseek-flash", "gemini-3.8-flash", "grok-4.6"]
+    assert brain_candidates("gemini-3.8-flash") == ["gemini-3.8-flash", "deepseek-flash", "grok-4.6"]
+

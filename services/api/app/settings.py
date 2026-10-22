@@ -397,8 +397,9 @@ class Settings(BaseSettings):
                     (
                         _normalize_model_name(provider_model)
                         in {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
+                        # deepseek-flash: DeepSeek official via New API (edu-core#3522)
                         or _normalize_model_name(provider_model).startswith(
-                            ("gpt-", "grok-", "gemini-")
+                            ("gpt-", "grok-", "gemini-", "deepseek-")
                         )
                     )
                     and {"pico-fast", "pico-deep"}.intersection(normalized_allowed)

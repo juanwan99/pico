@@ -100,14 +100,16 @@ class RateCard:
 
 
 _CARD: RateCard | None = None
-_LANES = frozenset({"pico-fast", "pico-deep", "pico-agent", "pico"})
+_LANES = frozenset({"pico-fast", "pico-deep", "pico-ocr", "pico-agent", "pico"})
 # What a lane priced as before the brain moved to Gemini; last resort only.
 _LEGACY_LANE_MODEL = "gpt-5.6-sol"
 
 
 def _lane_backend(lane: str) -> str | None:
-    from pico_orchestrator.provider import product_backend_model
+    from pico_orchestrator.provider import OCR_LANE, ocr_backend_model, product_backend_model
 
+    if lane.lower() == OCR_LANE:
+        return ocr_backend_model() or None
     return product_backend_model(deep=lane.lower() == "pico-deep") or None
 
 

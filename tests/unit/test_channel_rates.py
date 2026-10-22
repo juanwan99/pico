@@ -231,3 +231,22 @@ def test_seed_card_image_and_search_keep_per_unit_price_on_new_points(monkeypatc
 
     assert per_unit("image", "imagen-4.0-fast-generate-001") == "36.500"  # 0.146 × 2.5 × 100
     assert per_unit("search", "web_search") == "14.500"  # 0.058 × 2.5 × 100
+
+
+def test_deepseek_brain_lanes_and_ocr_lane_price_their_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """edu-core#3522: lanes cost what they run on — deepseek-flash for the brain,
+    the OCR model for pico-ocr — not the gpt-5.6-sol last resort."""
+    monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-newapi-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.setenv("PICO_OCR_MODEL", "gemini-3.8-flash")
+    monkeypatch.delenv("PICO_BRAIN_DEEP_MODEL", raising=False)
+    reset_rate_card()
+    card = load_rate_card()
+    for lane in ("pico-fast", "pico-deep"):
+        rate = card.find(kind="llm", model=lane)
+        assert rate is not None and rate.model == "deepseek-flash"
+    ocr = card.find(kind="llm", model="pico-ocr")
+    assert ocr is not None and ocr.model == "gemini-3.8-flash"
