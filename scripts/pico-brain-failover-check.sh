@@ -23,6 +23,10 @@ cleanup() {
 trap cleanup EXIT
 # Path keeps "127.0.0.1:3000" so Pico takes the same New API code path as live.
 printf 'DEEPSEEK_BASE_URL=http://127.0.0.1:%s/127.0.0.1:3000/v1\n' "$RELAY_PORT" > "$WORK/env.extra"
+# A backup order not live yet (e.g. before brain-switch): PICO_BRAIN_FALLBACKS=… bash …
+if [ -n "${PICO_BRAIN_FALLBACKS:-}" ]; then
+  printf 'PICO_BRAIN_FALLBACKS=%s\n' "$PICO_BRAIN_FALLBACKS" >> "$WORK/env.extra"
+fi
 PICO_RULER_API_ENV_EXTRA="$WORK/env.extra" bash "$HERE/scripts/pico-ruler-stack.sh" up "$NAME" "$SRC" "$IDX"
 python3 "$HERE/scripts/pico-brain-failover-check.py" --stack "$NAME" --idx "$IDX" --relay-dir "$WORK" --n "$N" \
   | tee "$WORK/result.txt"

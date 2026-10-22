@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 DEFAULT_LONG = "gpt-5.6-sol"
-DEFAULT_FALLBACKS = "grok-4.6,gpt-5.6-sol"  # brain_ha.configured_fallbacks()
+DEFAULT_FALLBACKS = "deepseek-flash,grok-4.6,gpt-5.6-sol"  # brain_ha.DEFAULT_FALLBACKS
 
 
 def _split(raw: str) -> list[str]:

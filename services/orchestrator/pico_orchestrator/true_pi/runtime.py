@@ -371,19 +371,26 @@ def pi_wire(
     gpt-5.6-sol got chat/completions, whose reply New API passes through in
     Responses shape Pi cannot parse (#1090). Gemini stays chat/completions.
     Caps thinking_on=False (edu sidebar / pico-fast) spawns --thinking low;
-    the deep lane spawns --thinking high (pico#1320).
+    the deep lane spawns --thinking high (pico#1320). DeepSeek (backup,
+    edu-core#3509) rides chat/completions like Gemini.
     """
-    from pico_orchestrator.provider import is_gemini_model, is_openai_responses_model
+    from pico_orchestrator.provider import (
+        is_deepseek_model,
+        is_gemini_model,
+        is_openai_responses_model,
+    )
 
-    # Gemini first: a GPT primary must not drag the Gemini backup onto
+    # Gemini / DeepSeek first: a GPT primary must not drag a chat backup onto
     # Responses — Pi crashed on 'startsWith' there (live 10-14 14:26).
-    if openai_overlay and is_gemini_model(backend_model):
+    chat = is_gemini_model(backend_model) or is_deepseek_model(backend_model)
+    if openai_overlay and chat:
         api = "openai-completions"
     elif openai_brain or (openai_overlay and is_openai_responses_model(backend_model)):
         api = "openai-responses"
     else:
         api = ""
     # pico#1320 (owner 10-16): fast lane thinks lightly, deep lane thinks hard.
+    # DeepSeek behind New API with no level thought at its default (high) on both lanes (edu-core#3509).
     level = ("high" if thinking_on else "low") if (api or is_gemini_model(backend_model)) else ""
     return api, level
 

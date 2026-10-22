@@ -1012,9 +1012,11 @@ async def model_complete(
     if _has_images(messages):
         mid = vision_model_for_images(mid)
     # Same New API, next model when the brain's channel or key is dead — the
-    # same rule as chat (pico#1271): 401/402/403, no channel, quota gone. A 429,
-    # a refusal or a timeout stays on this model. Image pages skip a backup
-    # that cannot read images.
+    # same rule as chat (pico#1271): 401/402/403, no channel, quota gone — or
+    # busy: a 429 / 5xx that outlasted the retry. Vertex quota 429s one model,
+    # not the backup on its own key (3 papers at once: 50 × 429 in 3 min, pages
+    # fell back to no thinking, edu-core#3509). A refusal or a timeout stays on
+    # this model. Image pages skip a backup that cannot read images.
     models = [mid]
     if cfg.name == "deepseek" and P.uses_new_api_openai_overlay(cfg):
         from pico_orchestrator.brain_ha import brain_candidates
@@ -1030,16 +1032,23 @@ async def model_complete(
     sent = [0]
     for i, model in enumerate(models):
         budget = upstream.CALL_BUDGET - sent[0]  # three requests across both models
+        if i + 1 < len(models) and budget > 1:
+            budget -= 1  # the head leaves the backup one request
         try:
             text = await _complete_once(
                 P, cfg, model, messages, sent, budget=budget,
                 max_tokens=max_tokens, thinking=thinking, usage_out=usage_out,
             )
         except Exception as exc:
-            if i + 1 >= len(models) or upstream.CALL_BUDGET - sent[0] < 1 or not _brain_dead(exc):
+            dead = _brain_dead(exc)
+            if i + 1 >= len(models) or upstream.CALL_BUDGET - sent[0] < 1 or not (dead or _brain_busy(exc)):
                 raise
-            mark_down(model)
-            logger.warning("exam brain %s dead, next %s: %s", model, models[i + 1], str(exc)[:200])
+            if dead:
+                mark_down(model)
+            logger.warning(
+                "exam brain %s %s, next %s: %s",
+                model, "dead" if dead else "busy", models[i + 1], str(exc)[:200],
+            )
             continue
         if model_out is not None:
             model_out["model"] = model  # bill the model that answered
@@ -1056,6 +1065,13 @@ def _brain_dead(exc: BaseException) -> bool:
     if status in upstream.RETRY_STATUS or isinstance(exc, TimeoutError):
         return False
     return status in upstream.DEAD_STATUS or is_model_dead(f"{exc} {exc.__cause__ or ''}")
+
+
+def _brain_busy(exc: BaseException) -> bool:
+    """The relay kept answering 429 / 5xx through the retry: this model's quota, not the request."""
+    from pico_orchestrator import upstream
+
+    return upstream.status_of(exc) in upstream.RETRY_STATUS
 
 
 async def _complete_once(

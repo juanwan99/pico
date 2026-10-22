@@ -327,7 +327,7 @@ def test_a_ruler_stack_never_uses_aiproxy(tmp_path: Path) -> None:
     # Fallbacks unset: the code default still names sol, so it is written out without it.
     env.write_text("DEEPSEEK_MODEL=gemini-3.8-flash\n")
     subprocess.run([sys.executable, str(guard), str(env)], check=True)
-    assert "PICO_BRAIN_FALLBACKS=grok-4.6" in env.read_text().splitlines()
+    assert "PICO_BRAIN_FALLBACKS=deepseek-flash,grok-4.6" in env.read_text().splitlines()
     # A sol-pinned stack does not start.
     env.write_text("DEEPSEEK_MODEL=gpt-5.6-sol\n")
     run = subprocess.run([sys.executable, str(guard), str(env)], capture_output=True, text=True, check=False)

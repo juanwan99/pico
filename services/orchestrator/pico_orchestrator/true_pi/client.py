@@ -158,6 +158,18 @@ def true_pi_windows_from_caps(caps: Any | None) -> tuple[int, int]:
     return context, output
 
 
+# Pi 0.84 catalog (providers/data/deepseek.json) for DeepSeek on chat/completions.
+_DEEPSEEK_PI_COMPAT = {
+    "supportsStore": False,
+    "supportsDeveloperRole": False,
+    "supportsReasoningEffort": True,
+    "maxTokensField": "max_tokens",
+    "requiresReasoningContentOnAssistantMessages": True,
+    "thinkingFormat": "deepseek",
+}
+_DEEPSEEK_PI_LEVELS = {"minimal": "low", "low": "low", "medium": "high", "high": "high", "xhigh": "max"}
+
+
 def true_pi_models_document(
     *,
     provider: str,
@@ -184,6 +196,7 @@ def true_pi_models_document(
     if accept_image:
         inputs.append("image")
     gemini = mid.lower().startswith("gemini-")
+    deepseek = mid.lower().startswith("deepseek")
     # Both lanes think (pico#1320): fast --thinking low, deep --thinking high.
     model_entry: dict[str, Any] = {
         "id": mid,
@@ -235,6 +248,12 @@ def true_pi_models_document(
                 "thinkingFormat": "reasoning_effort",
             }
             model_entry["compat"] = dict(provider_entry["compat"])
+        elif deepseek and kind == "openai-completions":
+            # Behind New API the provider is "openai", so Pi cannot tell this is
+            # DeepSeek: give it Pi's own DeepSeek compat (catalog deepseek.json).
+            # Tool loops in thinking mode need reasoning_content sent back.
+            model_entry["compat"] = dict(_DEEPSEEK_PI_COMPAT)
+            model_entry["thinkingLevelMap"] = dict(_DEEPSEEK_PI_LEVELS)
     return {"providers": {name: provider_entry}}
 
 

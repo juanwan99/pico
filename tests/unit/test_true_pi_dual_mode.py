@@ -379,6 +379,31 @@ def test_pi_wire_responses_models_on_gemini_primary() -> None:
     )
 
 
+def test_pi_wire_deepseek_backup_behind_new_api() -> None:
+    """edu-core#3509: with no level Pi sent DeepSeek no reasoning_effort and it thought at its
+    default (high) on the fast lane; on the openai provider it must ride chat/completions."""
+    from pico_orchestrator.true_pi.client import true_pi_models_document
+    from pico_orchestrator.true_pi.runtime import pi_wire
+
+    wire = {"openai_brain": False, "openai_overlay": True}
+    assert pi_wire("deepseek-flash", thinking_on=False, **wire) == ("openai-completions", "low")
+    assert pi_wire("deepseek-flash", thinking_on=True, **wire) == ("openai-completions", "high")
+    doc = true_pi_models_document(
+        provider="openai",
+        model="deepseek-flash",
+        max_context=128000,
+        max_tokens=8000,
+        api="openai-completions",
+    )
+    entry = doc["providers"]["openai"]["models"][0]
+    assert entry["input"] == ["text", "image"]
+    # Pi's own DeepSeek compat: thinking.type + reasoning_content back on tool loops
+    assert entry["compat"]["thinkingFormat"] == "deepseek"
+    assert entry["compat"]["requiresReasoningContentOnAssistantMessages"] is True
+    assert entry["compat"]["maxTokensField"] == "max_tokens"
+    assert entry["thinkingLevelMap"]["low"] == "low" and entry["thinkingLevelMap"]["high"] == "high"
+
+
 def test_pi_wire_gemini_backup_under_gpt_primary() -> None:
     """Live 10-14 14:26: GPT primary failed over to Gemini on Responses; Pi
     crashed on 'startsWith'. The backup rides its own wire."""

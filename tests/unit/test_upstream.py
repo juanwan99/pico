@@ -677,14 +677,63 @@ async def test_exam_falls_to_the_backup_brain_when_gemini_is_dead(
 
 
 @pytest.mark.asyncio
-async def test_exam_stays_on_gemini_when_it_is_only_busy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """429 (Vertex shared quota) is retried on the same model, never switched."""
+async def test_exam_busy_gemini_moves_to_deepseek(monkeypatch: pytest.MonkeyPatch) -> None:
+    """edu-core#3509: a Vertex 429 that outlasts one retry goes to DeepSeek (own quota)
+    instead of failing the page into a read without thinking. Not marked down: busy, not dead."""
+    from pico_orchestrator import brain_ha
+
     ex = _extract()
-    _env(monkeypatch, fallbacks="gpt-5.6-sol")
+    _env(monkeypatch, fallbacks="deepseek-flash,grok-4.6")
+    calls = _gemini_fails(monkeypatch, lambda: _Status(429, "Resource exhausted. quota"))
+    picked: dict = {}
+    page = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "读这页"},
+                {"type": "image", "mime": "image/png", "data_b64": "iVBORw0KGgo="},
+            ],
+        }
+    ]
+    assert await ex.model_complete(page, thinking=True, model_out=picked) == "好"
+    assert calls == [("chat", "gemini-3.8-pro")] * 2 + [("chat", "deepseek-flash")]
+    assert picked == {"model": "deepseek-flash"}
+    assert not brain_ha.is_down("gemini-3.8-pro")
+
+    # No backup: the head keeps the whole budget, as before.
+    _env(monkeypatch, fallbacks="")
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "gemini-3.8-pro")
     calls = _gemini_fails(monkeypatch, lambda: _Status(429, "Resource exhausted. quota"))
     with pytest.raises(_Status):
         await ex.model_complete([{"role": "user", "content": "读题"}])
     assert calls == [("chat", "gemini-3.8-pro")] * upstream.CALL_BUDGET
+
+
+@pytest.mark.asyncio
+async def test_exam_deepseek_backup_gets_its_own_thinking_wire(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The hop re-builds the body for DeepSeek: thinking.type, never Gemini's extra_body.google."""
+    from pico_orchestrator import provider
+
+    ex = _extract()
+    _env(monkeypatch, fallbacks="deepseek-flash")
+    provider._CLIENTS.clear()
+    bodies: list[dict] = []
+
+    async def chat(**kwargs):
+        bodies.append(kwargs)
+        if kwargs["model"].startswith("gemini"):
+            raise _Status(429, "Resource exhausted")
+        return _reply("好")
+
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        lambda **_kw: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=chat))),
+    )
+    assert await ex.model_complete([{"role": "user", "content": "解题"}], thinking=True) == "好"
+    ds = bodies[-1]
+    assert ds["model"] == "deepseek-flash"
+    assert ds["extra_body"] == {"thinking": {"type": "enabled"}}
+    assert "google" in str(bodies[0]["extra_body"])
 
 
 @pytest.mark.asyncio
