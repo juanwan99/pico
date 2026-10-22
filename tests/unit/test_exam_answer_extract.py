@@ -2012,3 +2012,47 @@ async def test_text_solve_that_ran_out_thinking_reads_again_without():
     result = await ex.extract_text("1. 题 A. 甲 B. 乙", task="solve", complete=complete)
     assert seen == [True, False]
     assert result["questions"][0]["answer"] == "A"
+
+
+@pytest.mark.asyncio
+async def test_exam_read_body_on_the_wire_to_new_api(monkeypatch: pytest.MonkeyPatch):
+    """edu-core#3508: the exact JSON New API gets. New API drops reasoning_effort for gemini-3 and
+    forwards only extra_body.google.thinking_config. Google's own OpenAI-compatible endpoint refuses
+    both at once, and Gemini 2.5 has no thinking_level: a brain that skips New API or a 2.5 model
+    must change thinking_extra_body (send only one of them) — this test says where."""
+    import httpx
+    from openai import AsyncOpenAI
+    from pico_orchestrator import provider as P
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "id": "x", "object": "chat.completion", "created": 0, "model": "gemini-3.8-flash",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "[]"}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        })
+
+    client = AsyncOpenAI(api_key="sk-test", base_url="http://127.0.0.1:3000/v1",
+                         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    monkeypatch.setattr(P, "_llm_client", lambda _cfg: client)
+
+    async def call_once(_cfg, _purpose, fn, budget=None):
+        return await fn()
+
+    monkeypatch.setattr(P, "call_once", call_once)
+
+    cfg = P.resolve_provider()
+    for thinking, level in ((False, "low"), (True, "high")):
+        await ex._complete_once(P, cfg, "gemini-3.8-flash", [{"role": "user", "content": "x"}], [0],
+                                budget=3, max_tokens=16000, thinking=thinking, usage_out={})
+        body = bodies[-1]
+        assert body["reasoning_effort"] == level
+        assert body["extra_body"] == {"google": {"thinking_config": {"thinking_level": level}}}
+        assert "thinking" not in body and "google" not in body
