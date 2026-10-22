@@ -12,7 +12,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app/services \
     DOCKER_CONFIG=/tmp/.docker
 
+# Debian apt via Aliyun like sandbox_worker: deb.debian.org stalls from ECS
+# (Packages 8.7 MB hung >8 min on the edu-core#3509 deploy, 10-21).
 RUN set -eux; \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl; \
     curl -fsSL -o /tmp/docker.tgz \
