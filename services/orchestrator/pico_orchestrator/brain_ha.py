@@ -1,7 +1,7 @@
 """Thin chat failover: same New API, next model if the current one is down.
 
-Not a second router. Gemini Vertex is primary; DeepSeek, then Grok / GPT-5.6-sol
-are backups (edu-core#3509).
+Not a second router. Primary = DEEPSEEK_MODEL, backups = PICO_BRAIN_FALLBACKS in
+order (edu-core#3509; DeepSeek primary, Gemini first backup since edu-core#3522).
 The switch is invisible to the teacher. Tests inject transport and skip this loop.
 """
 

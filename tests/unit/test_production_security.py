@@ -77,6 +77,16 @@ def test_production_allows_gpt55_on_pico_fast_deep_lanes() -> None:
         _valid_production(pico_accept_test_issuer=True).validate_production()
 
 
+
+def test_production_allows_deepseek_flash_brain_and_ocr_lane() -> None:
+    """edu-core#3522: DeepSeek official (deepseek-flash) is the brain; edu marking
+    asks for the pico-ocr lane. A bare model id still is not allowed."""
+    settings = _valid_production(deepseek_model="deepseek-flash")
+    settings.validate_production()
+    _assert_model_allowed("pico-ocr", settings)
+    with pytest.raises(HTTPException):
+        _assert_model_allowed("gemini-3.8-flash", settings)
+
 def test_production_break_glass_is_explicit_and_logged(caplog: pytest.LogCaptureFixture) -> None:
     settings = _valid_production(
         pico_accept_test_issuer=True,

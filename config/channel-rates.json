@@ -142,6 +142,15 @@
       "note": "Vertex list price USD 1.50 in / 7.50 out / 0.15 cached per M x 7.3 (intro 50% off until 2026-12-31 not used). Was New API default ratio 37.5 (~USD 75/M), 50x too high. Vertex channel 4."
     },
     {
+      "id": "new-api:deepseek-official:deepseek-flash",
+      "kind": "llm",
+      "model": "deepseek-flash",
+      "input_yuan_per_million": 2,
+      "output_yuan_per_million": 8,
+      "cache_read_yuan_per_million": 0.04,
+      "note": "DeepSeek official peak price CNY 2 in / 8 out / 0.04 cached per M (api-docs pricing 10-22; off-peak half, not used). New API channel 8 (edu-core#3522)."
+    },
+    {
       "id": "new-api:micu-grok:grok-4.6",
       "kind": "llm",
       "model": "grok-4.6",

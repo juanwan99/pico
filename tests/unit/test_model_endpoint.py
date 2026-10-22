@@ -761,7 +761,11 @@ def test_chat_completions_image_on_non_vision_personal_model_runs_on_school_not_
 
     assert resp.status_code == 200, resp.text
     assert captured["provider_name"] != "personal"
-    assert "vision" in str(captured["backend_model"] or "").lower()
+    # A school model that reads images (first configured one, edu-core#3522).
+    from pico_orchestrator.vision import model_accepts_image
+
+    assert model_accepts_image(captured["backend_model"])
+    assert captured["backend_model"] != "deepseek-chat"
     assert _bill_to_for_last_llm_row(tmp_path) != "personal"
 
 

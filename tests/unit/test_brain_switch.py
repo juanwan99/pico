@@ -73,3 +73,52 @@ def test_preflight_never_probes_aiproxy(monkeypatch) -> None:
     assert bs.preflight("b", "k", "p", ["g", "s"], frozenset({"s"})) is True
     assert "s" not in probed
     assert bs.preflight("b", "k", "s", ["g"], frozenset({"s"})) is False
+
+
+def test_preflight_ocr_model_must_read_images(monkeypatch) -> None:
+    """edu-core#3522: --ocr names the handwriting model; it is probed once even
+    when it is also a fallback, and must pass the image turn."""
+    probed: list[str] = []
+    fake = _fake({
+        ("p", "text"): True, ("p", "image"): True,
+        ("g", "text"): True, ("g", "image"): True,
+        ("o", "text"): True, ("o", "image"): False,
+    })
+
+    def probe(base, key, model, content, want):
+        probed.append(model)
+        return fake(base, key, model, content, want)
+
+    monkeypatch.setattr(bs, "relay_probe", probe)
+    assert bs.preflight("b", "k", "p", ["g", "p"], ocr="g") is True
+    assert probed.count("g") == 2 and probed.count("p") == 2  # text + image, once each
+    assert bs.preflight("b", "k", "p", ["g"], ocr="o") is False
+
+
+def test_switch_rolls_back_when_api_does_not_come_up(monkeypatch, tmp_path) -> None:
+    """A new env pico-api cannot boot on must restore the backup, not exit mid-switch."""
+    env = tmp_path / ".env"
+    env.write_text(
+        "DEEPSEEK_BASE_URL=http://127.0.0.1:3000/v1\nPICO_OPENAI_PROXY_KEY=t\nDEEPSEEK_MODEL=old\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bs, "PICO_ENV", env)
+    monkeypatch.setattr(bs, "probe_key", lambda e: "k")
+    monkeypatch.setattr(bs, "preflight", lambda *a, **k: True)
+    monkeypatch.setattr(bs, "trail", lambda card, why: None)
+    calls: list[str] = []
+
+    def recreate() -> None:
+        calls.append(env.read_text(encoding="utf-8"))
+        if len(calls) == 1:
+            raise RuntimeError("pico-api not healthy after recreate")
+
+    monkeypatch.setattr(bs, "recreate_api", recreate)
+    monkeypatch.setattr(
+        bs.sys, "argv",
+        ["brain-switch", "--primary", "new", "--ocr", "o", "--card", "c", "--why", "w"],
+    )
+    assert bs.main() == 1
+    assert "DEEPSEEK_MODEL=new" in calls[0] and "PICO_OCR_MODEL=o" in calls[0]
+    assert "DEEPSEEK_MODEL=old" in env.read_text(encoding="utf-8")
+    assert len(calls) == 2  # recreated again on the restored env

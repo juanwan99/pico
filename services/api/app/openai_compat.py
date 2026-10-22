@@ -360,7 +360,11 @@ def _assert_model_allowed(model: str, settings: Settings) -> None:
         return
     if product_surface.intersection(allowed) and normalized in deepseek_aliases:
         return
-    if normalized in {"pico-fast", "pico-deep"} and {"pico-fast", "pico-deep"}.intersection(allowed):
+    # pico-ocr: handwriting transcription lane, edu exam marking only (edu-core#3522).
+    if normalized in {"pico-fast", "pico-deep", "pico-ocr"} and {
+        "pico-fast",
+        "pico-deep",
+    }.intersection(allowed):
         return
     # Product delivery name. Host allowlist is often pico-fast,pico-deep only.
     if normalized in {"pico-agent", "pico"} and {"pico-fast", "pico-deep"}.intersection(

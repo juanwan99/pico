@@ -45,8 +45,19 @@ def model_accepts_image(model: str | None) -> bool:
 
 
 def vision_model_for_images(current: str | None = None) -> str:
+    """``current`` when it reads images, else the first configured one that does.
+
+    ``deepseek-v4-flash-vision-exp`` has no New API channel: last resort only
+    (edu-core#3522).
+    """
     if model_accepts_image(current):
         return str(current).strip()
+    from pico_orchestrator.brain_ha import configured_fallbacks
+    from pico_orchestrator.provider import ocr_backend_model
+
+    for mid in (ocr_backend_model(), *configured_fallbacks()):
+        if model_accepts_image(mid):
+            return mid
     return DEFAULT_DEEPSEEK_VISION
 
 
