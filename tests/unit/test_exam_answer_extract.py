@@ -1224,6 +1224,47 @@ def test_paper_material_continuation_after_unread_page_is_dropped():
     assert [m["material"] for m in result["materials"]] == ["甲"]
 
 
+def test_question_tail_marked_as_continued_material_lands_in_that_question():
+    # edu-core#3627 枫溪物理 7：页顶「在机翼材料中的波速为…是（ ）」和 A–D 被标成续写的材料，3 次读 3 次，原来整段丢掉
+    p2 = _paper_page(
+        2,
+        [
+            {"kind": "material", "continued": True, "material": "A．动量守恒\nB．动量不守恒"},
+            {"number": 6, "type": "single_choice", "stem": "流量大小可能为（ ）"},
+            {"number": 7, "type": "single_choice", "stem": "已知超声波", "figures": [{"box_2d": [740, 520, 830, 720]}]},
+        ],
+    )
+    p3 = _paper_page(
+        3,
+        [
+            {"kind": "material", "continued": True, "material": "在机翼材料中的波速为 6300 m/s，下列选项正确的是（ ）\nA．振动减弱\nB．振动加强"},
+            {"number": 8, "type": "multi_choice", "stem": "每一级台阶"},
+        ],
+    )
+    p1 = _paper_page(1, [{"number": 4, "type": "single_choice", "stem": "此系统（ ）"}])
+    result = ex._finish("pages", [p1, p2, p3], [{"ok": True}] * 3, [], "", {}, {})
+    by_no = {q["number"]: q for q in result["questions"]}
+    assert by_no[4]["stem"] == "此系统（ ）\nA．动量守恒\nB．动量不守恒" and by_no[4]["on_pages"] == [1, 2]
+    assert by_no[7]["stem"].startswith("已知超声波\n在机翼材料中的波速为 6300 m/s")
+    assert by_no[7]["stem"].endswith("B．振动加强") and by_no[7]["on_pages"] == [2, 3]
+    assert by_no[7]["type"] == "single_choice" and by_no[8]["stem"] == "每一级台阶"
+    assert result["materials"] == []
+
+
+def test_continued_material_after_a_question_goes_to_the_question_not_the_older_material():
+    p1 = _paper_page(
+        1,
+        [
+            {"kind": "material", "material": "阅读材料"},
+            {"number": 1, "type": "single_choice", "stem": "下列说法正确的是（ ）"},
+        ],
+    )
+    p2 = _paper_page(2, [{"kind": "material", "continued": True, "material": "A．甲\nB．乙"}])
+    result = ex._finish("pages", [p1, p2], [{"ok": True}] * 2, [], "", {}, {})
+    assert [m["material"] for m in result["materials"]] == ["阅读材料"]
+    assert result["questions"][0]["stem"] == "下列说法正确的是（ ）\nA．甲\nB．乙"
+
+
 def test_paper_text_read_has_no_figure_boxes_and_no_default_options():
     raw = '[{"number": 3, "type": "single_choice", "stem": "[图1] 如图", "figures": [{"box": [1,2,300,400]}]}]'
     (item,) = ex.items_from_model_text(raw, page=None, task="paper")

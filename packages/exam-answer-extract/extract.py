@@ -755,6 +755,8 @@ def attach_continued(
     gap = False
     seen: dict[int, int] = {}
     last_mat: dict[str, Any] | None = None
+    # what the reading order ended on so far: a page-top continuation carries on that one
+    last_kind = ""
     out: list[list[dict[str, Any]]] = []
     for idx, batch in enumerate(batches):
         kept: list[dict[str, Any]] = []
@@ -763,10 +765,18 @@ def attach_continued(
                 if not item["continued"]:
                     last_mat = {**item, "figures": list(item["figures"])}
                     kept.append(last_mat)
-                elif last_mat is not None:
+                    last_kind = "material"
+                    continue
+                if last_mat is not None and (last_kind != "question" or not last):
                     last_mat["material"] = _merge_text(last_mat["material"], item["material"])
                     last_mat["figures"] += item["figures"]
-                continue
+                    continue
+                if gap or not last:
+                    continue
+                # The model marks a question's page-top tail (the rest of its stem, its A–D) as a
+                # continued material too (物理 7: 3 of 3 reads, edu-core#3627); with no material open,
+                # or a question read after it, that tail was dropped. It continues the last question.
+                item = _question_tail(item, batch)
             if item["number"] == 0:
                 owner = _gap_owner(batches, idx, pos, last, order) if gap else last
                 if owner:
@@ -777,6 +787,7 @@ def attach_continued(
                     continue
             else:
                 kept.append(item)
+            last_kind = "question"
             n = item["number"]
             subs_max = max((s["sub"] for s in item.get("subs") or []), default=0)
             stem_marks = count_sub_marks(item.get("stem")) if item.get("stem") else 0
@@ -790,6 +801,16 @@ def attach_continued(
             last_mat = None
         out.append(kept)
     return out
+
+
+def _question_tail(material: dict[str, Any], batch: list[dict[str, Any]]) -> dict[str, Any]:
+    """A continued material that is really the last question's tail → a number-0 continuation."""
+    page = next((i["source"]["page"] for i in batch if not is_material(i) and (i.get("source") or {}).get("page")), None)
+    if page is None:
+        page = next((f.get("page") for f in material["figures"] if f.get("page")), None)
+    item = normalize_item({"number": 0, "continued": True, "stem": material["material"]}, page=page, task="paper")
+    assert item is not None
+    return {**item, "figures": list(material["figures"]), "has_figure": bool(material["figures"])}
 
 
 def _merge_blanks(prev: list[dict[str, Any]], nxt: list[dict[str, Any]]) -> list[dict[str, Any]]:
