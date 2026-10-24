@@ -160,3 +160,5 @@ PRs stay (one writer / one branch / CI). Do **not** split one theme into many wa
 
 E2E-PATHS: services/api/app/ scripts/prod-update.sh scripts/prod-update.impl.sh scripts/e2e-smoke.sh scripts/apply-gateway-nginx.sh docker-compose.host.yml Dockerfile.pico-api.true-pi Dockerfile.pico-api librechat.yaml .github/workflows/
 E2E-SMOKE: bash scripts/e2e-smoke.sh --prod
+
+制卡解析（edu-core#3703 · 验证分四类 ④）：改了制卡读卷的提示词或读法（`packages/exam-answer-extract/`、`services/api/app/exam_answer_extract.py`），或换了读卷用的模型，PR 先起本 PR 的临时栈，再在 edu-core 跑十份固定真卷回归：`bash scripts/exam-card-parse-regress.sh --pico <临时栈地址>`（钥匙自己 `export PICO_EDU_ISS` / `PICO_EDU_JWT_SECRET`）。合入发版后再跑一次 `--prod`。回执写 `E2E: bash scripts/exam-card-parse-regress.sh --pico <url> → PASS（对 n，已知未修 k，新错 0） @<环境>`。有新错先修，修不了不合。样卷与标注在 edu-core `apps/bff/src/modules/exam/fixtures/card-parse-regress/`。
