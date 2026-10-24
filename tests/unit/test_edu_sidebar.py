@@ -108,6 +108,8 @@ def test_sidebar_enters_pi_helpers() -> None:
     assert "generate_image" in EDU_SIDEBAR_DEFAULT_TOOLS
     assert "sandbox_office_lib" in EDU_SIDEBAR_DEFAULT_TOOLS
     assert "generate_pptx_document" not in EDU_SIDEBAR_DEFAULT_TOOLS
+    # edu-core#3728: the rail cannot show or answer a parked ask (180s hang).
+    assert "ask_user" not in EDU_SIDEBAR_DEFAULT_TOOLS
     hinted = with_sidebar_workbench_hint("附属，不是用户要求")
     assert SIDEBAR_WORKBENCH_HINT in hinted
     assert "不得调用" not in hinted

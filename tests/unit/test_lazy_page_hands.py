@@ -120,8 +120,9 @@ def test_catalog_rides_with_the_sidebar_not_the_workbench() -> None:
     assert not set(EDU_AGENT_TOOLS) & set(workbench)
     sidebar = resolve_visible_tools(edu_sidebar_tool_ceiling(None))
     assert set(EDU_AGENT_TOOLS) <= set(sidebar)
-    # Same workbench hands beside a school page, nothing less.
-    assert set(CORE_VISIBLE_TOOLS) <= set(sidebar)
+    # Same workbench hands beside a school page, nothing less — except
+    # ask_user, which the rail cannot answer (edu-core#3728).
+    assert set(CORE_VISIBLE_TOOLS) - set(sidebar) == {"ask_user"}
 
 
 @pytest.mark.skipif(not _node_strips_types(), reason="needs node >= 22.18 (type stripping)")
