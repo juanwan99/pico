@@ -33,7 +33,7 @@ that the school executes after the teacher confirms.
 1. **No cabinet.** SYSTEM never carries this teacher's workbench day-use block (recent ledger titles). #761.
 2. **No cross-teacher session.** Session dir is `school / membership / conversation`; two teachers on the same page-keyed conversation id never share a Pi session file.
 3. **History semantics.** Pi path ignores `messages[]` beyond the last user turn; continuity comes from the session file above. If edu omits `X-Conversation-Id`, every turn is a fresh session (allowed, but the rail is then stateless).
-4. **Same hands.** CORE (`generate_html_document`, `sandbox_office_lib`, `generate_image`, `workspace_*`, `web_*`, `kb_search`, `ask_user`, sandbox doors). Thinking off; tool progress rides `content` so the rail can show it.
+4. **Same hands.** CORE (`generate_html_document`, `sandbox_office_lib`, `generate_image`, `workspace_*`, `web_*`, `kb_search`, sandbox doors) — **not** `ask_user`: the rail streams `content` only and has no way to show or answer a parked choice, so a question is the turn's reply and the teacher's next turn answers it (edu-core#3728). Thinking off; tool progress rides `content` so the rail can show it.
 5. **Left-page hand.** When `affordances[]` is present: one extra tool `propose_page_mutation` (contracts/tools.md §4.7). Otherwise the model has no way to touch the left page and must say so — Pico puts that sentence in SYSTEM (`SIDEBAR_NO_HANDS_HINT`): no JSON / `affordanceId` / 「请确认」 in prose pretending to be a proposal.
 
 ## 3. Mutations envelope (Pico → edu)

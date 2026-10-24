@@ -50,7 +50,13 @@ SIDEBAR_WORKBENCH_HINT = (
 
 # Same CORE hands as workbench, plus the school catalog: it only makes sense
 # beside a school page, so the workbench no longer carries it (#1342).
-EDU_SIDEBAR_DEFAULT_TOOLS: tuple[str, ...] = (*CORE_VISIBLE_TOOLS, *EDU_AGENT_TOOLS)
+# Minus ask_user: the edu rail streams content only — no run id, no options,
+# no answer door — so a parked ask waited the full 180s (edu-core#3728).
+# A question there is the turn's reply; the teacher's next line answers it.
+SIDEBAR_NO_TOOLS: frozenset[str] = frozenset({"ask_user"})
+EDU_SIDEBAR_DEFAULT_TOOLS: tuple[str, ...] = tuple(
+    name for name in (*CORE_VISIBLE_TOOLS, *EDU_AGENT_TOOLS) if name not in SIDEBAR_NO_TOOLS
+)
 EDU_SIDEBAR_ALLOWED_TOOLS = frozenset(EDU_SIDEBAR_DEFAULT_TOOLS)
 
 
