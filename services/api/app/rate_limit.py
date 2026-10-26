@@ -129,10 +129,19 @@ def parse_chat_caps_json(raw: str) -> dict[str, dict[str, int]]:
     return out
 
 
+# Edu exam marking transcription (edu-core#3927). Its own per-person bucket so a
+# 400-sheet batch neither waits on the chat cap nor eats a teacher's chat slots.
+OCR_LANE = "pico-ocr"
+OCR_KEY_SUFFIX = ":" + OCR_LANE
+
+
 def resolve_chat_caps(key: str, settings: Any) -> tuple[int, int, int]:
     """Return (rpm, person_max, school_max). school_max 0 = unlimited."""
     rpm = int(settings.pico_chat_rpm)
     person = int(settings.pico_chat_max_concurrent)
+    if key.startswith("membership:") and key.endswith(OCR_KEY_SUFFIX):
+        rpm = int(settings.pico_ocr_rpm)
+        person = int(settings.pico_ocr_max_concurrent)
     school_max = int(getattr(settings, "pico_chat_school_max_concurrent", 16) or 0)
     overrides = parse_chat_caps_json(getattr(settings, "pico_chat_caps_json", "") or "")
     school = school_from_key(key)
@@ -165,6 +174,10 @@ class ChatRateLimitMiddleware:
 
         settings = get_settings()
         key = _rate_limit_key(scope, settings)
+        if key.startswith("membership:"):
+            body, receive = await _buffer_body(receive)
+            if _request_model(body) == OCR_LANE:
+                key += OCR_KEY_SUFFIX
         rpm, person, school_max = resolve_chat_caps(key, settings)
         reason = await self.admission.acquire(
             key,
@@ -205,6 +218,45 @@ class ChatRateLimitMiddleware:
             await self.app(scope, receive, send)
         finally:
             await self.admission.release(key)
+
+
+async def _buffer_body(receive: Any) -> tuple[bytes, Any]:
+    """Read the request body once and hand back a receive that replays it."""
+    chunks: list[bytes] = []
+    while True:
+        message = await receive()
+        if message["type"] != "http.request":
+            # Client went away before the body arrived; let the app see it.
+            async def gone(message: dict = message) -> dict:
+                return message
+
+            return b"", gone
+        chunks.append(message.get("body", b""))
+        if not message.get("more_body", False):
+            break
+    body = b"".join(chunks)
+    sent = False
+
+    async def replay() -> dict:
+        nonlocal sent
+        if sent:
+            return await receive()
+        sent = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return body, replay
+
+
+def _request_model(body: bytes) -> str:
+    try:
+        blob = json.loads(body or b"{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return ""
+    model = blob.get("model") if isinstance(blob, dict) else None
+    if not isinstance(model, str):
+        return ""
+    model = model.strip()
+    return model.split("/")[-1] if "/" in model else model
 
 
 def _rate_limit_key(scope: dict, settings: Any) -> str:

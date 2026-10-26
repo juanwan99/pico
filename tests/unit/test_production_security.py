@@ -288,3 +288,73 @@ async def test_chat_rate_limit_middleware_returns_human_chinese_429(monkeypatch)
     ).decode("utf-8")
     assert "user_message" in body
     assert any(token in body for token in ("并发", "繁忙", "限流", "频繁"))
+
+
+@pytest.mark.asyncio
+async def test_ocr_lane_gets_its_own_wider_bucket(monkeypatch) -> None:
+    """edu-core#3927: pico-ocr marking calls 16 at once / 300 per minute per
+    person in their own bucket; the same teacher's chat stays at 4 / 30."""
+    import app.rate_limit as rl
+    from app.rate_limit import ChatRateLimitMiddleware
+
+    settings = Settings(_env_file=None)
+    assert (settings.pico_ocr_max_concurrent, settings.pico_ocr_rpm) == (16, 300)
+    assert (settings.pico_chat_max_concurrent, settings.pico_chat_rpm) == (4, 30)
+    monkeypatch.setattr(rl, "get_settings", lambda: settings)
+    admission = ChatAdmission()
+    monkeypatch.setattr(rl, "get_chat_admission", lambda: admission)
+
+    import asyncio
+
+    gate = asyncio.Event()
+    seen_bodies: list[bytes] = []
+
+    class _App:
+        async def __call__(self, scope, receive, send):
+            message = await receive()
+            seen_bodies.append(message["body"])
+            await gate.wait()
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok"})
+
+    middleware = ChatRateLimitMiddleware(_App())
+    token = issue_test_token(school_id="school-a", membership_id="m1", settings=settings)
+
+    async def call(model: str) -> int:
+        body = json.dumps({"model": model, "messages": []}).encode()
+        chunks = [body[:5], body[5:]]
+
+        async def receive():
+            part = chunks.pop(0)
+            return {"type": "http.request", "body": part, "more_body": bool(chunks)}
+
+        status: list[int] = []
+
+        async def send(message):
+            if message["type"] == "http.response.start":
+                status.append(message["status"])
+
+        scope = {
+            "type": "http",
+            "path": "/v1/chat/completions",
+            "method": "POST",
+            "client": ("203.0.113.10", 1),
+            "headers": [(b"authorization", f"Bearer {token}".encode())],
+        }
+        await middleware(scope, receive, send)
+        return status[0]
+
+    ocr = [asyncio.create_task(call("pico-ocr")) for _ in range(17)]
+    chat = [asyncio.create_task(call("pico-fast")) for _ in range(5)]
+    await asyncio.sleep(0.05)
+    gate.set()
+    ocr_status = await asyncio.gather(*ocr)
+    chat_status = await asyncio.gather(*chat)
+    assert sorted(ocr_status) == [200] * 16 + [429]
+    assert sorted(chat_status) == [200] * 4 + [429]
+    # The app still reads the whole body after the middleware peeked at it.
+    assert all(json.loads(b)["model"] in {"pico-ocr", "pico-fast"} for b in seen_bodies)
+
+    rpm, person, _ = resolve_chat_caps("membership:school-a:m1:pico-ocr", settings)
+    assert (rpm, person) == (300, 16)
+    assert school_from_key("membership:school-a:m1:pico-ocr") == "school-a"
