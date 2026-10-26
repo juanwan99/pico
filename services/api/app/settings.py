@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     # be the only cap; person cap still applies. Workspace boxes past the
     # runner's room wait in its line (#1135), so this only stops a runaway.
     pico_chat_school_max_concurrent: int = 48
+    # Edu exam marking transcription (model pico-ocr), its own per-membership
+    # bucket; the school cap above still counts it. edu-core#3927, owner 10-26.
+    pico_ocr_rpm: int = 300
+    pico_ocr_max_concurrent: int = 16
     # Optional JSON overrides, no secrets:
     # {"school:demo":{"school_max_concurrent":8},"membership:demo:m1":{"rpm":10,"max_concurrent":2}}
     pico_chat_caps_json: str = ""
@@ -414,6 +418,8 @@ class Settings(BaseSettings):
             errors.append("PICO_CHAT_MAX_CONCURRENT must be greater than zero")
         if self.pico_chat_school_max_concurrent < 0:
             errors.append("PICO_CHAT_SCHOOL_MAX_CONCURRENT must be >= 0")
+        if self.pico_ocr_rpm <= 0 or self.pico_ocr_max_concurrent <= 0:
+            errors.append("PICO_OCR_RPM / PICO_OCR_MAX_CONCURRENT must be greater than zero")
         if self.pico_chat_max_prompt_chars <= 0:
             errors.append("PICO_CHAT_MAX_PROMPT_CHARS must be greater than zero")
         if self.pico_run_max_tokens <= 0:

@@ -267,6 +267,8 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
             "chat_rpm": settings.pico_chat_rpm,
             "chat_max_concurrent": settings.pico_chat_max_concurrent,
             "chat_school_max_concurrent": settings.pico_chat_school_max_concurrent,
+            "ocr_rpm": settings.pico_ocr_rpm,
+            "ocr_max_concurrent": settings.pico_ocr_max_concurrent,
             "key_scope": "membership_or_ip",
             **get_chat_admission().snapshot(),
         },

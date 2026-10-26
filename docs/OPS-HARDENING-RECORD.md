@@ -35,6 +35,7 @@ PROD: https://pico.aivia.asia
 |----|------|----------|
 | chat RPM | 超 `PICO_CHAT_RPM` → **429** | health `rate_limit.chat_rpm`（现网常见 30） |
 | 并发 | 超 `PICO_CHAT_MAX_CONCURRENT` → 忙态/429 人话 | health `rate_limit.chat_max_concurrent`（现网常见 2） |
+| 阅卷识别并发 | `model: pico-ocr` 单独一桶：每人 `PICO_OCR_MAX_CONCURRENT`（16）、`PICO_OCR_RPM`（300），聊天仍按上行；全校上限照算（edu-core#3927，业主 10-26） | health `rate_limit.ocr_max_concurrent` / `ocr_rpm` |
 | 人话 | 用户可见繁忙/限流文案，非裸栈 | `user_errors` / UI |
 
 **演练纪律（本包）：** 冒烟串行短任务；不并行轰炸生产。  

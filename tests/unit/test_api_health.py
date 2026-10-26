@@ -27,6 +27,8 @@ def test_health() -> None:
         "chat_rpm": 30,
         "chat_max_concurrent": 4,
         "chat_school_max_concurrent": 48,
+        "ocr_rpm": 300,
+        "ocr_max_concurrent": 16,
         "key_scope": "membership_or_ip",
         "inflight_total": 0,
         "school_count": 0,
