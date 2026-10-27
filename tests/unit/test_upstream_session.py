@@ -101,6 +101,74 @@ async def test_the_key_cap_holds_across_teachers(monkeypatch: pytest.MonkeyPatch
     assert upstream.stats()["peak"][upstream.key_id("k")] == 4
 
 
+def test_ocr_caps_default_to_16(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(upstream.OCR_KEY_MAX_ENV, raising=False)
+    monkeypatch.delenv(upstream.OCR_MEMBER_MAX_ENV, raising=False)
+    assert (upstream.ocr_key_max(), upstream.ocr_member_max()) == (16, 16)
+    stats = upstream.stats()
+    assert (stats["ocr_key_max"], stats["ocr_member_max"]) == (16, 16)
+
+
+@pytest.mark.asyncio
+async def test_handwriting_reads_have_their_own_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+    """edu-core#3927: 16 reads at once for one teacher; their chat still has its 2 and waits on them."""
+    for env in (upstream.KEY_MAX_ENV, upstream.MEMBER_MAX_ENV, upstream.OCR_KEY_MAX_ENV, upstream.OCR_MEMBER_MAX_ENV):
+        monkeypatch.delenv(env, raising=False)
+    with upstream.caller_scope(conversation_id="c", run_id="r", membership_id="exam"):
+        reads = [await asyncio.wait_for(upstream.acquire("k", "direct", ocr=True), 1) for _ in range(16)]
+        seventeenth = asyncio.ensure_future(upstream.acquire("k", "direct", ocr=True))
+        chats = [await asyncio.wait_for(upstream.acquire("k", "direct"), 1) for _ in range(2)]
+        third_chat = asyncio.ensure_future(upstream.acquire("k", "direct"))
+        await asyncio.sleep(0.05)
+        assert not seventeenth.done() and not third_chat.done()
+    reads.pop()()
+    (await asyncio.wait_for(seventeenth, 1))()
+    chats.pop()()
+    (await asyncio.wait_for(third_chat, 1))()
+    for release in (*reads, *chats):
+        release()
+    assert upstream.stats()["inflight"] == {}
+
+
+@pytest.mark.asyncio
+async def test_handwriting_reads_never_reach_aiproxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live env (10-26): every model failing, a pico-ocr read still never tries AIProxy.
+
+    AIProxy (gpt-5.6-sol) banned the key on 10-18 for one-shot calls; a read is one.
+    """
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-flash")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
+    monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
+    monkeypatch.setenv("PICO_OCR_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "gemini-3.8-flash,deepseek-flash,grok-4.6,gpt-5.6-sol")
+    monkeypatch.delenv("PICO_LONG_SESSION_MODELS", raising=False)
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    monkeypatch.setattr(upstream, "backoff", lambda exc, n: 0.0)
+    provider._CLIENTS.clear()
+    tried: list[tuple[str, bool]] = []
+
+    async def create(**kwargs):
+        # Which slots the call holds: the read's own, never chat's.
+        tried.append((kwargs["model"], bool(upstream._OCR_SLOTS) and not upstream._SLOTS))
+        raise RuntimeError("no available channel for model")
+
+    api = SimpleNamespace(create=create)
+    monkeypatch.setattr(
+        "pico_orchestrator.provider.AsyncOpenAI",
+        lambda **_kw: SimpleNamespace(chat=SimpleNamespace(completions=api), responses=api),
+    )
+    with (
+        upstream.caller_scope(conversation_id=None, run_id="r", membership_id="exam"),
+        pytest.raises(RuntimeError),
+    ):
+        [p async for p in provider.stream_chat("读这道题", model="pico-ocr", thinking=False)]
+    models = [m for m, _ in tried]
+    assert models == ["gemini-3.8-flash", "deepseek-flash", "grok-4.6"]
+    assert "gpt-5.6-sol" not in models
+    assert all(own for _, own in tried)
+
+
 def _responses_stub(monkeypatch: pytest.MonkeyPatch, seen: list[dict]) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     monkeypatch.setenv("DEEPSEEK_MODEL", "gpt-5.6-sol")

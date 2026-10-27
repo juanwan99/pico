@@ -51,6 +51,12 @@ KEY_MAX_ENV = "PICO_UPSTREAM_KEY_MAX"
 _KEY_MAX_DEFAULT = 4
 MEMBER_MAX_ENV = "PICO_UPSTREAM_MEMBER_MAX"
 _MEMBER_MAX_DEFAULT = 2
+# Exam handwriting reads (lane pico-ocr) get their own slots: one-shot reads at
+# 1–2 s each, 400 a subject; on the shared 2 per teacher a subject took 573 s
+# (edu-core#3927, owner 10-26 15:52「AI 阅卷识别太慢，要提高」). Chat / Pi keep 2 / 4.
+OCR_KEY_MAX_ENV = "PICO_UPSTREAM_OCR_KEY_MAX"
+OCR_MEMBER_MAX_ENV = "PICO_UPSTREAM_OCR_MEMBER_MAX"
+_OCR_MAX_DEFAULT = 16
 SLOT_WAIT_S = 120.0
 
 HEDGE_FAST_ENV = "PICO_HEDGE_FAST_S"
@@ -383,6 +389,14 @@ def member_max() -> int:
     return _env_max(MEMBER_MAX_ENV, _MEMBER_MAX_DEFAULT)
 
 
+def ocr_key_max() -> int:
+    return _env_max(OCR_KEY_MAX_ENV, _OCR_MAX_DEFAULT)
+
+
+def ocr_member_max() -> int:
+    return _env_max(OCR_MEMBER_MAX_ENV, _OCR_MAX_DEFAULT)
+
+
 @dataclass(frozen=True)
 class Caller:
     """Who a model call is for: ``session`` goes upstream, ``member`` waits for a teacher slot."""
@@ -433,6 +447,8 @@ def caller_scope(*, conversation_id: str | None, run_id: str, membership_id: str
 
 _SLOTS: dict[str, asyncio.Semaphore] = {}
 _MEMBER_SLOTS: dict[str, asyncio.Semaphore] = {}
+_OCR_SLOTS: dict[str, asyncio.Semaphore] = {}
+_OCR_MEMBER_SLOTS: dict[str, asyncio.Semaphore] = {}
 _INFLIGHT: Counter[str] = Counter()
 _PEAK: Counter[str] = Counter()
 _COUNTS: Counter[tuple[str, str]] = Counter()
@@ -447,22 +463,24 @@ def count(purpose: str, outcome: str, n: int = 1) -> None:
     _COUNTS[(purpose, outcome)] += n
 
 
-async def acquire(key: str, purpose: str) -> Callable[[], None]:
+async def acquire(key: str, purpose: str, *, ocr: bool = False) -> Callable[[], None]:
     """Take this teacher's slot, then a slot on ``key``, and count one request.
 
     Returns the release (call it once). The teacher slot comes first so one
-    teacher's queue never holds a key slot others could use.
+    teacher's queue never holds a key slot others could use. ``ocr`` waits on
+    the handwriting-read slots instead, so reads and chat never queue on each other.
     """
     kid = key_id(key)
-    sem = _SLOTS.get(kid)
+    keys, members = (_OCR_SLOTS, _OCR_MEMBER_SLOTS) if ocr else (_SLOTS, _MEMBER_SLOTS)
+    sem = keys.get(kid)
     if sem is None:
-        sem = _SLOTS[kid] = asyncio.Semaphore(key_max())
+        sem = keys[kid] = asyncio.Semaphore(ocr_key_max() if ocr else key_max())
     member = CALLER.get().member
     own = None
     if member:
-        own = _MEMBER_SLOTS.get(member)
+        own = members.get(member)
         if own is None:
-            own = _MEMBER_SLOTS[member] = asyncio.Semaphore(member_max())
+            own = members[member] = asyncio.Semaphore(ocr_member_max() if ocr else member_max())
     deadline = time.monotonic() + SLOT_WAIT_S
     try:
         if own is not None:
@@ -507,6 +525,8 @@ def stats() -> dict[str, object]:
         "since": int(_STARTED),
         "key_max": key_max(),
         "member_max": member_max(),
+        "ocr_key_max": ocr_key_max(),
+        "ocr_member_max": ocr_member_max(),
         "calls": by_purpose,
         "inflight": {k: v for k, v in _INFLIGHT.items() if v},
         "peak": dict(_PEAK),
@@ -518,6 +538,8 @@ def reset() -> None:
     global _STARTED
     _SLOTS.clear()
     _MEMBER_SLOTS.clear()
+    _OCR_SLOTS.clear()
+    _OCR_MEMBER_SLOTS.clear()
     _INFLIGHT.clear()
     _PEAK.clear()
     _COUNTS.clear()

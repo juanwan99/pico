@@ -831,9 +831,11 @@ async def stream_chat(
         else bool(runtime_policy_for_model(model).get("thinking", False))
     )
 
+    ocr_lane = _bare_model(model).lower() == OCR_LANE
+
     async def _iter_provider(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
         think = thinking if mid == model_id else lane_thinking
-        release = await upstream.acquire(provider.api_key, "direct")
+        release = await upstream.acquire(provider.api_key, "direct", ocr=ocr_lane)
         try:
             if uses_openai_responses_brain(provider):
                 async for piece in _iter_openai_responses(
