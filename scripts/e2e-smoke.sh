@@ -69,10 +69,11 @@ case "$MODE" in
     UI="${PICO_SMOKE_UI:-${LIBRECHAT_URL:-http://127.0.0.1:18088}}"
     TIP_URL="$PUBLIC/api/pico/tip"
     # ECS → dmit 公网回程丢包（SYN-ACK 回不来），tip 走 Tailscale 连同一个 nginx；设空串则走公网。
+    # 只管 https 默认端口的公网域名；PICO_SMOKE_PUBLIC 指向别处（本地、带端口）时照原样连。
     TIP_IP="${PICO_SMOKE_TIP_IP-100.88.199.74}"
-    if [ -n "$TIP_IP" ]; then
-      TIP_HOST="${PUBLIC#*://}"
-      TIP_HOST="${TIP_HOST%%/*}"
+    TIP_HOST="${PUBLIC#https://}"
+    TIP_HOST="${TIP_HOST%%/*}"
+    if [ -n "$TIP_IP" ] && [[ "$PUBLIC" == https://* && "$TIP_HOST" != *:* ]]; then
       TIP_ARGS=(--resolve "${TIP_HOST}:443:${TIP_IP}")
     fi
     HEALTH_URL="$API/health"
