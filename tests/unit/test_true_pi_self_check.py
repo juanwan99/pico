@@ -52,6 +52,19 @@ def test_naming_the_teachers_upload_is_not_a_miss() -> None:
     ]
 
 
+def test_naming_a_file_the_teacher_inlined_is_not_a_miss() -> None:
+    # edu-core#4018: the edu sidebar inlines attachments into the text, so 新生.csv is
+    # never in the box; naming it back must not fail the run.
+    asked = "按包里的名单加学生\n附件 新生材料.zip 包里读了 2 份\n附件 新生.csv\n姓名,班级,性别"
+    text = "按「新生.csv」里的 2 人放进核对表了，点写入才建档。"
+    assert self_check_facts(text, _report(), had_files_before=False, asked=asked) == []
+    assert self_check_facts(text, _report(), had_files_before=False) == ["回答提到的 新生.csv 在 outputs 里没有。"]
+    # Still a miss when the answer says it is in outputs/.
+    assert self_check_facts("见 outputs/新生.csv", _report(), had_files_before=False, asked=asked) == [
+        "回答提到的 新生.csv 在 outputs 里没有。"
+    ]
+
+
 def test_claim_without_new_file_same_as_delivery_gate() -> None:
     claim = "通知已生成，请下载。"
     assert self_check_facts(claim, _report(), had_files_before=False)

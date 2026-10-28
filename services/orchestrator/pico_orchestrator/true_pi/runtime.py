@@ -1242,7 +1242,7 @@ async def _run_true_pi_once(
 
         check_facts: list[str] = []
         if ws_on and not toolless and await _turn_healthy():
-            check_facts = await _self_check_now(client, state, ws_before, rid)
+            check_facts = await _self_check_now(client, state, ws_before, rid, prompt)
             if check_facts:
                 state.event_kinds.append("run.resume")
                 await emit(
@@ -1267,7 +1267,7 @@ async def _run_true_pi_once(
                 if early is not None:
                     return early
                 if state.step != steps_before and await _turn_healthy():
-                    check_facts = await _self_check_now(client, state, ws_before, rid)
+                    check_facts = await _self_check_now(client, state, ws_before, rid, prompt)
         if state.visual_output:
             logger.info(
                 "true_pi look run_id=%s steered=%s reads=%s",
@@ -1536,7 +1536,7 @@ async def _write_self_check(client: Any, facts: list[str], rid: str) -> bool:
 
 
 async def _self_check_now(
-    client: Any, state: EventMapState, before: dict[str, Any] | None, rid: str
+    client: Any, state: EventMapState, before: dict[str, Any] | None, rid: str, asked: str = ""
 ) -> list[str]:
     """Run the read-only outputs check in the live box; [] when fine or unknown."""
     from pico_orchestrator.true_pi.self_check import (
@@ -1562,7 +1562,7 @@ async def _self_check_now(
         logger.info("true_pi self_check unreadable run_id=%s", rid)
         return []
     had = any(not os.path.basename(p).startswith(".") for p in (before or {}))
-    facts = self_check_facts(answer, report, had_files_before=had)
+    facts = self_check_facts(answer, report, had_files_before=had, asked=asked)
     logger.info("true_pi self_check run_id=%s files=%s facts=%s", rid, len(report["files"]), len(facts))
     return facts
 
