@@ -44,6 +44,7 @@ PUBLIC="${PICO_SMOKE_PUBLIC:-https://pico.aivia.asia}"
 TIMEOUT="${PICO_SMOKE_TIMEOUT:-10}"
 TENANT="${PICO_SMOKE_TENANT:-smoke-school:smoke-e2e}"
 KEY="${PICO_SMOKE_KEY:-}"
+TIP_ARGS=()
 
 case "$MODE" in
   local)
@@ -67,6 +68,13 @@ case "$MODE" in
     # Shared ECS: LibreChat loopback is 18088 — never 8080 (edu-core-bff).
     UI="${PICO_SMOKE_UI:-${LIBRECHAT_URL:-http://127.0.0.1:18088}}"
     TIP_URL="$PUBLIC/api/pico/tip"
+    # ECS → dmit 公网回程丢包（SYN-ACK 回不来），tip 走 Tailscale 连同一个 nginx；设空串则走公网。
+    TIP_IP="${PICO_SMOKE_TIP_IP-100.88.199.74}"
+    if [ -n "$TIP_IP" ]; then
+      TIP_HOST="${PUBLIC#*://}"
+      TIP_HOST="${TIP_HOST%%/*}"
+      TIP_ARGS=(--resolve "${TIP_HOST}:443:${TIP_IP}")
+    fi
     HEALTH_URL="$API/health"
     HEALTH_JSON=1
     if [ -z "$KEY" ]; then
@@ -201,7 +209,7 @@ check() {
 }
 
 JSON_ARGS=("${PICO_SMOKE_EXPECT_SHA:-}")
-if check tip 200 tip GET "$TIP_URL"; then
+if check tip 200 tip GET "$TIP_URL" ${TIP_ARGS[@]+"${TIP_ARGS[@]}"}; then
   TIP_SHA="$(json tip "${PICO_SMOKE_EXPECT_SHA:-}")"
 fi
 
