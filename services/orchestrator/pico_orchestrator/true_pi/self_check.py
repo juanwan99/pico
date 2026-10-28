@@ -136,8 +136,15 @@ def _num(raw: str) -> int:
     return int(raw) if raw.isdigit() else _CN_NUM.get(raw, 0)
 
 
-def self_check_facts(answer: str, report: Mapping[str, Any], *, had_files_before: bool) -> list[str]:
-    """Chinese fact lines when the answer and outputs/ disagree. Empty = fine."""
+def self_check_facts(
+    answer: str, report: Mapping[str, Any], *, had_files_before: bool, asked: str = ""
+) -> list[str]:
+    """Chinese fact lines when the answer and outputs/ disagree. Empty = fine.
+
+    ``asked`` = what the teacher sent this turn. A quoted name that appears there is a
+    file the teacher gave (edu sidebar inlines attachments into the text, so they are
+    not in the box), not one the answer claims to have made (edu-core#4018).
+    """
     text = (answer or "").strip()
     if not text or looks_like_clarification(text):
         return []
@@ -157,7 +164,7 @@ def self_check_facts(answer: str, report: Mapping[str, Any], *, had_files_before
         name = os.path.basename(m.group(1) or m.group(2))
         named[name] = named.get(name, False) or bool(m.group(1))
     for name, in_outputs in named.items():
-        if name not in names and (in_outputs or name not in others):
+        if name not in names and (in_outputs or (name not in others and name not in (asked or ""))):
             facts.append(f"回答提到的 {name} 在 outputs 里没有。")
     for f in files:
         name = str(f.get("name") or "")
