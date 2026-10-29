@@ -131,6 +131,27 @@ async def test_handwriting_reads_have_their_own_slots(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
+async def test_exam_paper_reads_have_their_own_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+    """edu-core#4095: a paper parse (4 pages + 2 copies) no longer holds the 4 chat slots."""
+    for env in (upstream.KEY_MAX_ENV, upstream.EXAM_KEY_MAX_ENV):
+        monkeypatch.delenv(env, raising=False)
+    assert upstream.stats()["exam_key_max"] == 6
+    reads = [await asyncio.wait_for(upstream.acquire("k", "exam"), 1) for _ in range(6)]
+    seventh = asyncio.ensure_future(upstream.acquire("k", "exam"))
+    chats = [await asyncio.wait_for(upstream.acquire("k", "direct"), 1) for _ in range(4)]
+    fifth_chat = asyncio.ensure_future(upstream.acquire("k", "pi_step"))
+    await asyncio.sleep(0.05)
+    assert not seventh.done() and not fifth_chat.done()
+    reads.pop()()
+    (await asyncio.wait_for(seventh, 1))()
+    chats.pop()()
+    (await asyncio.wait_for(fifth_chat, 1))()
+    for release in (*reads, *chats):
+        release()
+    assert upstream.stats()["inflight"] == {}
+
+
+@pytest.mark.asyncio
 async def test_handwriting_reads_never_reach_aiproxy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Live env (10-26): every model failing, a pico-ocr read still never tries AIProxy.
 
