@@ -536,7 +536,7 @@ async def test_exam_page_reads_go_through_the_door(monkeypatch: pytest.MonkeyPat
     import extract as ex
 
     _env(monkeypatch)
-    monkeypatch.setenv("PICO_UPSTREAM_KEY_MAX", "2")
+    monkeypatch.setenv("PICO_UPSTREAM_EXAM_KEY_MAX", "2")  # paper reads have their own slots (edu-core#4095)
     monkeypatch.delenv("PICO_EXAM_EXTRACT_ATTEMPTS", raising=False)
     calls = _exam_relay(monkeypatch, lambda _n: (_ for _ in ()).throw(_Status(503, "busy")))
     with pytest.raises(_Status):
@@ -548,7 +548,7 @@ async def test_exam_page_reads_go_through_the_door(monkeypatch: pytest.MonkeyPat
     pages = [{"page": i, "mime": "image/png", "data_b64": "iVBORw0KGgo="} for i in range(1, 7)]
     await ex.extract_pages(pages, concurrency=4, complete=ex.model_complete)
     assert len(calls) == 6
-    assert upstream.stats()["peak"] == {upstream.key_id("sk-test"): 2}  # key cap, not 4
+    assert upstream.stats()["peak"] == {upstream.key_id("sk-test"): 2}  # exam key cap, not 4
 
 
 def _wire_relay(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:

@@ -57,6 +57,12 @@ _MEMBER_MAX_DEFAULT = 2
 OCR_KEY_MAX_ENV = "PICO_UPSTREAM_OCR_KEY_MAX"
 OCR_MEMBER_MAX_ENV = "PICO_UPSTREAM_OCR_MEMBER_MAX"
 _OCR_MAX_DEFAULT = 16
+# Exam paper reads (exam-answer-extract, purpose "exam") get their own slots too: one paper
+# sends 4 pages + 2 stalled-read copies at once, so a background paper parse held all 4 chat
+# slots and a teacher's side-rail ask on that same card waited 186 s (edu-core#4095).
+# 6 = one paper's whole wave; a second paper queues behind it, never behind chat.
+EXAM_KEY_MAX_ENV = "PICO_UPSTREAM_EXAM_KEY_MAX"
+_EXAM_MAX_DEFAULT = 6
 SLOT_WAIT_S = 120.0
 
 HEDGE_FAST_ENV = "PICO_HEDGE_FAST_S"
@@ -397,6 +403,10 @@ def ocr_member_max() -> int:
     return _env_max(OCR_MEMBER_MAX_ENV, _OCR_MAX_DEFAULT)
 
 
+def exam_key_max() -> int:
+    return _env_max(EXAM_KEY_MAX_ENV, _EXAM_MAX_DEFAULT)
+
+
 @dataclass(frozen=True)
 class Caller:
     """Who a model call is for: ``session`` goes upstream, ``member`` waits for a teacher slot."""
@@ -449,6 +459,7 @@ _SLOTS: dict[str, asyncio.Semaphore] = {}
 _MEMBER_SLOTS: dict[str, asyncio.Semaphore] = {}
 _OCR_SLOTS: dict[str, asyncio.Semaphore] = {}
 _OCR_MEMBER_SLOTS: dict[str, asyncio.Semaphore] = {}
+_EXAM_SLOTS: dict[str, asyncio.Semaphore] = {}
 _INFLIGHT: Counter[str] = Counter()
 _PEAK: Counter[str] = Counter()
 _COUNTS: Counter[tuple[str, str]] = Counter()
@@ -468,13 +479,19 @@ async def acquire(key: str, purpose: str, *, ocr: bool = False) -> Callable[[], 
 
     Returns the release (call it once). The teacher slot comes first so one
     teacher's queue never holds a key slot others could use. ``ocr`` waits on
-    the handwriting-read slots instead, so reads and chat never queue on each other.
+    the handwriting-read slots instead, so reads and chat never queue on each other;
+    purpose ``exam`` (paper reads) waits on its own key slots the same way.
     """
     kid = key_id(key)
-    keys, members = (_OCR_SLOTS, _OCR_MEMBER_SLOTS) if ocr else (_SLOTS, _MEMBER_SLOTS)
+    if ocr:
+        keys, members, cap = _OCR_SLOTS, _OCR_MEMBER_SLOTS, ocr_key_max
+    elif purpose == "exam":
+        keys, members, cap = _EXAM_SLOTS, _MEMBER_SLOTS, exam_key_max
+    else:
+        keys, members, cap = _SLOTS, _MEMBER_SLOTS, key_max
     sem = keys.get(kid)
     if sem is None:
-        sem = keys[kid] = asyncio.Semaphore(ocr_key_max() if ocr else key_max())
+        sem = keys[kid] = asyncio.Semaphore(cap())
     member = CALLER.get().member
     own = None
     if member:
@@ -527,6 +544,7 @@ def stats() -> dict[str, object]:
         "member_max": member_max(),
         "ocr_key_max": ocr_key_max(),
         "ocr_member_max": ocr_member_max(),
+        "exam_key_max": exam_key_max(),
         "calls": by_purpose,
         "inflight": {k: v for k, v in _INFLIGHT.items() if v},
         "peak": dict(_PEAK),
@@ -540,6 +558,7 @@ def reset() -> None:
     _MEMBER_SLOTS.clear()
     _OCR_SLOTS.clear()
     _OCR_MEMBER_SLOTS.clear()
+    _EXAM_SLOTS.clear()
     _INFLIGHT.clear()
     _PEAK.clear()
     _COUNTS.clear()
