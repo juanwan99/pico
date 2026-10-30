@@ -505,3 +505,85 @@ def test_page_check_per_teacher_and_total() -> None:
     got = ur.page_check(page, ledger, 0.01)
     assert got["ok"] is False and got["teachers_off"][0]["membership_id"] == "m1"
     assert ur.beijing_month_bounds("2026-12")[1].isoformat() == "2026-12-31T16:00:00+00:00"
+
+
+def _at(sec: float) -> datetime:
+    return datetime(2026, 10, 30, 17, 0, tzinfo=UTC) + timedelta(seconds=sec)
+
+
+def test_snap_quiet_moves_edge_before_whole_run() -> None:
+    """A run's calls come back to back: the edge goes before the first, not into a gap of 5 s."""
+    base = _at(0).timestamp()
+    spans = [(base - 100, base - 40), (base - 35, base + 30)]
+    got = ur.snap_quiet(_at(0), spans, quiet_s=20)
+    assert got is not None and got.timestamp() < base - 120
+    assert ur.snap_quiet(_at(0), [(base + 60, base + 90)], quiet_s=20) == _at(0)
+    busy = [(base - 4000, base + 10)]
+    assert ur.snap_quiet(_at(0), busy, quiet_s=20, lookback_s=1800) is None
+
+
+def test_main_snaps_window_off_a_straddling_run(tmp_path: Path, capsys) -> None:
+    """edu-core#4350 10-30 13:21: an answer-extract run of 3 calls straddled since; the
+    ledger row (end of run) was in, one gateway call was out, so Pico read 1.7% high."""
+    pico = tmp_path / "pico.db"
+    con = sqlite3.connect(pico)
+    con.execute(
+        """
+        CREATE TABLE usage_events (
+            id TEXT, kind TEXT, model TEXT, prompt_tokens INT, completion_tokens INT,
+            total_tokens INT, tokens_unknown INT, idempotency_key TEXT, extra_json TEXT,
+            created_at TEXT
+        )
+        """
+    )
+    con.execute("CREATE TABLE runs (id TEXT, started_at TEXT, ended_at TEXT, created_at TEXT)")
+
+    def naive(sec: float) -> str:
+        return _at(sec).replace(tzinfo=None).isoformat(sep=" ")
+
+    con.execute(
+        "INSERT INTO usage_events VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("e1", "api", "deepseek-flash", 300, 0, 300, 0, "x:1", '{"calls": 3}', naive(31)),
+    )
+    con.execute(
+        "INSERT INTO usage_events VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("e2", "api", "deepseek-flash", 100, 0, 100, 0, "x:2", '{"calls": 1}', naive(600)),
+    )
+    con.commit()
+    con.close()
+    newapi = tmp_path / "one-api.db"
+    con = sqlite3.connect(newapi)
+    con.execute(
+        """
+        CREATE TABLE logs (
+            created_at INT, use_time INT, prompt_tokens INT, completion_tokens INT,
+            model_name TEXT, token_name TEXT, type INT
+        )
+        """
+    )
+    for end in (-30, 0, 30):  # three 25 s calls; the asked since (t=-10) cuts the run
+        con.execute(
+            "INSERT INTO logs VALUES (?,?,?,?,?,?,?)",
+            (int(_at(end).timestamp()), 25, 100, 0, "deepseek-flash", "pico-gateway", 2),
+        )
+    con.execute(
+        "INSERT INTO logs VALUES (?,?,?,?,?,?,?)",
+        (int(_at(600).timestamp()), 5, 100, 0, "deepseek-flash", "pico-gateway", 2),
+    )
+    con.commit()
+    con.close()
+    argv = [
+        "--pico-db", str(pico), "--newapi-db", str(newapi), "--token-name", "pico-gateway",
+        "--since", _at(-10).isoformat(), "--until", _at(900).isoformat(),
+    ]
+    import json
+
+    assert ur.main([*argv, "--no-snap"]) == 1
+    raw = json.loads(capsys.readouterr().out)
+    assert raw["spend"]["pico_calls"] == 4 and raw["spend"]["newapi_calls"] == 3
+
+    assert ur.main(argv) == 0
+    snapped = json.loads(capsys.readouterr().out)
+    assert snapped["spend"]["pico_calls"] == snapped["spend"]["newapi_calls"] == 4
+    assert snapped["window"]["snapped_to_quiet"] == {"since": True, "until": True}
+    assert snapped["window"]["asked"]["since"] == _at(-10).isoformat()

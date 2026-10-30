@@ -15,6 +15,8 @@ unknown token 单独列，不当 0。偏差门槛默认 1%。
 答案抽取一天两千次调用没进账，按 run 窗口对齐时它们在窗外、不进头条，就这样藏住了）。
 token 和调用数两项偏差都 ≤ 门槛才 ok。聊天行带 extra.calls（这轮上游回了 2xx 的请求数，edu-core#4350）
 就直接用；窗口里有不带的旧行才退回按 run 窗口对齐（run_join，平时只作参考）。
+窗口两头默认往前挪到没有请求在跑的空当（网关调用 use_time 段 + Pico run 段，前后各留 20 秒）：
+一轮的账本行记在跑完那刻，它的网关调用却分在两边，切在中间就差一截（edu-core#4350）；--no-snap 不挪。
 
 第三方 edu 用量页：--page-json <GET /v1/schools/<id>/ai/usage 回包> --school-id <id>，按回包的北京月
 逐老师、全校合计对 token 和调用数，任一偏差 > 门槛头条就不 ok。
@@ -240,6 +242,61 @@ def read_newapi_logs(
             continue
         rows.append(rec)
     return {"ok": True, "rows": rows}
+
+
+QUIET_S = 20
+SNAP_LOOKBACK_S = 1800
+
+
+def read_busy_spans(
+    newapi_db: Path | None,
+    pico_db: Path,
+    *,
+    lo: datetime,
+    hi: datetime,
+    token_name: str | None = None,
+) -> list[tuple[float, float]]:
+    """Unix spans something was in flight: each New API call (end − use_time → end) and each
+    Pico run (started → ended). A window edge inside one cuts a run whose ledger row lands on
+    one side and part of its gateway calls on the other (edu-core#4350)."""
+    spans: list[tuple[float, float]] = []
+    if newapi_db:
+        con = _connect_ro(newapi_db)
+        cols = _cols(con, "logs") if "logs" in _table_names(con) else set()
+        if {"created_at", "use_time"}.issubset(cols):
+            sql = "SELECT created_at, use_time FROM logs WHERE created_at >= ? AND created_at < ?"
+            args: list[Any] = [int(lo.timestamp()), int(hi.timestamp()) + 3600]
+            if token_name and "token_name" in cols:
+                sql += " AND token_name = ?"
+                args.append(token_name)
+            for end, used in con.execute(sql, args):
+                spans.append((float(end) - float(used or 0), float(end)))
+        con.close()
+    for run in read_pico_runs(pico_db, since=lo, until=hi).values():
+        start = _parse_dt(run.get("started_at") or run.get("created_at"))
+        end = _parse_dt(run.get("ended_at")) or hi
+        if start is not None:
+            spans.append((start.timestamp(), end.timestamp()))
+    return spans
+
+
+def snap_quiet(
+    at: datetime,
+    spans: list[tuple[float, float]],
+    *,
+    quiet_s: float = QUIET_S,
+    lookback_s: float = SNAP_LOOKBACK_S,
+) -> datetime | None:
+    """Latest moment ≤ ``at`` with nothing in flight within ``quiet_s``; None if none within
+    ``lookback_s`` (the caller keeps ``at`` and says so)."""
+    t = at.timestamp()
+    floor = t - lookback_s
+    while t >= floor:
+        hit = [s for s, e in spans if s - quiet_s <= t <= e + quiet_s]
+        if not hit:
+            return datetime.fromtimestamp(t, UTC)
+        t = min(hit) - quiet_s - 0.001
+    return None
 
 
 def newapi_token_book(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -784,6 +841,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--hours", type=int, default=24)
     p.add_argument("--since", help="ISO start (overrides --hours)")
     p.add_argument("--until", help="ISO end (default now)")
+    p.add_argument(
+        "--no-snap",
+        action="store_true",
+        help="不把窗口两头挪到没有请求在跑的空当（默认挪，免得切断一轮）",
+    )
     p.add_argument("--export-ids", type=Path, help="JSON list of export event ids")
     p.add_argument("--threshold", type=float, default=THRESHOLD)
     p.add_argument("--json", action="store_true")
@@ -808,6 +870,22 @@ def main(argv: list[str] | None = None) -> int:
     if not args.pico_db:
         print("need --pico-db", flush=True)
         return 2
+    asked = {"since": since.isoformat(), "until": until.isoformat()}
+    snapped: dict[str, bool] = {}
+    if not args.no_snap:
+        spans = read_busy_spans(
+            args.newapi_db,
+            args.pico_db,
+            lo=since - timedelta(seconds=SNAP_LOOKBACK_S + 3600),
+            hi=until,
+            token_name=args.token_name or None,
+        )
+        for name in ("since", "until"):
+            at = since if name == "since" else until
+            quiet = snap_quiet(at, spans)
+            snapped[name] = quiet is not None
+            if quiet is not None:
+                since, until = (quiet, until) if name == "since" else (since, quiet)
     pico = read_pico_usage(args.pico_db, since=since, until=until)
     if not pico.get("ok"):
         print(json.dumps(pico, ensure_ascii=False))
@@ -842,7 +920,12 @@ def main(argv: list[str] | None = None) -> int:
         newapi_rows=newapi_rows,
         run_join=run_join,
     )
-    report["window"] = {"since": since.isoformat(), "until": until.isoformat()}
+    report["window"] = {
+        "since": since.isoformat(),
+        "until": until.isoformat(),
+        "asked": asked,
+        "snapped_to_quiet": snapped,
+    }
     if args.page_json:
         page = json.loads(args.page_json.read_text())
         m_start, m_end = beijing_month_bounds(str(page.get("month") or ""))

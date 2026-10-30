@@ -191,7 +191,7 @@ await record_usage_event(
 
 **学校账也是老师的用量（edu-core#4350）：** 汇总和明细列出本人所有行，`bill_to=school`（学校付）、`member`（本人）分开标；只有额度门（§9）只算 `member`。日界、月界一律北京时间（Asia/Shanghai），与额度门同一天。
 
-**调用数 `calls`：** 一轮聊天一行，`extra.calls` = 这轮里上游实际回了 2xx 的请求数（沙盒路径在 run 代理 / llm-pass 计，直连路径在建流处计，`hosted` 在 `call_once` 计），等于 New API 那边的日志条数；没记这项的旧行和按次行算 1。
+**调用数 `calls`：** 一轮聊天一行，`extra.calls` = 这轮里上游实际回了 2xx 的请求数（沙盒路径在 run 代理 / llm-pass 计，直连路径在建流处计，`hosted` 在 `call_once` 计），等于 New API 那边的日志条数；按次行（如提取答案）记了 `extra.calls` 就按 `max(1, calls)`，没记的旧行算 1。`usage-reconcile.py` 对网关时，窗口两头默认挪到没有请求在跑的空当（`window.asked` / `snapped_to_quiet` 写明），不把一轮切成两半；`--no-snap` 照原样切。
 
 响应 **无** 金额字段。`billing: false` 明示本账不是收费系统。老师 JSON **无** token 列；`school-month`（校管）和导出才有 token 列。
 
