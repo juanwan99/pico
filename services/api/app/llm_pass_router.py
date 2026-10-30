@@ -87,4 +87,5 @@ async def llm_pass(run_id: str, path: str, request: Request) -> Response:
         call=call,
         key=auth.removeprefix("Bearer ").strip() or "llm-pass",
         run_id=None if raced else run_id,
+        bill_run=run_id,
     )

@@ -68,11 +68,21 @@ class _Status(Exception):
         self.headers = headers
 
 
-async def _open(method: str, target: str, headers: dict[str, str], body: bytes, *, key: str, purpose: str):
+async def _open(
+    method: str,
+    target: str,
+    headers: dict[str, str],
+    body: bytes,
+    *,
+    key: str,
+    purpose: str,
+    bill_run: str | None = None,
+):
     """One upstream call up to its first body chunk: (client, upstream, first, chunks, release).
 
     The relay's key slot (pico#1271) is held until the body is done; a call to
-    our own llm-pass hop is counted there, not here.
+    our own llm-pass hop is counted there, not here. A 2xx head counts one call
+    on ``bill_run``: New API logs every answered request (edu-core#4350).
     """
     release = (lambda: None) if not key else await upstream.acquire(key, purpose)
     client = httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False)
@@ -83,6 +93,8 @@ async def _open(method: str, target: str, headers: dict[str, str], body: bytes, 
         if resp.status_code >= 400:
             raw = await resp.aread()
             raise _Status(resp.status_code, raw, dict(resp.headers))
+        if bill_run and key:
+            upstream.note_answered(bill_run)
         chunks = resp.aiter_bytes()
         first = b""
         async for chunk in chunks:
@@ -110,6 +122,7 @@ async def _stream(
     call: upstream.Call | None = None,
     key: str = "",
     run_id: str | None = None,
+    bill_run: str | None = None,
 ) -> Response:
     """Stream upstream back. ``on_done`` runs once the body is fully sent (or failed).
 
@@ -126,7 +139,9 @@ async def _stream(
     call = call or upstream.Call("tool", budget=1)
 
     def start(k: int):
-        return _open(method, target, headers, body, key=key, purpose=call.purpose)
+        return _open(
+            method, target, headers, body, key=key, purpose=call.purpose, bill_run=bill_run
+        )
 
     async def discard(opened) -> None:
         client, resp, _first, _chunks, release = opened
@@ -346,6 +361,7 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
             call=upstream.Call("pi_step", run_id=run_id),
             key="" if is_llm_pass(target) else entry.llm_key,
             run_id=run_id,
+            bill_run=run_id,
         )
     finally:
         upstream.CALLER.reset(token)

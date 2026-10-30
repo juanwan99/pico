@@ -561,7 +561,9 @@ async def call_once[T](
     async def one(_k: int) -> T:
         release = await upstream.acquire(provider.api_key, purpose)
         try:
-            return await send()
+            out = await send()
+            upstream.note_answered(run_id)
+            return out
         finally:
             release()
 
@@ -712,6 +714,7 @@ async def _iter_openai_responses(
     # One try: resending belongs to the race in stream_chat (pico#1271).
     yielded = False
     stream = await client.responses.create(**kwargs)
+    upstream.note_answered()
     try:
         async for event in stream:
             usage = _responses_completed_usage(event)
@@ -792,6 +795,7 @@ async def stream_chat(
             "user": upstream.caller("direct"),
         }
         stream = await client.chat.completions.create(**kwargs)
+        upstream.note_answered()
         spent = 0
         answered = False
         try:

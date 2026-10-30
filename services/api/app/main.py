@@ -509,29 +509,34 @@ async def me(principal: Principal = Depends(require_scoped_principal)) -> dict:
 def _usage_html(principal: Principal, summary: dict, events: list[dict]) -> str:
     import html as html_lib
 
+    payer = {"school": "学校账", "personal": "我的接口", "member": "本人"}
     rows = []
     for ev in events:
         pts = ev.get("points")
         pts_label = str(pts) if isinstance(pts, str) and pts else "—"
+        bill = (ev.get("extra") or {}).get("bill_to") or "member"
         rows.append(
             "<tr>"
             f"<td>{html_lib.escape(str(ev.get('created_at') or ''))}</td>"
             f"<td>{html_lib.escape(str(ev.get('kind') or ''))}</td>"
             f"<td>{html_lib.escape(str(ev.get('model') or '—'))}</td>"
+            f"<td>{html_lib.escape(payer.get(bill, bill))}</td>"
             f"<td>{html_lib.escape(pts_label)}</td>"
             f"<td>{html_lib.escape(str(ev.get('run_id') or '—'))}</td>"
             "</tr>"
         )
     body_rows = "\n".join(rows) or (
-        "<tr><td colspan='5'>暂无用量记录（空态诚实）</td></tr>"
+        "<tr><td colspan='6'>暂无用量记录（空态诚实）</td></tr>"
     )
     day_bits = []
     for d in summary.get("days") or []:
         pts = d.get("points")
         pts_label = str(pts) if isinstance(pts, str) and pts else "—"
+        bill = str(d.get("bill_to") or "member")
         day_bits.append(
             f"<li>{html_lib.escape(str(d.get('day')))} · {html_lib.escape(str(d.get('kind')))} · "
-            f"{int(d.get('event_count') or 0)} 次 · 积分 "
+            f"{html_lib.escape(payer.get(bill, bill))} · "
+            f"{int(d.get('calls') or 0)} 次 · 积分 "
             f"{html_lib.escape(pts_label)}"
             f"</li>"
         )
@@ -548,11 +553,11 @@ th, td {{ border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; }}
 </style></head><body>
 <h1>我的用量</h1>
 <p class="note">统计/管理 · <strong>不做钱</strong>（无价格、无扣款）。账号 {school} / {member}</p>
-<h2>按日汇总</h2>
+<h2>按日汇总（北京时间）</h2>
 <ul>{days_html}</ul>
 <h2>明细</h2>
 <table>
-<thead><tr><th>时间</th><th>kind</th><th>模型</th><th>积分</th><th>run</th></tr></thead>
+<thead><tr><th>时间</th><th>kind</th><th>模型</th><th>记账</th><th>积分</th><th>run</th></tr></thead>
 <tbody>
 {body_rows}
 </tbody>
@@ -574,6 +579,18 @@ async def usage_summary(
     return await summarize_usage(
         session, principal, kind=kind, day=day, membership_id=membership_id
     )
+
+
+@app.get("/v1/usage/school-month")
+async def usage_school_month(
+    month: str,
+    principal: Principal = Depends(require_scope("ai:admin")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """School admin: one Beijing month per account × payer × kind, tokens and calls (edu-core#4350)."""
+    from app.usage_ledger import school_month_usage
+
+    return await school_month_usage(session, principal, month=month)
 
 
 @app.get("/v1/usage/events")

@@ -912,13 +912,18 @@ async def test_write_path_expands_cache_split_and_bills_weighted(client: AsyncCl
     assert "formula" not in (meter.get("extra") or {})
 
 
-async def test_school_bill_to_hidden_from_teacher_visible_in_export(client: AsyncClient):
+async def test_school_bill_to_shown_to_teacher_tagged_and_in_export(client: AsyncClient):
     personal_id = await _seed_llm(
         school="school-a",
         member="m1",
         run_id="run-personal-bill",
         tokens={"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
     )
+    from app.db import session_factory as _sf
+    from app.usage_ledger import used_millipoints_today
+
+    async with _sf()() as session:
+        used_before = await used_millipoints_today(session, _principal())
     school_row = await record_usage_event(
         school_id="school-a",
         membership_id="m1",
@@ -936,12 +941,24 @@ async def test_school_bill_to_hidden_from_teacher_visible_in_export(client: Asyn
     )
     assert school_row is not None
 
+    # School-billed rows are the teacher's own use too, tagged by payer (edu-core#4350).
     owner = await _auth(client, member="m1")
     mine = await client.get("/v1/usage/events", headers=owner)
     assert mine.status_code == 200, mine.text
-    ids = [e["id"] for e in mine.json()["events"]]
-    assert personal_id in ids
-    assert school_row.id not in ids
+    payer = {e["id"]: e["extra"]["bill_to"] for e in mine.json()["events"]}
+    assert payer[personal_id] == "member"
+    assert payer[school_row.id] == "school"
+    summary = await client.get("/v1/usage/summary", headers=owner)
+    assert summary.status_code == 200, summary.text
+    by_bill = {d["bill_to"]: d for d in summary.json()["days"]}
+    assert by_bill["member"]["event_count"] == 1
+    assert by_bill["school"]["event_count"] == 1
+    assert by_bill["school"]["calls"] == 1
+    assert "total_tokens" not in by_bill["school"]
+
+    # The allowance alone stays member-only: the school row costs the teacher nothing.
+    async with _sf()() as session:
+        assert await used_millipoints_today(session, _principal()) == used_before
 
     school_tok = await _token(
         client, member="m1", scopes=["ai:run", "ai:read", "ai:school-run"]
@@ -964,6 +981,63 @@ async def test_school_bill_to_hidden_from_teacher_visible_in_export(client: Asyn
     assert school["billing"] is False
 
 
+
+
+async def test_school_month_admin_tokens_and_calls_by_payer(client: AsyncClient):
+    """Admin month read (edu-core#4350): per account × payer, tokens of known rows and the
+    run's answered calls; a Beijing month, so 16:30 UTC on the last day lands next month."""
+    from datetime import UTC, datetime
+
+    from app.db import UsageEventRow
+    from app.db import session_factory as _sf
+
+    rows = [
+        ("m1", "member", 100, {"calls": 3}, datetime(2026, 10, 10, 2, 0, tzinfo=UTC)),
+        ("m1", "school", 40, {"calls": 2}, datetime(2026, 10, 11, 2, 0, tzinfo=UTC)),
+        ("m1", "member", None, {"calls": 1}, datetime(2026, 10, 12, 2, 0, tzinfo=UTC)),
+        ("m2", "member", 7, {}, datetime(2026, 10, 31, 16, 30, tzinfo=UTC)),  # 11-01 00:30 Beijing
+        ("m2", "member", 9, {}, datetime(2026, 9, 30, 16, 30, tzinfo=UTC)),  # 10-01 00:30 Beijing
+    ]
+    for i, (member, bill, total, extra, at) in enumerate(rows):
+        row = await record_usage_event(
+            school_id="school-a",
+            membership_id=member,
+            kind="llm",
+            model="gpt-4o",
+            prompt_tokens=total,
+            completion_tokens=0 if total is not None else None,
+            total_tokens=total,
+            tokens_unknown=total is None,
+            run_id=f"run-month-{i}",
+            source="test",
+            extra=extra,
+            bill_to=bill,
+            idempotency_key=f"llm:run-month-{i}",
+        )
+        async with _sf()() as session:
+            db_row = await session.get(UsageEventRow, row.id)
+            db_row.created_at = at.replace(tzinfo=None)
+            await session.commit()
+
+    teacher = await _auth(client, member="m1")
+    denied = await client.get("/v1/usage/school-month", headers=teacher, params={"month": "2026-10"})
+    assert denied.status_code == 403
+
+    admin = await _auth(client, member="m9", scopes=["ai:read", "ai:admin"])
+    got = await client.get("/v1/usage/school-month", headers=admin, params={"month": "2026-10"})
+    assert got.status_code == 200, got.text
+    body = got.json()
+    assert body["tz"] == "Asia/Shanghai"
+    by = {(r["membership_id"], r["bill_to"]): r for r in body["rows"]}
+    assert by[("m1", "member")]["total_tokens"] == 100
+    assert by[("m1", "member")]["calls"] == 4
+    assert by[("m1", "member")]["unknown_count"] == 1
+    assert by[("m1", "school")]["total_tokens"] == 40
+    assert by[("m1", "school")]["calls"] == 2
+    assert by[("m2", "member")]["total_tokens"] == 9
+    assert by[("m2", "member")]["calls"] == 1
+    bad = await client.get("/v1/usage/school-month", headers=admin, params={"month": "10/2026"})
+    assert bad.status_code == 400
 
 
 def _principal():
@@ -1120,3 +1194,25 @@ async def test_lane_named_llm_row_prices_on_the_lane_backend(monkeypatch):
     assert card.find(kind="llm", model="").model == "gemini-3.8-flash"
     monkeypatch.setattr(channel_rates, "_lane_backend", lambda lane: "no-such-model")
     assert card.find(kind="llm", model="pico-fast").model == "gpt-5.6-sol"
+
+
+async def test_chat_run_row_records_answered_calls(client: AsyncClient):
+    """edu-core#4350: one row per chat run, carrying how many requests the relay answered."""
+    from app.usage_ledger import emit_llm_usage_after_run
+    from pico_orchestrator import upstream
+
+    for _ in range(3):
+        upstream.note_answered("run-calls-1")
+    await emit_llm_usage_after_run(
+        "run-calls-1",
+        token_usage={"prompt_tokens": 30, "completion_tokens": 3, "total_tokens": 33},
+        school_id="school-a",
+        membership_id="m1",
+        model="gpt-4o",
+    )
+    hook = {"Authorization": "Bearer hook-secret-token"}
+    exported = await client.get(
+        "/v1/internal/usage/export", headers=hook, params={"school_id": "school-a", "limit": 200}
+    )
+    row = next(e for e in exported.json()["events"] if e["run_id"] == "run-calls-1")
+    assert row["extra"]["calls"] == 3

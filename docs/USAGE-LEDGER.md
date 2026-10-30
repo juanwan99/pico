@@ -178,7 +178,8 @@ await record_usage_event(
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/v1/usage/summary` | 按日 + kind 汇总 |
+| GET | `/v1/usage/summary` | 按北京日 × kind × `bill_to` 汇总：`event_count`、`calls`、`points`（无 token） |
+| GET | `/v1/usage/school-month?month=YYYY-MM` | **仅 `ai:admin`**：本校北京月按账号 × `bill_to` × kind，`prompt/completion/total_tokens`（只加已知行）、`unknown_count`、`event_count`、`calls`；edu 用量页读这个 |
 | GET | `/v1/usage/events` | 明细列表 |
 | GET | `/v1/usage/events/{id}` | 单条明细（跨账号 404） |
 | GET | `/v1/usage` | 极简「我的用量」HTML（只读 · 非运营后台） |
@@ -186,9 +187,13 @@ await record_usage_event(
 | GET | `/v1/usage/points?run_id=` | 本轮停下后的实际积分或 pending |
 | GET | `/v1/internal/usage/export` | **edu 拉数**：`PICO_HOOK_SERVICE_TOKEN` · 见 [usage-export.md](./contracts/usage-export.md) |
 
-查询参数：`kind` · `day=YYYY-MM-DD` · `limit` · `offset` · `membership_id`（仅 admin 且必须同校）。
+查询参数：`kind` · `day=YYYY-MM-DD`（北京日）· `limit` · `offset` · `membership_id`（仅 admin 且必须同校）。
 
-响应 **无** 金额字段。`billing: false` 明示本账不是收费系统。老师 JSON **无** token 列；导出才有 token 列 + `points`。
+**学校账也是老师的用量（edu-core#4350）：** 汇总和明细列出本人所有行，`bill_to=school`（学校付）、`member`（本人）分开标；只有额度门（§9）只算 `member`。日界、月界一律北京时间（Asia/Shanghai），与额度门同一天。
+
+**调用数 `calls`：** 一轮聊天一行，`extra.calls` = 这轮里上游实际回了 2xx 的请求数（沙盒路径在 run 代理 / llm-pass 计，直连路径在建流处计，`hosted` 在 `call_once` 计），等于 New API 那边的日志条数；没记这项的旧行和按次行算 1。
+
+响应 **无** 金额字段。`billing: false` 明示本账不是收费系统。老师 JSON **无** token 列；`school-month`（校管）和导出才有 token 列。
 
 ---
 

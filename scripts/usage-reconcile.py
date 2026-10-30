@@ -13,7 +13,11 @@ unknown token 单独列，不当 0。偏差门槛默认 1%。
 头条 ok 只看可对的聊天/精排车道；查询嵌入不混进头条。
 聊天头条 = spend：网关在 New API 上花的每次聊天调用都要落进 Pico 账本（edu-core#4331：
 答案抽取一天两千次调用没进账，按 run 窗口对齐时它们在窗外、不进头条，就这样藏住了）。
-token 和调用数两项偏差都 ≤ 门槛才 ok。按 run 窗口对齐 New API completion 仍列出（run_join），只作参考。
+token 和调用数两项偏差都 ≤ 门槛才 ok。聊天行带 extra.calls（这轮上游回了 2xx 的请求数，edu-core#4350）
+就直接用；窗口里有不带的旧行才退回按 run 窗口对齐（run_join，平时只作参考）。
+
+第三方 edu 用量页：--page-json <GET /v1/schools/<id>/ai/usage 回包> --school-id <id>，按回包的北京月
+逐老师、全校合计对 token 和调用数，任一偏差 > 门槛头条就不 ok。
 """
 
 from __future__ import annotations
@@ -73,6 +77,8 @@ def read_pico_usage(
         select_cols.append("run_id")
     if "created_at" in cols:
         select_cols.append("created_at")
+    who = [c for c in ("school_id", "membership_id") if c in cols]
+    select_cols.extend(who)
     rows = con.execute(
         f"""
         SELECT {", ".join(select_cols)}
@@ -110,6 +116,10 @@ def read_pico_usage(
             idx += 1
         if "created_at" in cols:
             rec["created_at"] = row[idx]
+            idx += 1
+        for name in who:
+            rec[name] = row[idx]
+            idx += 1
         out_rows.append(rec)
     return {"ok": True, "rows": out_rows}
 
@@ -540,12 +550,17 @@ def unknown_llm_breakdown(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _ledger_calls(row: dict[str, Any]) -> int:
+def _own_calls(row: dict[str, Any]) -> int | None:
+    """``extra.calls`` the row recorded (a chat run counts its answered requests, edu-core#4350)."""
     calls = (row.get("extra") or {}).get("calls") if isinstance(row.get("extra"), dict) else None
-    try:
-        return max(1, int(calls)) if calls is not None else 1
-    except (TypeError, ValueError):
-        return 1
+    return calls if isinstance(calls, int) and not isinstance(calls, bool) and calls >= 0 else None
+
+
+def _ledger_calls(row: dict[str, Any]) -> int:
+    calls = _own_calls(row)
+    if calls is not None:
+        return calls if str(row.get("kind") or "") == "llm" else max(1, calls)
+    return 1
 
 
 def spend_check(
@@ -558,12 +573,15 @@ def spend_check(
 
     Tokens: all known Pico chat rows vs all New API chat rows in the window (unknown rows count 0,
     so a call recorded without usage shows up as a gap). Calls: an llm run spans many completions,
-    so its calls are the New API completions inside its run window (usage known or not); other rows carry ``extra.calls``
-    (one per upstream request when absent).
+    so its calls are the ``extra.calls`` it recorded (requests the relay answered, edu-core#4350);
+    a window with older llm rows that lack it falls back to the New API completions inside run
+    windows. Other rows carry ``extra.calls`` (one per upstream request when absent).
     """
     na_chat = [r for r in newapi_rows if model_lane(r.get("model_name")) == "chat"]
     pico_chat = [r for r in pico_rows if model_lane(r.get("model")) == "chat"]
-    joined = bool(run_join and run_join.get("joined"))
+    llm_chat = [r for r in pico_chat if str(r.get("kind") or "") == "llm"]
+    own = bool(llm_chat) and all(_own_calls(r) is not None for r in llm_chat)
+    joined = bool(run_join and run_join.get("joined")) and not own
     pico_calls = (
         int(run_join.get("assigned_events") or 0) + int(run_join.get("unknown_run_events") or 0)
         if joined
@@ -597,7 +615,58 @@ def spend_check(
         "pico_calls": pico_calls,
         "newapi_calls": len(na_chat),
         "call_deviation": call_dev,
+        "calls_from": "ledger" if not joined else "run_join",
         "by_model": {name: dict(rec) for name, rec in sorted(by_model.items())},
+    }
+
+
+_BJ = timedelta(hours=8)
+
+
+def beijing_month_bounds(month: str) -> tuple[datetime, datetime]:
+    """YYYY-MM Beijing month → aware UTC [start, end)."""
+    y, m = (int(p) for p in month.split("-"))
+    start = datetime(y, m, 1, tzinfo=UTC) - _BJ
+    end = datetime(y + m // 12, m % 12 + 1, 1, tzinfo=UTC) - _BJ
+    return start, end
+
+
+def ledger_month_by_member(rows: list[dict[str, Any]], school_id: str) -> dict[str, dict[str, int]]:
+    """Ledger rows of one school → per membership {tokens, calls} the page should show."""
+    out: dict[str, dict[str, int]] = defaultdict(lambda: {"tokens": 0, "calls": 0})
+    for row in rows:
+        if school_id and str(row.get("school_id") or "") != school_id:
+            continue
+        rec = out[str(row.get("membership_id") or "")]
+        rec["tokens"] += int(row.get("total_tokens") or 0)
+        rec["calls"] += _ledger_calls(row)
+    return dict(out)
+
+
+def page_check(page: dict[str, Any], ledger: dict[str, dict[str, int]], threshold: float) -> dict[str, Any]:
+    """edu 用量页 (GET /ai/usage JSON) ↔ ledger: each teacher row and the school total."""
+    off: list[dict[str, Any]] = []
+    for t in page.get("teachers") or []:
+        mid = str(t.get("membership_id") or "")
+        want = ledger.get(mid, {"tokens": 0, "calls": 0})
+        got = {"tokens": int(t.get("used_tokens") or 0), "calls": int(t.get("calls") or 0)}
+        devs = {k: deviation(got[k], want[k]) for k in ("tokens", "calls")}
+        if max(devs.values()) > threshold:
+            off.append({"membership_id": mid, "page": got, "ledger": want, "deviation": devs})
+    total = page.get("school_total") or {}
+    want_tokens = sum(r["tokens"] for r in ledger.values())
+    want_calls = sum(r["calls"] for r in ledger.values())
+    token_dev = deviation(int(total.get("total_tokens") or 0), want_tokens)
+    call_dev = deviation(int(total.get("calls") or 0), want_calls)
+    return {
+        "ok": not off and token_dev <= threshold and call_dev <= threshold,
+        "month": page.get("month"),
+        "teachers": len(page.get("teachers") or []),
+        "teachers_off": off,
+        "page_total": {"tokens": int(total.get("total_tokens") or 0), "calls": int(total.get("calls") or 0)},
+        "ledger_total": {"tokens": want_tokens, "calls": want_calls},
+        "token_deviation": token_dev,
+        "call_deviation": call_dev,
     }
 
 
@@ -718,6 +787,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--export-ids", type=Path, help="JSON list of export event ids")
     p.add_argument("--threshold", type=float, default=THRESHOLD)
     p.add_argument("--json", action="store_true")
+    p.add_argument(
+        "--page-json",
+        type=Path,
+        help="edu 用量页 GET /v1/schools/<id>/ai/usage 回包；按它的北京月逐账号对账本",
+    )
+    p.add_argument("--school-id", default="", help="page 所属学校（--page-json 时必填）")
     return p.parse_args(argv)
 
 
@@ -768,6 +843,13 @@ def main(argv: list[str] | None = None) -> int:
         run_join=run_join,
     )
     report["window"] = {"since": since.isoformat(), "until": until.isoformat()}
+    if args.page_json:
+        page = json.loads(args.page_json.read_text())
+        m_start, m_end = beijing_month_bounds(str(page.get("month") or ""))
+        month_rows = read_pico_usage(args.pico_db, since=m_start, until=m_end)
+        ledger = ledger_month_by_member(month_rows.get("rows") or [], args.school_id)
+        report["page"] = page_check(page, ledger, float(args.threshold))
+        report["ok"] = bool(report["ok"] and report["page"]["ok"])
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report["ok"] else 1
 
