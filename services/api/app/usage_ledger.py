@@ -794,10 +794,13 @@ def _row_bill_to(row: UsageEventRow) -> str:
 
 
 def _row_calls(row: UsageEventRow) -> int:
-    """Upstream requests behind the row. A chat run carries its count (edu-core#4350);
-    every other row is one call, as are old chat rows."""
-    calls = _row_extra(row).get("calls") if row.kind == "llm" else None
-    return int(calls) if isinstance(calls, int) and calls >= 0 else 1
+    """Upstream requests behind the row, the way usage-reconcile counts them (edu-core#4350):
+    a chat run carries its answered count (0 allowed); other rows that record ``calls``
+    (exam answer-extract retries) count them, at least one; rows without it are one call."""
+    calls = _row_extra(row).get("calls")
+    if not isinstance(calls, int) or isinstance(calls, bool) or calls < 0:
+        return 1
+    return calls if row.kind == "llm" else max(1, calls)
 
 
 def _rollup(rows: list[UsageEventRow], key: Any) -> dict[Any, dict[str, Any]]:
@@ -1201,13 +1204,12 @@ async def school_month_usage(
     start, end = _month_bounds(month)
     extra = UsageEventRow.extra_json
     bill = func.coalesce(func.json_extract(extra, "$.bill_to"), "member")
+    # Same count as _row_calls: chat runs their answered calls, other rows max(1, calls).
+    own = func.json_extract(extra, "$.calls")
     calls = case(
         (
-            and_(
-                UsageEventRow.kind == "llm",
-                func.json_type(extra, "$.calls") == "integer",
-            ),
-            func.json_extract(extra, "$.calls"),
+            and_(func.json_type(extra, "$.calls") == "integer", own >= 0),
+            case((UsageEventRow.kind == "llm", own), else_=func.max(own, 1)),
         ),
         else_=1,
     )
