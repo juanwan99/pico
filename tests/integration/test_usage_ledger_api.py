@@ -1040,6 +1040,43 @@ async def test_school_month_admin_tokens_and_calls_by_payer(client: AsyncClient)
     assert bad.status_code == 400
 
 
+async def test_api_rows_count_their_recorded_calls(client: AsyncClient):
+    """An answer-extract row records the upstream requests it took (retries included); the
+    month read and the daily summary count them like usage-reconcile, max(1, calls), and a
+    row without ``calls`` stays one call (edu-core#4350: drill teacher 9442 vs ledger 9606)."""
+    for i, extra in enumerate([{"calls": 5}, {"calls": 0}, {}]):
+        await record_usage_event(
+            school_id="school-a",
+            membership_id="m5",
+            kind="api",
+            model="gemini-3.8-flash",
+            prompt_tokens=10,
+            completion_tokens=0,
+            total_tokens=10,
+            tokens_unknown=False,
+            source="exam_answer_extract",
+            extra=extra,
+            idempotency_key=f"exam_answer_extract:school-a:calls-{i}",
+        )
+    await _seed_llm(school="school-a", member="m5", run_id="run-api-calls", tokens={"total_tokens": 4})
+
+    from datetime import UTC, datetime, timedelta
+
+    month = (datetime.now(UTC) + timedelta(hours=8)).strftime("%Y-%m")
+    admin = await _auth(client, member="m9", scopes=["ai:read", "ai:admin"])
+    got = await client.get("/v1/usage/school-month", headers=admin, params={"month": month})
+    assert got.status_code == 200, got.text
+    by = {(r["membership_id"], r["kind"]): r for r in got.json()["rows"]}
+    assert by[("m5", "api")]["calls"] == 5 + 1 + 1
+    assert by[("m5", "api")]["event_count"] == 3
+
+    owner = await _auth(client, member="m5")
+    summary = await client.get("/v1/usage/summary", headers=owner)
+    assert summary.status_code == 200, summary.text
+    api_days = [d for d in summary.json()["days"] if d.get("kind") == "api"]
+    assert sum(d["calls"] for d in api_days) == 7
+
+
 def _principal():
     from app.auth import Principal
 
