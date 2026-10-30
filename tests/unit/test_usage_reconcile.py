@@ -314,6 +314,54 @@ def test_spend_counts_rows_outside_runs_by_their_calls() -> None:
     assert report["ok"] is False and report["spend"]["call_deviation"] == 1.0
 
 
+def test_non_stream_call_inside_run_window_not_double_counted() -> None:
+    """读卷（非流式）的调用落在同时段聊天 run 的窗口里，不再被 run 再算一次（edu-core#4331 上线对账 601 vs 591）。"""
+    now = datetime(2026, 10, 30, 14, 0, tzinfo=UTC)
+    pico_rows = [
+        {
+            "kind": "llm",
+            "run_id": "r1",
+            "model": "deepseek-flash",
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "tokens_unknown": False,
+            "created_at": now.isoformat(),
+            "idempotency_key": "llm:r1",
+        },
+        {
+            "kind": "api",
+            "source": "exam_answer_extract",
+            "model": "deepseek-flash",
+            "prompt_tokens": 600,
+            "completion_tokens": 200,
+            "total_tokens": 800,
+            "tokens_unknown": False,
+            "idempotency_key": "exam_answer_extract:req:1",
+            "extra": {"calls": 2},
+        },
+    ]
+    runs = {"r1": {"started_at": now.isoformat(), "ended_at": (now + timedelta(seconds=30)).isoformat()}}
+    ts = int(now.timestamp()) + 10
+    newapi_rows = [
+        {"id": 1, "created_at": ts, "model_name": "deepseek-flash", "prompt_tokens": 100, "completion_tokens": 20, "is_stream": 1},
+        {"id": 2, "created_at": ts, "model_name": "deepseek-flash", "prompt_tokens": 300, "completion_tokens": 100, "is_stream": 0},
+        {"id": 3, "created_at": ts, "model_name": "deepseek-flash", "prompt_tokens": 300, "completion_tokens": 100, "is_stream": 0},
+    ]
+    joined = ur.join_newapi_to_llm_runs(pico_rows, runs, newapi_rows)
+    assert joined["assigned_events"] == 1 and joined["unattributed_events"] == 2
+    report = ur.reconcile(
+        pico_book=ur.pico_token_book(pico_rows),
+        newapi_book=ur.newapi_token_book(newapi_rows),
+        export_vs_ledger=None,
+        pico_rows=pico_rows,
+        newapi_rows=newapi_rows,
+        run_join=joined,
+    )
+    assert report["spend"]["pico_calls"] == 3 and report["spend"]["newapi_calls"] == 3
+    assert report["ok"] is True
+
+
 def test_run_join_skipped_without_run_id() -> None:
     pico_rows = [
         {
