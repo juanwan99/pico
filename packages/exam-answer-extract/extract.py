@@ -1116,16 +1116,22 @@ async def _complete_once(
         async def read_stream() -> str:
             sent[0] += 1
             pieces: list[str] = []
-            async for piece in P._iter_openai_responses(
-                cfg,
-                mid,
-                _to_responses_messages(messages),
-                max_tokens=max_tokens,
-                thinking=thinking,
-                usage_out=usage_out,
-                purpose="exam",
-            ):
-                pieces.append(piece)
+            calls = int((usage_out or {}).get("calls") or 0)
+            before = (usage_out or {}).get("total_tokens")
+            try:
+                async for piece in P._iter_openai_responses(
+                    cfg,
+                    mid,
+                    _to_responses_messages(messages),
+                    max_tokens=max_tokens,
+                    thinking=thinking,
+                    usage_out=usage_out,
+                    purpose="exam",
+                ):
+                    pieces.append(piece)
+            finally:
+                if usage_out and usage_out.get("total_tokens") != before:
+                    usage_out["calls"] = calls + 1
             return "".join(pieces)
 
         return await P.call_once(cfg, "exam", read_stream, budget=budget)
@@ -1155,10 +1161,12 @@ async def _complete_once(
 
         spent = parse_usage_blob(usage) or {}
         if usage_out is not None:
+            calls = int(usage_out.get("calls") or 0) + 1
             merged = add_usage(dict(usage_out) if usage_out else None, spent)
             usage_out.clear()
             if merged:
                 usage_out.update(merged)
+                usage_out["calls"] = calls
     choices = getattr(resp, "choices", None) or []
     if choices and thought_out(getattr(choices[0], "finish_reason", None), spent, max_tokens):
         # Gemini 3 behind New API thought 15.4k of 16k on a structure read and cut the paper
@@ -1512,15 +1520,17 @@ async def extract_text(
     prompts: dict[str, str] | None = None,
     task: str = "answers",
     roster: str = "",
+    usage_out: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """``usage_out`` collects every model call's usage, filled even when the read fails."""
     args = dict(
         subject_code=subject_code, subject_name=subject_name, complete=complete,
         prompts=prompts, task=task, roster=roster,
     )
+    usage: dict[str, Any] = {} if usage_out is None else usage_out
     votes = _env_int("PICO_EXAM_STRUCTURE_VOTES", _STRUCTURE_VOTES)
     if task != "structure" or votes < 2:
-        return await _extract_text_once(text, **args)
-    usage: dict[str, Any] = {}
+        return await _extract_text_once(text, usage=usage, **args)
     model_out: dict[str, Any] = {}
 
     async def once() -> dict[str, Any] | BaseException:
@@ -1672,8 +1682,12 @@ async def extract_pages(
     task: str = "answers",
     roster: str = "",
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    usage_out: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """pages: [{page:int, mime:str, data_b64:str}] — one vision call per page, merged."""
+    """pages: [{page:int, mime:str, data_b64:str}] — one vision call per page, merged.
+
+    ``usage_out`` collects every model call's usage, filled even when the read fails.
+    """
     complete = complete or model_complete
     prompts = prompts or load_prompts(task=task)
     if not pages:
@@ -1685,7 +1699,7 @@ async def extract_pages(
     # is one wave. Per-page retry/backoff below still absorbs a stray reset.
     limit = concurrency or _env_int("PICO_EXAM_EXTRACT_CONCURRENCY", _DEFAULT_CONCURRENCY)
     sem = asyncio.Semaphore(limit)
-    usage: dict[str, Any] = {}
+    usage: dict[str, Any] = {} if usage_out is None else usage_out
     model_out: dict[str, Any] = {}
 
     on_page = roster_pages(roster)

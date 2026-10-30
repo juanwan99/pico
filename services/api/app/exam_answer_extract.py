@@ -11,6 +11,7 @@ import binascii
 import hashlib
 import logging
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -134,6 +135,8 @@ async def post_exam_answer_extract(
 
     result: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
+    # Filled by every model call as it lands, so a read that fails halfway still bills what it spent.
+    spent: dict[str, Any] = {}
     try:
         try:
             import extract as extract_mod
@@ -148,6 +151,7 @@ async def post_exam_answer_extract(
                     task=body.task or "answers",
                     roster=body.roster or "",
                     concurrency=body.concurrency,
+                    usage_out=spent,
                 )
             else:
                 result = await extract_mod.extract_text(
@@ -156,6 +160,7 @@ async def post_exam_answer_extract(
                     subject_name=body.subject_name,
                     task=body.task or "answers",
                     roster=body.roster or "",
+                    usage_out=spent,
                 )
         except extract_mod.ExtractError as exc:
             status = {
@@ -173,6 +178,7 @@ async def post_exam_answer_extract(
         usage = result.pop("usage", None) or None
         return result
     finally:
+        usage = usage or spent or None
         if getattr(principal, "school_id", None):
             await record_usage_event(
                 school_id=principal.school_id,
@@ -185,8 +191,11 @@ async def post_exam_answer_extract(
                 total_tokens=(usage or {}).get("total_tokens"),
                 tokens_unknown=not usage,
                 bill_to=payer_for(principal),
-                idempotency_key=(
-                    "exam_answer_extract:"
-                    f"{principal.school_id}:{body.item_id or content_sha[:16]}:{content_sha}"
-                ),
+                # One row per request: a re-read of the same pages is a new upstream spend.
+                idempotency_key=f"exam_answer_extract:{principal.school_id}:{uuid.uuid4().hex}",
+                extra={
+                    "item_id": body.item_id,
+                    "content_sha": content_sha,
+                    "calls": (usage or {}).get("calls"),
+                },
             )

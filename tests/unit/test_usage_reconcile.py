@@ -214,14 +214,17 @@ def test_run_join_two_completions_match_one_pico_row() -> None:
         newapi_rows=newapi_rows,
         run_join=joined,
     )
-    assert report["ok"] is True
+    # run-aligned still matches, but the 1000 tokens outside any run are spend nobody recorded
     assert report["by_model"]["gemini-3.8-flash"]["token_deviation"] == 0.0
     assert report["by_model"]["gemini-3.8-flash"]["newapi"]["events"] == 2
     assert report["run_join"]["unattributed_tokens"] == 1000
+    assert report["ok"] is False, "a call outside every run window is unrecorded spend (edu-core#4331)"
+    assert report["spend"]["pico_calls"] == 2 and report["spend"]["newapi_calls"] == 3
+    assert report["spend"]["pico_tokens"] == 100 and report["spend"]["newapi_tokens"] == 1100
     assert "assigned_rows" not in report["run_join"]
 
 
-def test_unknown_run_newapi_is_not_gated() -> None:
+def test_unknown_run_spend_is_gated() -> None:
     pico_rows = [
         {
             "kind": "llm",
@@ -263,9 +266,52 @@ def test_unknown_run_newapi_is_not_gated() -> None:
         newapi_rows=newapi_rows,
         run_join=joined,
     )
-    assert report["ok"] is True
     assert report["by_model"]["gpt-5.6-sol"]["token_deviation"] == 0.0
     assert report["by_model"]["gpt-5.6-sol"]["newapi"]["total_tokens"] == 10
+    # the failed run spent 80 tokens upstream with no usage in the ledger: that is the gap to find
+    assert report["ok"] is False
+    assert report["spend"]["call_deviation"] == 0.0
+    assert report["spend"]["by_model"]["gpt-5.6-sol"]["pico_unknown_rows"] == 1
+
+
+def test_spend_counts_rows_outside_runs_by_their_calls() -> None:
+    """答案抽取不是 run：一次请求一行，extra.calls 记它向上游发了几次（edu-core#4331）。"""
+    pico_rows = [
+        {
+            "kind": "api",
+            "source": "exam_answer_extract",
+            "model": "deepseek-flash",
+            "prompt_tokens": 900,
+            "completion_tokens": 300,
+            "total_tokens": 1200,
+            "tokens_unknown": False,
+            "idempotency_key": "exam_answer_extract:s:1",
+            "extra": {"calls": 3},
+        }
+    ]
+    newapi_rows = [
+        {"id": i, "created_at": 0, "model_name": "deepseek-flash", "prompt_tokens": 300, "completion_tokens": 100}
+        for i in range(3)
+    ]
+    report = ur.reconcile(
+        pico_book=ur.pico_token_book(pico_rows),
+        newapi_book=ur.newapi_token_book(newapi_rows),
+        export_vs_ledger=None,
+        pico_rows=pico_rows,
+        newapi_rows=newapi_rows,
+        run_join=ur.join_newapi_to_llm_runs(pico_rows, {}, newapi_rows),
+    )
+    assert report["ok"] is True
+    assert report["spend"]["pico_calls"] == 3 and report["spend"]["token_deviation"] == 0.0
+    # the same day before the fix: the row was missing
+    report = ur.reconcile(
+        pico_book=ur.pico_token_book([]),
+        newapi_book=ur.newapi_token_book(newapi_rows),
+        export_vs_ledger=None,
+        pico_rows=[],
+        newapi_rows=newapi_rows,
+    )
+    assert report["ok"] is False and report["spend"]["call_deviation"] == 1.0
 
 
 def test_run_join_skipped_without_run_id() -> None:

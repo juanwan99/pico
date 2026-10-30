@@ -559,7 +559,9 @@ def test_route_text_ok_records_usage_with_tokens(client: TestClient, monkeypatch
     assert rows[0]["source"] == "exam_answer_extract"
     assert rows[0]["total_tokens"] == 15
     assert rows[0]["tokens_unknown"] == 0
-    assert rows[0]["idempotency_key"].startswith("exam_answer_extract:school-a:sk-1:")
+    assert rows[0]["idempotency_key"].startswith("exam_answer_extract:school-a:")
+    extra = json.loads(rows[0]["extra_json"])
+    assert extra["item_id"] == "sk-1"
 
 
 def test_route_pages_ok(client: TestClient, monkeypatch):
@@ -626,8 +628,11 @@ def test_route_empty_and_failed_codes(client: TestClient, monkeypatch, tmp_path)
     res = client.post("/v1/exam/answer-extract", json={"text": "1. C"}, headers=_headers())
     assert res.status_code == 503
     rows = _usage_rows(tmp_path)
-    # same text twice → one idempotent row; the page request is the second row
-    assert len(rows) == 2 and all(r["tokens_unknown"] == 1 for r in rows)
+    # one row per request (edu-core#4331): the empty read and the failed page read still spent 15 tokens
+    # each (the stub bills before it raises); only the unconfigured one never reached a model
+    assert len(rows) == 3
+    assert [r["total_tokens"] for r in rows] == [15, 15, None]
+    assert [r["tokens_unknown"] for r in rows] == [0, 0, 1]
 
 
 def test_prompt_counts_sub_questions_not_circled_blanks():
@@ -1414,7 +1419,7 @@ def test_route_bills_each_task_on_the_same_pages(client: TestClient, monkeypatch
     )
     assert again.status_code == 200
     rows = _usage_rows(tmp_path)
-    assert len({r["idempotency_key"] for r in rows}) == 2, "paper、solve 各一笔；同一请求重发不重记"
+    assert len({r["idempotency_key"] for r in rows}) == 3, "每次请求各记一笔：同一请求重发也是又花了一次（edu-core#4331）"
 
 
 @pytest.mark.asyncio
@@ -2013,6 +2018,7 @@ async def test_thinking_that_eats_the_output_is_a_failed_read():
         await ex._complete_once(P, cfg, "gemini-3.8-flash", [], [0], budget=3, max_tokens=16000,
                                 thinking=False, usage_out=usage)
     assert usage["reasoning_tokens"] == 15358, "spent tokens still billed"
+    assert usage["calls"] == 1, "every upstream call is counted (edu-core#4331)"
     # a long answer that hits the cap without thinking is the continue loop's job, not a failure
     P, _ = _fake_brain("length", {"completion_tokens": 16000, "completion_tokens_details": {"reasoning_tokens": 0}}, '[{"number": 1')
     assert await ex._complete_once(P, cfg, "gemini-3.8-flash", [], [0], budget=3, max_tokens=16000,

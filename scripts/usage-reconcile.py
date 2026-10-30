@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """C1: New API logs ↔ Pico usage_events ↔ export. Read-only. Not a wallet.
 
-On ECS (typical):
-  python3 scripts/usage-reconcile.py \\
-    --pico-db /opt/pico/data/pico.db \\
-    --newapi-db /home/ops/new-api/data/one-api.db \\
-    --hours 24
+On ECS (pico.db lives in the pico_pico_data volume and is WAL, so mount it writable; the script
+  still opens both dbs mode=ro; the host has no sqlite3, so run it in the api image):
+  docker run --rm --entrypoint python -v pico_pico_data:/d -v /home/ops/new-api/data:/n \\
+    -v /opt/pico/scripts:/s:ro pico-api:<ver> /s/usage-reconcile.py \\
+    --pico-db /d/pico.db --newapi-db /n/one-api.db --token-name pico-gateway --hours 24
+  (--since / --until take ISO times, e.g. 2026-10-30T16:00:00+00:00, instead of --hours)
 
 edu 钱包实扣不在本仓。第三本 = export 行（与 usage_events 应逐行同）。
 unknown token 单独列，不当 0。偏差门槛默认 1%。
 头条 ok 只看可对的聊天/精排车道；查询嵌入不混进头条。
-聊天按 Pico run 窗口对齐 New API completion（一轮多 completion）；窗外调用单列，不进头条。
+聊天头条 = spend：网关在 New API 上花的每次聊天调用都要落进 Pico 账本（edu-core#4331：
+答案抽取一天两千次调用没进账，按 run 窗口对齐时它们在窗外、不进头条，就这样藏住了）。
+token 和调用数两项偏差都 ≤ 门槛才 ok。按 run 窗口对齐 New API completion 仍列出（run_join），只作参考。
 """
 
 from __future__ import annotations
@@ -329,6 +332,7 @@ def join_newapi_to_llm_runs(
 
     assigned: list[dict[str, Any]] = []
     unattributed: list[dict[str, Any]] = []
+    unknown_run_events = 0
     for idx, raw in enumerate(newapi_rows):
         if model_lane(raw.get("model_name")) != "chat":
             continue
@@ -346,6 +350,7 @@ def join_newapi_to_llm_runs(
             continue
         known_hits = [window for window in hits if not window["unknown"]]
         if not known_hits:
+            unknown_run_events += 1
             rec = per_run[hits[0]["run_id"]]
             rec["na_events"] += 1
             rec["na_tokens"] += na_row_tokens(log)
@@ -402,6 +407,7 @@ def join_newapi_to_llm_runs(
         "slack_s": slack_s,
         "joined": True,
         "assigned_events": len(assigned),
+        "unknown_run_events": unknown_run_events,
         "unattributed_events": len(unattributed),
         "assigned_tokens": assigned_tokens,
         "unattributed_tokens": unattr_tokens,
@@ -527,6 +533,67 @@ def unknown_llm_breakdown(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _ledger_calls(row: dict[str, Any]) -> int:
+    calls = (row.get("extra") or {}).get("calls") if isinstance(row.get("extra"), dict) else None
+    try:
+        return max(1, int(calls)) if calls is not None else 1
+    except (TypeError, ValueError):
+        return 1
+
+
+def spend_check(
+    pico_rows: list[dict[str, Any]],
+    newapi_rows: list[dict[str, Any]],
+    run_join: dict[str, Any] | None,
+    threshold: float,
+) -> dict[str, Any]:
+    """Every chat call New API billed the gateway for must land in a Pico ledger row.
+
+    Tokens: all known Pico chat rows vs all New API chat rows in the window (unknown rows count 0,
+    so a call recorded without usage shows up as a gap). Calls: an llm run spans many completions,
+    so its calls are the New API completions inside its run window (usage known or not); other rows carry ``extra.calls``
+    (one per upstream request when absent).
+    """
+    na_chat = [r for r in newapi_rows if model_lane(r.get("model_name")) == "chat"]
+    pico_chat = [r for r in pico_rows if model_lane(r.get("model")) == "chat"]
+    joined = bool(run_join and run_join.get("joined"))
+    pico_calls = (
+        int(run_join.get("assigned_events") or 0) + int(run_join.get("unknown_run_events") or 0)
+        if joined
+        else 0
+    )
+    by_model: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"pico_tokens": 0, "pico_unknown_rows": 0, "newapi_tokens": 0, "newapi_calls": 0}
+    )
+    for row in pico_chat:
+        rec = by_model[_model_key(row.get("model"))]
+        rec["pico_tokens"] += pico_billed_tokens(row) or 0
+        rec["pico_unknown_rows"] += 1 if row.get("tokens_unknown") else 0
+        if str(row.get("kind") or "") == "llm" and joined:
+            continue
+        pico_calls += _ledger_calls(row)
+    for row in na_chat:
+        rec = by_model[_model_key(row.get("model_name"))]
+        rec["newapi_tokens"] += na_row_tokens(row)
+        rec["newapi_calls"] += 1
+    for rec in by_model.values():
+        rec["token_deviation"] = deviation(rec["pico_tokens"], rec["newapi_tokens"])
+    pico_tokens = sum(rec["pico_tokens"] for rec in by_model.values())
+    na_tokens = sum(rec["newapi_tokens"] for rec in by_model.values())
+    token_dev = deviation(pico_tokens, na_tokens)
+    call_dev = deviation(pico_calls, len(na_chat))
+    return {
+        "ok": token_dev <= threshold and call_dev <= threshold,
+        "pico_tokens": pico_tokens,
+        "newapi_tokens": na_tokens,
+        "token_deviation": token_dev,
+        "pico_calls": pico_calls,
+        "newapi_calls": len(na_chat),
+        "call_deviation": call_dev,
+        "by_model": {name: dict(rec) for name, rec in sorted(by_model.items())},
+    }
+
+
 def reconcile(
     *,
     pico_book: dict[str, Any],
@@ -565,22 +632,26 @@ def reconcile(
                         "completion_tokens": None,
                         "total_tokens": int(stats.get("assigned_tokens") or 0),
                     }
-                    if rec["comparable"]:
-                        comparable_ok.append(
-                            rec["token_deviation"] is not None
-                            and rec["token_deviation"] <= threshold
-                        )
+                    # Run-aligned is a reference only: calls outside run windows are what the
+                    # spend gate below is for (edu-core#4331).
+                    rec["comparable"] = False
                 elif rec.get("comparable") and rec.get("lane") == "rerank":
                     comparable_ok.append(
                         rec.get("token_deviation") is not None
                         and rec["token_deviation"] <= threshold
                     )
     export_dev = None if export_vs_ledger is None else export_vs_ledger["deviation"]
+    spend = None
+    if pico_rows is not None and newapi_rows is not None and newapi_book is not None \
+            and newapi_book.get("ok") is not False:
+        spend = spend_check(pico_rows, newapi_rows, run_join, threshold)
     checks = []
+    if spend is not None:
+        checks.append(spend["ok"])
     if comparable_ok is not None:
         if comparable_ok:
             checks.append(all(comparable_ok))
-    elif token_dev is not None:
+    elif token_dev is not None and spend is None:
         checks.append(token_dev <= threshold)
     if export_dev is not None:
         checks.append(export_dev <= threshold)
@@ -593,10 +664,10 @@ def reconcile(
         "blended token_deviation is informational (do not mix embed into the gate)",
         "pico total_tokens prefers ledger total (reasoning) over prompt+completion",
     ]
-    if run_join and run_join.get("joined"):
+    if spend is not None:
         notes.append(
-            "chat headline uses New API completions inside Pico run windows; "
-            "unattributed (probes / outside windows) listed under run_join, not gated"
+            "chat headline is spend: every New API chat call must land in the Pico ledger "
+            "(tokens and calls both within threshold); run_join is a reference only"
         )
     else:
         notes.append(
@@ -613,6 +684,8 @@ def reconcile(
         "export_vs_ledger": export_vs_ledger,
         "notes": notes,
     }
+    if spend is not None:
+        report["spend"] = spend
     if by_model is not None:
         report["by_model"] = by_model
     if pico_rows is not None:
@@ -633,6 +706,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--newapi-db", type=Path, help="New API sqlite (logs)")
     p.add_argument("--token-name", default="", help="New API token_name filter (e.g. pico-gateway)")
     p.add_argument("--hours", type=int, default=24)
+    p.add_argument("--since", help="ISO start (overrides --hours)")
+    p.add_argument("--until", help="ISO end (default now)")
     p.add_argument("--export-ids", type=Path, help="JSON list of export event ids")
     p.add_argument("--threshold", type=float, default=THRESHOLD)
     p.add_argument("--json", action="store_true")
@@ -641,8 +716,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    until = datetime.now(UTC)
-    since = until - timedelta(hours=max(1, int(args.hours)))
+    until = _parse_dt(args.until) if args.until else datetime.now(UTC)
+    since = _parse_dt(args.since) if args.since else None
+    if until is None or (args.since and since is None):
+        print("bad --since / --until", flush=True)
+        return 2
+    until = until.astimezone(UTC)
+    since = since.astimezone(UTC) if since else until - timedelta(hours=max(1, int(args.hours)))
     if not args.pico_db:
         print("need --pico-db", flush=True)
         return 2
@@ -680,7 +760,7 @@ def main(argv: list[str] | None = None) -> int:
         newapi_rows=newapi_rows,
         run_join=run_join,
     )
-    report["window"] = {"since": since.isoformat(), "until": until.isoformat(), "hours": args.hours}
+    report["window"] = {"since": since.isoformat(), "until": until.isoformat()}
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report["ok"] else 1
 
