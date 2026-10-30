@@ -212,6 +212,8 @@ def read_newapi_logs(
         select.append("token_name")
     if "type" in cols:
         select.append("type")
+    if "is_stream" in cols:
+        select.append("is_stream")
     sql = f"SELECT {', '.join(select)} FROM logs WHERE created_at >= ? AND created_at < ?"
     args: list[Any] = [since_unix, until_unix]
     if token_name and "token_name" in cols:
@@ -335,6 +337,11 @@ def join_newapi_to_llm_runs(
     unknown_run_events = 0
     for idx, raw in enumerate(newapi_rows):
         if model_lane(raw.get("model_name")) != "chat":
+            continue
+        # Pico llm runs always stream; non-stream calls (exam answer-extract) are rows that carry
+        # their own extra.calls, so a concurrent run window must not claim them too (edu-core#4331).
+        if raw.get("is_stream") is not None and not int(raw["is_stream"]):
+            unattributed.append(dict(raw, _idx=raw.get("id") if raw.get("id") is not None else f"i{idx}"))
             continue
         log = dict(raw)
         log["_idx"] = log.get("id") if log.get("id") is not None else f"i{idx}"
