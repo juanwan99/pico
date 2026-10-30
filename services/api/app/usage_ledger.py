@@ -19,7 +19,7 @@ from pico_orchestrator.usage_parse import (
     parse_usage_blob,
     usage_extra_bits,
 )
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -590,6 +590,15 @@ async def emit_llm_usage_after_run(
     extra = usage_extra_bits(usage_dict)
     if ui_model and is_ui_lane(ui_model):
         extra.setdefault("ui_model", ui_model)
+    try:
+        from pico_orchestrator import upstream
+
+        calls = upstream.answered_calls(rid)
+        if calls is not None:
+            # Requests the relay answered for this run = New API log rows (edu-core#4350).
+            extra["calls"] = calls
+    except Exception:
+        logger.debug("llm calls count skipped", exc_info=True)
     if fields.tokens_unknown:
         extra.setdefault("reason", "provider_usage_missing")
         if run_status == "failed":
@@ -741,10 +750,10 @@ async def enforce_allowance(
 
 
 def _day_bounds(day: str) -> tuple[datetime, datetime]:
+    """One Beijing calendar day as naive-UTC [start, end) — the school's day (edu-core#4350)."""
     try:
-        # Naive UTC calendar day — matches db._utcnow() (tzinfo stripped).
         y, m, d = (int(p) for p in day.strip().split("-"))
-        start = datetime(y, m, d, tzinfo=UTC).replace(tzinfo=None)
+        start = datetime(y, m, d, tzinfo=_SHANGHAI).astimezone(UTC).replace(tzinfo=None)
     except ValueError as exc:
         from fastapi import HTTPException, status
 
@@ -753,6 +762,42 @@ def _day_bounds(day: str) -> tuple[datetime, datetime]:
             detail={"code": "usage.bad_day", "message": "day must be YYYY-MM-DD"},
         ) from exc
     return start, start + timedelta(days=1)
+
+
+def _month_bounds(month: str) -> tuple[datetime, datetime]:
+    """One Beijing calendar month (YYYY-MM) as naive-UTC [start, end)."""
+    try:
+        y, m = (int(p) for p in month.strip().split("-"))
+        start = datetime(y, m, 1, tzinfo=_SHANGHAI)
+        end = datetime(y + m // 12, m % 12 + 1, 1, tzinfo=_SHANGHAI)
+    except ValueError as exc:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "usage.bad_month", "message": "month must be YYYY-MM"},
+        ) from exc
+    return (
+        start.astimezone(UTC).replace(tzinfo=None),
+        end.astimezone(UTC).replace(tzinfo=None),
+    )
+
+
+def _beijing_day(at: datetime) -> str:
+    """Naive-UTC timestamp → its Beijing calendar day."""
+    return (at + timedelta(hours=8)).strftime("%Y-%m-%d")
+
+
+def _row_bill_to(row: UsageEventRow) -> str:
+    """Who pays the row; old rows without a tag are the teacher's own."""
+    return str(_row_extra(row).get("bill_to") or "member")
+
+
+def _row_calls(row: UsageEventRow) -> int:
+    """Upstream requests behind the row. A chat run carries its count (edu-core#4350);
+    every other row is one call, as are old chat rows."""
+    calls = _row_extra(row).get("calls") if row.kind == "llm" else None
+    return int(calls) if isinstance(calls, int) and calls >= 0 else 1
 
 
 def _rollup(rows: list[UsageEventRow], key: Any) -> dict[Any, dict[str, Any]]:
@@ -764,9 +809,10 @@ def _rollup(rows: list[UsageEventRow], key: Any) -> dict[Any, dict[str, Any]]:
     for row in rows:
         g = groups.setdefault(
             key(row),
-            {"event_count": 0, "total_tokens": None, "unknown_count": 0, "milli": None},
+            {"event_count": 0, "calls": 0, "total_tokens": None, "unknown_count": 0, "milli": None},
         )
         g["event_count"] += 1
+        g["calls"] += _row_calls(row)
         g["unknown_count"] += int(bool(row.tokens_unknown))
         if row.total_tokens is not None:
             g["total_tokens"] = (g["total_tokens"] or 0) + int(row.total_tokens)
@@ -784,8 +830,8 @@ def _rollup_points(group: dict[str, Any]) -> str | None:
 
 async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
     """School-blind today rollup for the owner gateway page. No membership ids."""
-    today = datetime.now(UTC).date().isoformat()
-    start, end = _day_bounds(today)
+    start, end = shanghai_day_bounds_utc()
+    today = _beijing_day(start)
     q = select(UsageEventRow).where(
         UsageEventRow.created_at >= start, UsageEventRow.created_at < end
     )
@@ -822,10 +868,10 @@ async def list_usage_events(
     offset: int = 0,
 ) -> list[UsageEventRow]:
     school, member = _tenant_filter(principal, membership_id)
+    # School-billed rows are this teacher's too, tagged bill_to (edu-core#4350).
     q = select(UsageEventRow).where(
         UsageEventRow.school_id == school,
         UsageEventRow.membership_id == member,
-        _personal_bill_clause(),
     )
     if kind:
         kind_n = kind.strip().lower()
@@ -1102,10 +1148,11 @@ async def summarize_usage(
     membership_id: str | None = None,
 ) -> dict[str, Any]:
     school, member = _tenant_filter(principal, membership_id)
+    # Every row of this teacher, split by who pays; the allowance alone stays
+    # member-only (used_millipoints_today). Days are Beijing days (edu-core#4350).
     q = select(UsageEventRow).where(
         UsageEventRow.school_id == school,
         UsageEventRow.membership_id == member,
-        _personal_bill_clause(),
     )
     if kind:
         kind_n = kind.strip().lower()
@@ -1115,17 +1162,19 @@ async def summarize_usage(
         start, end = _day_bounds(day)
         q = q.where(UsageEventRow.created_at >= start, UsageEventRow.created_at < end)
     rows = list((await session.execute(q)).scalars().all())
-    groups = _rollup(rows, lambda row: (row.created_at.strftime("%Y-%m-%d"), row.kind))
+    groups = _rollup(
+        rows, lambda row: (_beijing_day(row.created_at), row.kind, _row_bill_to(row))
+    )
     days = [
         {
             "day": day_key,
             "kind": kind_key,
+            "bill_to": bill_key,
             "event_count": g["event_count"],
+            "calls": g["calls"],
             "points": _rollup_points(g),
         }
-        for (day_key, kind_key), g in sorted(
-            groups.items(), key=lambda item: (item[0][0], item[0][1])
-        )
+        for (day_key, kind_key, bill_key), g in sorted(groups.items())
     ]
     days.sort(key=lambda row: row["day"], reverse=True)
     return {
@@ -1134,6 +1183,75 @@ async def summarize_usage(
         "school_id": school,
         "membership_id": member,
         "days": days,
+    }
+
+
+async def school_month_usage(
+    session: AsyncSession, principal: Principal, *, month: str
+) -> dict[str, Any]:
+    """Admin read: the school's Beijing month per account × payer × kind, with tokens
+    (known rows only) and upstream calls — the numbers New API logs (edu-core#4350)."""
+    if "ai:admin" not in principal.scopes:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "usage.forbidden", "message": "admin only"},
+        )
+    start, end = _month_bounds(month)
+    extra = UsageEventRow.extra_json
+    bill = func.coalesce(func.json_extract(extra, "$.bill_to"), "member")
+    calls = case(
+        (
+            and_(
+                UsageEventRow.kind == "llm",
+                func.json_type(extra, "$.calls") == "integer",
+            ),
+            func.json_extract(extra, "$.calls"),
+        ),
+        else_=1,
+    )
+    q = (
+        select(
+            UsageEventRow.membership_id,
+            bill,
+            UsageEventRow.kind,
+            func.count(),
+            func.sum(calls),
+            func.sum(UsageEventRow.prompt_tokens),
+            func.sum(UsageEventRow.completion_tokens),
+            func.sum(UsageEventRow.total_tokens),
+            func.sum(case((UsageEventRow.tokens_unknown, 1), else_=0)),
+        )
+        .where(
+            UsageEventRow.school_id == principal.school_id,
+            UsageEventRow.created_at >= start,
+            UsageEventRow.created_at < end,
+        )
+        .group_by(UsageEventRow.membership_id, bill, UsageEventRow.kind)
+        .order_by(UsageEventRow.membership_id, bill, UsageEventRow.kind)
+    )
+    rows = [
+        {
+            "membership_id": mid,
+            "bill_to": bt,
+            "kind": kind,
+            "event_count": int(n or 0),
+            "calls": int(c or 0),
+            "prompt_tokens": int(p or 0),
+            "completion_tokens": int(o or 0),
+            "total_tokens": int(t or 0),
+            "unknown_count": int(u or 0),
+        }
+        for mid, bt, kind, n, c, p, o, t, u in (await session.execute(q)).all()
+    ]
+    return {
+        "billing": False,
+        "schema": USAGE_EXPORT_SCHEMA,
+        "school_id": principal.school_id,
+        "month": month.strip(),
+        "tz": "Asia/Shanghai",
+        "rows": rows,
     }
 
 

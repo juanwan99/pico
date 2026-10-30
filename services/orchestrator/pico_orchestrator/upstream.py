@@ -211,6 +211,8 @@ class RunState:
     last_status: int | None = None
     last_error: str = ""
     sent: int = 0
+    # Requests the relay answered 2xx: New API logs each as one call (edu-core#4350).
+    answered: int = 0
 
 
 _RUNS: OrderedDict[str, RunState] = OrderedDict()
@@ -235,6 +237,19 @@ def note_upstream_error(run_id: str | None, status: int, text: str) -> None:
     if st is not None:
         st.last_status = status
         st.last_error = (text or "")[:300]
+
+
+def note_answered(run_id: str | None = None) -> None:
+    """One request of this run got a 2xx head (the caller's run when not named)."""
+    st = run_state(run_id or CALLER.get().run_id)
+    if st is not None:
+        st.answered += 1
+
+
+def answered_calls(run_id: str | None) -> int | None:
+    """2xx requests this run sent so far; None when this process never saw the run."""
+    st = _RUNS.get(run_id or "")
+    return None if st is None else st.answered
 
 
 def upstream_error(run_id: str | None) -> str:
@@ -409,10 +424,12 @@ def exam_key_max() -> int:
 
 @dataclass(frozen=True)
 class Caller:
-    """Who a model call is for: ``session`` goes upstream, ``member`` waits for a teacher slot."""
+    """Who a model call is for: ``session`` goes upstream, ``member`` waits for a teacher slot,
+    ``run_id`` counts the answered request on that run."""
 
     session: str = ""
     member: str = ""
+    run_id: str = ""
 
 
 _NOBODY = Caller()
@@ -447,6 +464,7 @@ def caller_scope(*, conversation_id: str | None, run_id: str, membership_id: str
     who = Caller(
         session=conversation_session(conversation_id or f"run:{run_id}"),
         member=member_key(membership_id),
+        run_id=run_id or "",
     )
     token = CALLER.set(who)
     try:

@@ -326,10 +326,11 @@ def test_ingest_usage_success_and_payer(client, monkeypatch, tmp_path, binary, s
     teacher = client.get("/v1/usage/events", headers=headers)
     assert teacher.status_code == 200, teacher.text
     events = teacher.json()["events"]
-    assert len(events) == (0 if school_run else 1)
-    if events:
-        assert events[0]["points"] is None
-        assert "total_tokens" not in events[0]
+    # 学校账的行也给老师看，标出谁付（edu-core#4350）
+    assert len(events) == 1
+    assert events[0]["extra"]["bill_to"] == ("school" if school_run else "member")
+    assert events[0]["points"] is None
+    assert "total_tokens" not in events[0]
     for surface in (response.json(), exported.json(), teacher.json()):
         assert '"price"' not in json.dumps(surface)
 

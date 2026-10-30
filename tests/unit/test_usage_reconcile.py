@@ -447,3 +447,61 @@ def test_read_pico_and_newapi_sqlite(tmp_path: Path) -> None:
     report = ur.reconcile(pico_book=book_p, newapi_book=book_n, export_vs_ledger=None)
     assert report["ok"] is True
     assert report["token_deviation"] == 0.0
+
+
+def test_spend_uses_run_calls_from_ledger() -> None:
+    """edu-core#4350: a chat run row carries its answered requests; no run-window guess."""
+    pico_rows = [
+        {
+            "kind": "llm",
+            "model": "deepseek-flash",
+            "prompt_tokens": 900,
+            "completion_tokens": 300,
+            "total_tokens": 1200,
+            "tokens_unknown": False,
+            "idempotency_key": "llm:r1",
+            "run_id": "r1",
+            "extra": {"calls": 3},
+        },
+        {
+            "kind": "llm",
+            "model": "deepseek-flash",
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "tokens_unknown": True,
+            "idempotency_key": "llm:r2",
+            "run_id": "r2",
+            "extra": {"calls": 0, "fail_without_usage": True},
+        },
+    ]
+    newapi_rows = [
+        {"id": i, "created_at": 0, "model_name": "deepseek-flash", "prompt_tokens": 300, "completion_tokens": 100}
+        for i in range(3)
+    ]
+    spend = ur.spend_check(pico_rows, newapi_rows, None, 0.01)
+    assert spend["ok"] is True
+    assert spend["pico_calls"] == 3 and spend["calls_from"] == "ledger"
+
+
+def test_page_check_per_teacher_and_total() -> None:
+    rows = [
+        {"school_id": "s1", "membership_id": "m1", "kind": "llm", "total_tokens": 100, "extra": {"calls": 4}},
+        {"school_id": "s1", "membership_id": "m1", "kind": "llm", "total_tokens": None, "extra": {"calls": 1}},
+        {"school_id": "s1", "membership_id": "m2", "kind": "search", "total_tokens": None, "extra": {}},
+        {"school_id": "s2", "membership_id": "m9", "kind": "llm", "total_tokens": 999, "extra": {"calls": 9}},
+    ]
+    ledger = ur.ledger_month_by_member(rows, "s1")
+    page = {
+        "month": "2026-10",
+        "teachers": [
+            {"membership_id": "m1", "used_tokens": 100, "calls": 5},
+            {"membership_id": "m2", "used_tokens": 0, "calls": 1},
+        ],
+        "school_total": {"total_tokens": 100, "calls": 6},
+    }
+    assert ur.page_check(page, ledger, 0.01)["ok"] is True
+    page["teachers"][0]["used_tokens"] = 0  # the old page: tokens always 0
+    got = ur.page_check(page, ledger, 0.01)
+    assert got["ok"] is False and got["teachers_off"][0]["membership_id"] == "m1"
+    assert ur.beijing_month_bounds("2026-12")[1].isoformat() == "2026-12-31T16:00:00+00:00"
