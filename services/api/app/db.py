@@ -332,6 +332,7 @@ class UserModelEndpointRow(Base):
 
 _engine = None
 _Session: async_sessionmaker[AsyncSession] | None = None
+_engine_url: str | None = None
 
 
 def _sqlite_base_dir() -> Path:
@@ -492,9 +493,13 @@ def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
 
 
 async def init_db() -> None:
-    global _engine, _Session
+    global _engine, _Session, _engine_url
     settings = get_settings()
     url = _normalize_url(settings.pico_database_url)
+    # 建表 / 迁移 / 清账本整表扫一个进程只跑一次。每次对话都重跑会抢 sqlite 写锁排队：
+    # 11-01 考试阅卷一次 DeepSeek 1–2 秒，经 Pico 要 30–100 秒（edu-core#4503）。
+    if _Session is not None and _engine_url == url:
+        return
     engine_kwargs: dict[str, Any] = {"echo": False}
     if "sqlite" in url:
         # aiosqlite + default QueuePool can surface "unable to open database file"
@@ -514,6 +519,7 @@ async def init_db() -> None:
         if "sqlite" in url:
             await conn.run_sync(_migrate_sqlite_sync)
             await conn.run_sync(_scrub_usage_events_sync)
+    _engine_url = url
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
