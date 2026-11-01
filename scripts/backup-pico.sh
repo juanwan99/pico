@@ -15,6 +15,7 @@
 #   librechat-files.tgz     LibreChat uploads + images
 #   meili.dump              Meilisearch dump with vectors (a rebuild would re-embed the whole KB)
 #   SHA256SUMS
+#   COMPLETE                written last, after the remote size check: the drill only picks these
 # Never restores onto live. Fails closed: status JSON + mail alert.
 set -euo pipefail
 
@@ -133,6 +134,8 @@ cmd_run() {
   flock -n 9 || fail "another run holds the lock"
   curl -sS -o /dev/null --max-time 8 -x "$PROXY" https://www.googleapis.com/ || fail "proxy ${PROXY} cannot reach googleapis"
   local stamp dir
+  # A run killed by the systemd timeout never reaches its EXIT trap: drop what it left (we hold the lock).
+  find "$WORK" -mindepth 1 -maxdepth 1 -type d -name '20*' -exec rm -rf {} +
   stamp="$(date +%Y%m%dT%H%M%S%z)"
   dir="$WORK/$stamp"
   mkdir -p "$dir"
@@ -179,6 +182,8 @@ raise SystemExit(0 if ok == "ok" else "quick_check: " + ok)
   rclone_cmd copy "$dir" "$REMOTE/$stamp" || fail "upload (see $WORK/rclone.err)"
   # Off-host means the remote has every file at the right size.
   rclone_cmd check "$dir" "$REMOTE/$stamp" --size-only --one-way || fail "remote size check"
+  printf '%s\n' "$stamp" >"$dir/COMPLETE"
+  rclone_cmd copyto "$dir/COMPLETE" "$REMOTE/$stamp/COMPLETE" || fail "upload COMPLETE"
   rclone_cmd delete "$REMOTE" --min-age "${KEEP_DAYS}d" --drive-use-trash=false || log "prune skipped"
   rclone_cmd rmdirs "$REMOTE" --leave-root || true
   write_status OK "$stamp $(du -sb "$dir" | cut -f1) bytes"
@@ -215,15 +220,19 @@ drill_fail() {
   exit 1
 }
 
+# Newest folder that got its COMPLETE marker; a folder still uploading (or cut off) has none.
+latest_complete() {
+  "$RCLONE_BIN" lsf "$REMOTE" --max-depth 2 --files-only --include '/*/COMPLETE' | sort | tail -1 | cut -d/ -f1
+}
+
 cmd_drill() {
   local corrupt="${1:-}" latest dir img_api img_meili out n f part base
   [[ "$corrupt" == --corrupt ]] && CORRUPT=armed
   export https_proxy="$PROXY" HTTPS_PROXY="$PROXY"
-  latest="$("$RCLONE_BIN" lsf "$REMOTE" --dirs-only 2>/dev/null | sort | tail -1)" || true
-  latest="${latest%/}"
-  [[ -n "$latest" ]] || drill_fail "no backup on $REMOTE"
+  latest="$(latest_complete 2>/dev/null)" || true
+  [[ -n "$latest" ]] || drill_fail "no complete backup on $REMOTE"
   dir="$WORK/drill-$latest"
-  rm -rf "$dir" && mkdir -p "$dir"
+  rm -rf "$WORK"/drill-* && mkdir -p "$dir"
   trap 'rm -rf "$dir"; docker rm -f pico-drill-mongo pico-drill-meili >/dev/null 2>&1 || true' EXIT
   rclone_cmd copy "$REMOTE/$latest" "$dir" || drill_fail "download $latest"
   for part in "$dir"/*.part-000; do
