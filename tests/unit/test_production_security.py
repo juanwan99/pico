@@ -358,3 +358,61 @@ async def test_ocr_lane_gets_its_own_wider_bucket(monkeypatch) -> None:
     rpm, person, _ = resolve_chat_caps("membership:school-a:m1:pico-ocr", settings)
     assert (rpm, person) == (300, 16)
     assert school_from_key("membership:school-a:m1:pico-ocr") == "school-a"
+
+
+@pytest.mark.asyncio
+async def test_exam_grading_scope_is_never_rate_limited(monkeypatch) -> None:
+    """Owner 11-01「阅卷不能限速」: a marking ticket (ai:exam-grading) goes straight
+    through even past the person / school caps; the same teacher's chat is still capped."""
+    import asyncio
+
+    import app.rate_limit as rl
+    from app.auth import EXAM_GRADING_SCOPE
+    from app.rate_limit import ChatRateLimitMiddleware
+
+    settings = Settings(_env_file=None, pico_chat_rpm=2, pico_chat_school_max_concurrent=3)
+    monkeypatch.setattr(rl, "get_settings", lambda: settings)
+    monkeypatch.setattr(rl, "get_chat_admission", lambda: ChatAdmission())
+    gate = asyncio.Event()
+
+    class _App:
+        async def __call__(self, scope, receive, send):
+            await gate.wait()
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok"})
+
+    middleware = ChatRateLimitMiddleware(_App())
+    grading = issue_test_token(
+        school_id="school-a",
+        membership_id="m1",
+        scopes=["ai:run", "ai:read", "ai:school-run", EXAM_GRADING_SCOPE],
+        settings=settings,
+    )
+    chat = issue_test_token(school_id="school-a", membership_id="m1", settings=settings)
+
+    async def call(token: str) -> int:
+        async def receive():
+            return {"type": "http.request", "body": b'{"model":"pico-fast"}', "more_body": False}
+
+        status: list[int] = []
+
+        async def send(message):
+            if message["type"] == "http.response.start":
+                status.append(message["status"])
+
+        scope = {
+            "type": "http",
+            "path": "/v1/chat/completions",
+            "method": "POST",
+            "client": ("203.0.113.10", 1),
+            "headers": [(b"authorization", f"Bearer {token}".encode())],
+        }
+        await middleware(scope, receive, send)
+        return status[0]
+
+    marking = [asyncio.create_task(call(grading)) for _ in range(40)]
+    chats = [asyncio.create_task(call(chat)) for _ in range(3)]
+    await asyncio.sleep(0.05)
+    gate.set()
+    assert await asyncio.gather(*marking) == [200] * 40
+    assert sorted(await asyncio.gather(*chats)) == [200, 200, 429]

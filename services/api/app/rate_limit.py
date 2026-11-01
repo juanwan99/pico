@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from app.auth import decode_token, scope_proxy_principal
+from app.auth import EXAM_GRADING_SCOPE, decode_token, scope_proxy_principal
 from app.settings import get_settings
 
 
@@ -173,7 +173,12 @@ class ChatRateLimitMiddleware:
             return
 
         settings = get_settings()
-        key = _rate_limit_key(scope, settings)
+        principal = _principal(scope, settings)
+        if principal is not None and EXAM_GRADING_SCOPE in principal.scopes:
+            # 阅卷独立通道：不排队、不拒，并发由 edu 每个阅卷任务自己管。
+            await self.app(scope, receive, send)
+            return
+        key = _key_for(scope, principal)
         if key.startswith("membership:"):
             body, receive = await _buffer_body(receive)
             if _request_model(body) == OCR_LANE:
@@ -259,8 +264,8 @@ def _request_model(body: bytes) -> str:
     return model.split("/")[-1] if "/" in model else model
 
 
-def _rate_limit_key(scope: dict, settings: Any) -> str:
-    """Prefer an authenticated tenant membership, falling back to client IP."""
+def _principal(scope: dict, settings: Any) -> Any:
+    """The bearer's principal, or None when there is no usable token."""
     headers = {key.lower(): value for key, value in scope.get("headers", [])}
     authorization = headers.get(b"authorization", b"").decode("latin-1")
     membership_header = headers.get(b"x-pico-membership-id", b"").decode("latin-1")
@@ -269,12 +274,22 @@ def _rate_limit_key(scope: dict, settings: Any) -> str:
         if token:
             try:
                 principal = decode_token(token, settings)
-                principal = scope_proxy_principal(principal, membership_header)
-                return f"membership:{principal.school_id}:{principal.membership_id}"
+                return scope_proxy_principal(principal, membership_header)
             except HTTPException:
                 # Authentication remains the endpoint's responsibility. An
                 # unparseable principal still receives the conservative IP cap.
                 pass
+    return None
+
+
+def _rate_limit_key(scope: dict, settings: Any) -> str:
+    """Prefer an authenticated tenant membership, falling back to client IP."""
+    return _key_for(scope, _principal(scope, settings))
+
+
+def _key_for(scope: dict, principal: Any) -> str:
+    if principal is not None:
+        return f"membership:{principal.school_id}:{principal.membership_id}"
 
     client = scope.get("client")
     client_ip = str(client[0]) if client else "unknown"

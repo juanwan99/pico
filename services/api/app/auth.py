@@ -29,9 +29,21 @@ SCHOOL_RUN_SCOPE = "ai:school-run"
 # which edu opens with the same ticket, not through Pico.
 STEWARD_PUBLIC_SCOPE = "ai:steward-public"
 STEWARD_PUBLIC_MEMBERSHIP_ID = "steward-public"
+# Edu exam marking (transcribe / score / rubric) on its own channel: the chat
+# rate limiter lets it straight through; edu caps its own concurrency per task.
+# Owner 11-01「阅卷不能限速」.
+EXAM_GRADING_SCOPE = "ai:exam-grading"
 # feat:* are teacher-chosen switches edu signs into the token (#1042).
 REGISTERED_SCOPES = frozenset(
-    {"ai:read", "ai:run", "ai:confirm", "ai:admin", SCHOOL_RUN_SCOPE, STEWARD_PUBLIC_SCOPE}
+    {
+        "ai:read",
+        "ai:run",
+        "ai:confirm",
+        "ai:admin",
+        SCHOOL_RUN_SCOPE,
+        STEWARD_PUBLIC_SCOPE,
+        EXAM_GRADING_SCOPE,
+    }
     | FEATURE_SCOPES
 )
 
