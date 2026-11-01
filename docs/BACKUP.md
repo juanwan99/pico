@@ -13,17 +13,19 @@
 | `librechat-files.tgz` | LibreChat 上传和图片 | tar |
 | `meili.dump` | Meilisearch 索引（含向量）。从账本重建要把全库重新打一遍嵌入，又慢又花钱、还冲上游，所以照备 | `POST /dumps` |
 | `SHA256SUMS` | 以上校验 | |
+| `COMPLETE` | 传完标记：远端逐个文件大小对上之后最后传，内容是时间戳 | |
 
 - 大于 128 MB 的文件切成 `名字.part-000…` 分段上传：代理会在单个上传约 10 分钟后断开，分段后断了只重传那一段。`SHA256SUMS` 记的是整文件，演练时先拼回再校验。
 - 三个 tar 打的都是在用的目录：tar 读到一半有文件变了会退出 1，这时包是完整的，记一行日志照常往下走；退出 2 及以上才算失败（pico#1313）。包好不好由 sha256 和每周演练把关。
-- 上传后用 `rclone check --size-only` 对一遍远端；本地临时目录随即删掉（不占盘）。
+- 上传后用 `rclone check --size-only` 对一遍远端，对上了再传 `COMPLETE`；本地临时目录随即删掉（不占盘）。
+- 超时 6 小时（`TimeoutStartSec=6h`）：11-01 那次 2.14 GB 和 edu-core 备份抢代理，用了 2 小时 50 分（pico#1376）。被 systemd 杀掉时 EXIT 里的清理跑不到，所以每次开跑先（持锁）删掉上次留下的时间戳目录。
 - 失败：写 `~/logs/pico-backup-status.json`（state=FAIL），并用 `~/scripts/edu-backup-alert.py` 发信。日志 `~/logs/pico-backup.log`。
 - 没跑起来（定时器停了、机器宕了）不会写 FAIL：`pico-backup-watch.timer` 每小时看一次，上次成功超过 26 小时就发信（12 小时内只发一封）。
 - 通道：ECS 直连 Google 不通，走本机 sing-box 代理 `127.0.0.1:7893`（和 edu-core 备份同一个 rclone `gdrive` 远端）。
 
 ## 恢复演练
 
-`bash scripts/backup-pico.sh drill`：拉最新一份，进临时容器恢复（`--network none`，不碰现网）。`pico-backup-drill.timer` 每周日 06:10 自动跑；任何一项不过就失败、写 `~/logs/pico-backup-drill-status.json` 并发信，只有全过才打 `DRILL_OK`。`drill --corrupt` 故意改坏一个字节，用来证明坏包会在 sha256 这一步被拦下。它只检验演练本身：坏包被拦下就打 `CORRUPT_CAUGHT` 并以 0 退出，不写正式的演练状态、不发信，免得巡检把这次故意的失败当成真失败报警。只有坏包一路过了所有检查（`CORRUPT_MISSED`），才写 FAIL 并发信。逐项检查：
+`bash scripts/backup-pico.sh drill`：拉带 `COMPLETE` 的最新一份（还在传、或传到一半被杀的目录没有标记，不挑；pico#1376），进临时容器恢复（`--network none`，不碰现网）。`pico-backup-drill.timer` 每周日 06:10 自动跑；任何一项不过就失败、写 `~/logs/pico-backup-drill-status.json` 并发信，只有全过才打 `DRILL_OK`。`drill --corrupt` 故意改坏一个字节，用来证明坏包会在 sha256 这一步被拦下。它只检验演练本身：坏包被拦下就打 `CORRUPT_CAUGHT` 并以 0 退出，不写正式的演练状态、不发信，免得巡检把这次故意的失败当成真失败报警。只有坏包一路过了所有检查（`CORRUPT_MISSED`），才写 FAIL 并发信。逐项检查：
 - sha256 全部对上；
 - mongo 各集合条数（conversations、messages 不能为 0）；
 - pico.db `quick_check` = ok，runs 条数 > 0；

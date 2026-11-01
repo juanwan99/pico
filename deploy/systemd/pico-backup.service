@@ -10,6 +10,7 @@ Environment=PICO_BACKUP_REMOTE=gdrive:pico-backup
 Environment=PICO_BACKUP_PROXY=http://127.0.0.1:7893
 Environment=PICO_BACKUP_KEEP_DAYS=15
 ExecStart=/bin/bash /opt/pico/scripts/backup-pico.sh run
-TimeoutStartSec=3h
+# 11-01: 2.14 GB took 2h50m while edu-core backups shared the proxy (pico#1376)
+TimeoutStartSec=6h
 Nice=10
 IOSchedulingClass=idle
