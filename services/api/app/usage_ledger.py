@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
+from pico_orchestrator.grading_models import LANE_TAG, current_grading_school
 from pico_orchestrator.usage_parse import (
     billed_model_id,
     is_ui_lane,
@@ -590,6 +591,9 @@ async def emit_llm_usage_after_run(
     extra = usage_extra_bits(usage_dict)
     if ui_model and is_ui_lane(ui_model):
         extra.setdefault("ui_model", ui_model)
+    if current_grading_school() is not None:
+        # Exam marking is its own line on the bill (pico#1379, edu-core#4576).
+        extra["lane"] = LANE_TAG
     try:
         from pico_orchestrator import upstream
 

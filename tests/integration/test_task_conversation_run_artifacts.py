@@ -1646,3 +1646,54 @@ async def test_non_stream_client_gone_aborts_pi_run(tmp_path, monkeypatch) -> No
         run = (await session.execute(select(RunRow))).scalar_one()
         assert run.status == "cancelled"
         assert "7000" in (run.token_usage_json or "")
+
+
+@pytest.mark.asyncio
+async def test_exam_grading_ticket_rides_its_own_lane_and_bill_line(tmp_path, monkeypatch) -> None:
+    """pico#1379: an ai:exam-grading ticket runs under the marking scope (own token,
+    own models) and its usage row says lane=grading; a chat ticket right after does not."""
+    from app.auth import EXAM_GRADING_SCOPE
+    from app.db import UsageEventRow
+    from pico_orchestrator.grading_models import current_grading_school
+    from sqlalchemy import select
+
+    settings = await _fresh_db(tmp_path, monkeypatch, "grading-lane.db")
+    seen: list[str | None] = []
+
+    async def capture_stream(*_args, usage_out=None, **_kwargs) -> AsyncIterator[str]:
+        seen.append(current_grading_school())
+        if usage_out is not None:
+            usage_out.update({"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12})
+        yield '{"score":1}'
+
+    monkeypatch.setattr("pico_orchestrator.provider.stream_chat", capture_stream)
+
+    async def call(scopes: list[str] | None, member: str) -> None:
+        token = issue_test_token(
+            school_id="school-a", membership_id=member, scopes=scopes, settings=settings
+        )
+        response = await chat_completions(
+            ChatCompletionRequest(
+                model="pico-fast",
+                stream=False,
+                messages=[ChatMessage(role="user", content=f"评分 {member}")],
+            ),
+            authorization=f"Bearer {token}",
+            x_conversation_id=None,
+            x_workspace_id=None,
+            x_pico_membership_id=None,
+            x_pico_output="json_only_no_files",
+            settings=settings,
+        )
+        assert response["choices"][0]["message"]["content"] == '{"score":1}'
+
+    await call(["ai:run", "ai:read", "ai:school-run", EXAM_GRADING_SCOPE], "member-grade")
+    await call(None, "member-chat")
+    assert seen == ["school-a", None]
+    async with session_factory()() as session:
+        rows = {
+            r.membership_id: json.loads(r.extra_json or "{}")
+            for r in (await session.execute(select(UsageEventRow))).scalars()
+        }
+    assert rows["member-grade"].get("lane") == "grading"
+    assert "lane" not in rows["member-chat"]

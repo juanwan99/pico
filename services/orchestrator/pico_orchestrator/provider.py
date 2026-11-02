@@ -14,6 +14,7 @@ from openai import APIConnectionError, AsyncOpenAI
 
 from pico_orchestrator import upstream
 from pico_orchestrator.brain_ha import is_model_dead
+from pico_orchestrator.grading_models import current_grading_school, grading_api_key, grading_model
 from pico_orchestrator.sse_keepalive import is_proxy_first_byte_timeout
 from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG
 
@@ -181,6 +182,12 @@ def product_backend_model(*, deep: bool) -> str:
         # One model, no fast/deep split: the teacher configured exactly what
         # they want to pay for (#1331).
         return cfg.model
+    school = current_grading_school()
+    if school is not None:
+        # Exam marking scores on its own switchable model (pico#1379); no fast/deep split.
+        scored = grading_model("score", school)
+        if scored:
+            return scored
     # DeepSeek behind New API names its own ids (deepseek-flash, edu-core#3522); the
     # legacy deepseek-v4-flash / deepseek-reasoner names map onto Gemini in channel 4.
     if cfg is not None and (
@@ -207,11 +214,19 @@ def ocr_backend_model() -> str:
     cfg = resolve_provider()
     if cfg is not None and cfg.name == PERSONAL_PROVIDER_NAME:
         return cfg.model
+    school = current_grading_school()
+    if school is not None:
+        read = grading_model("ocr", school)
+        if read:
+            return read
     return (os.environ.get("PICO_OCR_MODEL") or "").strip() or product_backend_model(deep=False)
 
 
 def _deepseek_config() -> ProviderConfig | None:
     ds_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    if current_grading_school() is not None:
+        # Marking rides its own New API token / group (pico#1379): own channels, own slots.
+        ds_key = grading_api_key() or ds_key
     if not ds_key:
         return None
     return ProviderConfig(
@@ -835,7 +850,8 @@ async def stream_chat(
         else bool(runtime_policy_for_model(model).get("thinking", False))
     )
 
-    ocr_lane = _bare_model(model).lower() == OCR_LANE
+    # Marking scores wait on the marking slots too: own token, never chat's 4 / 2 (pico#1379).
+    ocr_lane = _bare_model(model).lower() == OCR_LANE or current_grading_school() is not None
 
     async def _iter_provider(provider: ProviderConfig, mid: str) -> AsyncIterator[str]:
         think = thinking if mid == model_id else lane_thinking
@@ -982,7 +998,9 @@ async def stream_chat(
             # No channel / key suspended / model refused: this model cannot answer.
             if is_model_dead(text) or verdict == "switch":
                 dead.add(mid)
-                mark_down(mid)
+                # The marking token has its own channels: its gap says nothing about chat's.
+                if current_grading_school() is None:
+                    mark_down(mid)
                 switched.add(id(exc))
             elif str(exc).startswith("模型不可用"):
                 dead.add(mid)
