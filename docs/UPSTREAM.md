@@ -39,6 +39,13 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
     - 主脑档：deepseek-flash → gemini
     - 转写档：gemini → deepseek-flash
   - 换脑用 `brain-switch.py --ocr <model>`：先预检转写模型能不能读图，切完后检里多一项 pico-ocr 读图。pico-api 起不来也自动回滚。
+- **阅卷单列**（pico#1379，业主 11-02「阅卷需要单列，至于用哪个模型 我需要灵活可方便切换」）：带 `ai:exam-grading` 的票（edu AI 阅卷的转写和评分）整次请求都在阅卷范围里（`grading_models.enter_grading`）。
+  - 上游 key 换成 `PICO_GRADING_API_KEY`（New API 令牌 `pico-grading`，分组 `grading`）。哪些渠道接阅卷、谁主谁备，在 New API 这个分组里配（UU 优先级高、米醋备）。没设就用正式 key，和以前一样。
+  - 模型看 `data/grading-models.json`（容器 `/app/data`），按学校覆盖：`pico-ocr` 用 `ocr`，其他档（评分）用 `score`。顺序是学校、`default`、环境变量（`PICO_OCR_MODEL` / 主脑）。文件改了下一次调用就生效，不重启；文件写坏了，接着用上一份读通的。
+  - 切换：宿主上 `python3 scripts/grading-model.py show`，`set [--school <id>] --ocr <m> --score <m> --card … --why …`（可加 `--dry-run`），`clear --school <id>`。先用阅卷令牌直打中转预检：转写模型要读图，评分模型要文字加读图。不过就不写。写完在 `~/pico-env-changes.log` 记一行旧 → 新。
+  - 阅卷分组缺某个模型的渠道时，只在这一次调用里跳过它，不把聊天用的这个模型标坏（`mark_down`）。
+  - 阅卷评分和转写一样，用阅卷那组名额（每把 key、每人各 16 个），不占聊天的 4 / 2。
+  - 记账：用量行 `extra.lane = "grading"`，模型记实际发出的那个。edu 钱包据此单列「阅卷」。
 - **按 key 限并发**：同一把 key 同时最多 4 个请求（`PICO_UPSTREAM_KEY_MAX`），同一个老师同时最多 2 个（`PICO_UPSTREAM_MEMBER_MAX`），超了排队，最多等 120 s；先排老师自己的，排着的不占 key 的名额（pico#1344：现网 14 天同时运行最多 5 次、每人基本 1 次）。阅卷识别（`pico-ocr`，一问一答、单次 1–2 s）另有一组名额：同一把 key、同一个老师各 16 个（`PICO_UPSTREAM_OCR_KEY_MAX` / `PICO_UPSTREAM_OCR_MEMBER_MAX`），和聊天 / Pi 的 4 / 2 互不占用（edu-core#3927：共用每人 2 个时一科 400 份要 573 s）；读试卷（`exam-answer-extract`，用途 `exam`）同一把 key 另有 6 个（`PICO_UPSTREAM_EXAM_KEY_MAX`，一份卷 4 页 + 2 个卡住页的副本正好一波），也不占聊天的 4 个（edu-core#4095：后台补题干占满 4 个，老师在同一张卡上问侧栏排了 186 s）；识别只走 `PICO_OCR_MODEL` 和不走 AIProxy 的备用模型，测试 `test_handwriting_reads_never_reach_aiproxy` 守着。尺子栈只给 1 个，`pico-ruler.py` 在宿主上一次只跑一遍（锁 `/tmp/pico-ruler.lock`，后来的等着）。
 - **一个对话一个会话**（pico#1344）：AIProxy 10-18 封了 key，说每次请求都新开对话、并发高。New API 自带「codex cli trace」规则，把客户端的 `session_id` 等头原样转给上游；原先代理只转四个头，会话头被丢了。现在 Pi 的请求带 `session_id` = Pi 自己的 `prompt_cache_key`（会话文件按对话钉死，同一对话不变）；直连路在 `upstream.caller_scope` 里带 `pcs-<对话哈希>`，同时当 `prompt_cache_key`。对账见下一条。
 - **AIProxy 只给多轮长会话**（pico#1344，业主 10-18 07:3x PDT「根本不是速率问题 是使用方式问题」）：AIProxy 是编程订阅，一个会话多轮用。四条：① 只有 Pi 的多轮会话能用；② 一问一答的调用（直连路、阅卷、探针）一律不去；③ 测试、尺子、探针不打现网 key 上的 AIProxy；④ 并发上限只是兜底。实现：`PICO_LONG_SESSION_MODELS`（默认 `gpt-5.6-sol`）里的模型只出现在 `brain_candidates(..., long_session=True)`（Pi 运行时），直连路的候选里没有；直连路只剩它一个时直接报错，不发请求。别的一问调用同样不用：联网搜索、知识库检索词扩写走 `one_shot_model()`（主模型是它就换第一个备用，没有就不调），换脑预检 `brain-switch.py` 不探它、也不许它当主模型，`kb-eval.py` 点名它就退出。尺子栈起栈时 `scripts/pico-ruler-env-guard.py` 把它们从备用里摘掉，主模型或别的覆盖还点名它们就不起栈。对账：`python3 scripts/pico-upstream-pressure-report.py --days 1`（宿主上只读 New API 库：一问请求（`pcs-` / `pico-` / 无会话键）= 0、同一对话第 2 步起命中缓存 ≥ 90%、同时请求峰值 ≤ 4，不过退出 1；只发一次的 Pi 会话另列不判；只判令牌 `pico-gateway`，冒烟、探针等其他令牌另列次数，#1346）。
@@ -47,11 +54,12 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
   - brain 换模型时看的是这条记录（`should_failover(..., relay=...)`）。所以上游回一个光秃秃的 403 也会换模型；本机 proxy 自己回的 403（`proxy.no_run` / `auth.denied`）不会。
 - **在途去重**（复审 #1259）：管家用同一个 json_only 信封重发时，如果第一次还在算，就等那一次的结果（响应头 `X-Pico-Replay: inflight`），不再起第二次模型调用。
 
-## 三把 token（New API）
+## 四把 token（New API）
 
 | token | 环境变量 | 谁用 |
 |---|---|---|
-| 正式 | `DEEPSEEK_API_KEY` | 对话、阅卷、Pi、托管循环 |
+| 正式 | `DEEPSEEK_API_KEY` | 对话、Pi、托管循环（阅卷令牌没设时也走它） |
+| 阅卷 pico-grading | `PICO_GRADING_API_KEY`（分组 `grading`） | edu AI 阅卷的转写、评分；`grading-model.py` 预检 |
 | 知识库 pico-kb | `PICO_KB_API_KEY`（没设就用正式的） | Meili 嵌入、rerank |
 | 探针 pico-probe | `PICO_PROBE_API_KEY` | `brain-switch.py` 预检、`model_hello.py`、`kb-eval.py`、`true-pi-live-smoke.py` |
 

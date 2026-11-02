@@ -24,6 +24,7 @@ from pico_orchestrator.edu_sidebar import (
     shape_web_hits,
 )
 from pico_orchestrator.gateway import ToolError as ChannelToolError
+from pico_orchestrator.grading_models import enter_grading
 from pico_orchestrator.provider import personal_provider_scope
 from pico_orchestrator.sse_keepalive import (
     SSE_COMMENT_KEEPALIVE,
@@ -36,6 +37,7 @@ from pydantic import BaseModel
 
 from app import json_only_replay
 from app.auth import (
+    EXAM_GRADING_SCOPE,
     LEGACY_PROXY_MEMBERSHIP_ID,
     Principal,
     decode_token,
@@ -1653,6 +1655,8 @@ async def chat_completions(
     principal = scope_proxy_principal(principal, x_pico_membership_id)
     enforce_scope(principal, "ai:run")
     require_billed_identity(principal, settings)
+    # Exam marking: own token, own switchable models, own ledger tag (pico#1379).
+    enter_grading(principal.school_id if EXAM_GRADING_SCOPE in principal.scopes else None)
     try:
         require_rate(kind="llm", model=(body.model or "").strip() or "gpt-5.6-sol")
     except ChannelToolError as exc:
