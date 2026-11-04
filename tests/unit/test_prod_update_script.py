@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "prod-update.sh"
 IMPL = ROOT / "scripts" / "prod-update.impl.sh"
 SMOKE = ROOT / "scripts" / "e2e-smoke.sh"
+EDU_LOCK = ROOT / "scripts" / "edu-accept-lock.sh"
 
 
 # Windows: the `bash` on PATH is usually the WSL launcher, which cannot see C:/.
@@ -47,6 +48,7 @@ def _production_checkout(tmp_path: Path) -> tuple[Path, str]:
     shutil.copy2(SCRIPT, source / "scripts" / "prod-update.sh")
     shutil.copy2(IMPL, source / "scripts" / "prod-update.impl.sh")
     shutil.copy2(SMOKE, source / "scripts" / "e2e-smoke.sh")
+    shutil.copy2(EDU_LOCK, source / "scripts" / "edu-accept-lock.sh")
     (source / "docker-compose.host.yml").write_text("services: {}\n")
     _run("git", "add", ".", cwd=source)
     _run("git", "commit", "-m", "fixture", cwd=source)
@@ -272,6 +274,8 @@ def _run_prod_update(
             "PICO_DEPLOY_SHA": sha,
             # Never share the host lock with a real deploy on this machine.
             "PICO_DEPLOY_LOCK": _bash_path(production.parent / "deploy.lock"),
+            # Nor the edu-core acceptance lock (edu-core#4735): a fixture dir, absent → skip.
+            "PICO_EDU_ACCEPT_LOCK": _bash_path(production.parent / "no-edu-core" / "acceptance.lock"),
             # E2E smoke gate: the host reads PICO_OPENAI_PROXY_KEY from /opt/pico/.env.
             "PICO_SMOKE_KEY": "smoke-fixture-key",
             **(extra_env or {}),

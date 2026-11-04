@@ -246,6 +246,10 @@ if [ -z "${PICO_DEPLOY_DRAIN_WAIT_S:-}" ] && [ -f .env ]; then
   PICO_DEPLOY_DRAIN_WAIT_S="$(grep -E '^PICO_DEPLOY_DRAIN_WAIT_S=[0-9]+$' .env | tail -1 | cut -d= -f2 || true)"
 fi
 DRAIN_WAIT_S="${PICO_DEPLOY_DRAIN_WAIT_S:-900}"
+# edu-core acceptance on this host talks to Pico: queue for its lock first,
+# then drain (its runs are done by then) and recreate (edu-core#4735).
+. "$ROOT/scripts/edu-accept-lock.sh"
+edu_accept_lock_take || exit $?
 DRAIN_POLL_S=5
 inflight="$(inflight_runs_now)"
 if [ "$inflight" -gt 0 ]; then
@@ -390,7 +394,8 @@ if [ "${PICO_KB_REINDEX_FORCE:-0}" = "1" ]; then
   # the incremental pass below still runs and gates the deploy (only new artifacts).
   REINDEX_LOG="${HOME}/logs/pico-kb-reindex-force.log"
   mkdir -p "$(dirname "$REINDEX_LOG")"
-  nohup curl -sS --max-time 0 -X POST "${REINDEX_URL}?force=1" >"$REINDEX_LOG" 2>&1 &
+  # 7>&-: the ~2 h job must not keep holding the edu-core acceptance lock (#4735).
+  nohup curl -sS --max-time 0 -X POST "${REINDEX_URL}?force=1" >"$REINDEX_LOG" 2>&1 7>&- &
   echo "[pico] kb reindex: force (full re-chunk) running in background → $REINDEX_LOG"
 fi
 REINDEX_FILE="$(mktemp)"
