@@ -930,11 +930,12 @@ def _caps_with_request_thinking(caps: Any, override: bool | None) -> Any:
 
 
 def _direct_thinking(*, json_only: bool, override: bool | None) -> bool | None:
-    """Direct (toolless) path: json_only and `reasoning_effort: none` are off;
-    a named level is on; otherwise the lane policy decides."""
-    if json_only or override is False:
-        return False
-    return True if override else None
+    """Direct (toolless) path: `reasoning_effort: none` is off and a named level
+    is on, json_only too (edu 细则生成 asks medium; dropping it left Gemini at low,
+    edu-core#4576). No field: json_only is off, else the lane policy decides."""
+    if override is not None:
+        return override
+    return False if json_only else None
 
 
 def _caps_with_sidebar_thinking(caps: Any, *, edu_sidebar: bool) -> Any:
