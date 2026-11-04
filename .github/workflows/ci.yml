@@ -86,6 +86,7 @@ jobs:
       - name: Require LibreChat shell; forbid web/workbench
         run: |
           bash scripts/assert-product-identity.sh
+          bash scripts/edu-accept-lock.test.sh
           test -f apps/librechat/package.json
           test -f apps/README.md
           grep -q 'librechat' apps/README.md
