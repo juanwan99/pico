@@ -39,9 +39,10 @@ def test_thinking_override_values() -> None:
 
 
 def test_direct_path_thinking_choice() -> None:
-    # json_only propose stays off whatever the request says.
+    # json_only without the field stays off; a named level is honored (edu-core#4576).
     assert _direct_thinking(json_only=True, override=None) is False
-    assert _direct_thinking(json_only=True, override=True) is False
+    assert _direct_thinking(json_only=True, override=False) is False
+    assert _direct_thinking(json_only=True, override=True) is True
     # Old callers (no field) keep the lane default.
     assert _direct_thinking(json_only=False, override=None) is None
     assert _direct_thinking(json_only=False, override=False) is False
