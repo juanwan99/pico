@@ -14,11 +14,15 @@ ENV = {"PICO_OCR_MODEL": "gemini-3.8-flash", "DEEPSEEK_MODEL": "deepseek-flash"}
 
 
 def test_effective_layers_school_over_default_over_env() -> None:
-    assert gm.effective({}, "g26", ENV) == {"ocr": "gemini-3.8-flash", "score": "deepseek-flash"}
+    assert gm.effective({}, "g26", ENV) == {"ocr": "gemini-3.8-flash", "score": "deepseek-flash", "score2": "deepseek-flash"}
     data = {"default": {"score": "grok-x"}, "schools": {"g26": {"score": "gemini-3.8-flash"}}}
     assert gm.effective(data, "g26", ENV)["score"] == "gemini-3.8-flash"
     assert gm.effective(data, "fengxi", ENV)["score"] == "grok-x"
     assert gm.effective(data, None, ENV)["ocr"] == "gemini-3.8-flash"
+    # edu-core#4576 ⑨c: score2 unset follows the effective scorer; set at default it applies to every school.
+    assert gm.effective(data, "g26", ENV)["score2"] == "gemini-3.8-flash"
+    data["default"]["score2"] = "deepseek-flash"
+    assert gm.effective(data, "g26", ENV)["score2"] == "deepseek-flash"
 
 
 def _fake(results: dict[tuple[str, str], bool]):
