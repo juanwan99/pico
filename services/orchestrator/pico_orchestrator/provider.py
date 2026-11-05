@@ -222,6 +222,23 @@ def ocr_backend_model() -> str:
     return (os.environ.get("PICO_OCR_MODEL") or "").strip() or product_backend_model(deep=False)
 
 
+SCORE2_LANE = "pico-score2"
+
+
+def score2_backend_model() -> str:
+    """Exam marking's second scorer (edu-core#4576 ⑨c): the ``score2`` model, else the scorer.
+
+    Edu averages two scorers on the kinds where that tested closer to teachers;
+    no ``score2`` set = the same model as ``pico-fast`` (nothing changes).
+    """
+    school = current_grading_school()
+    if school is not None:
+        second = grading_model("score2", school)
+        if second:
+            return second
+    return product_backend_model(deep=False)
+
+
 def _deepseek_config() -> ProviderConfig | None:
     ds_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
     if current_grading_school() is not None:
@@ -335,6 +352,8 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
             return product_backend_model(deep=True)
         if low == OCR_LANE:
             return ocr_backend_model()
+        if low == SCORE2_LANE:
+            return score2_backend_model()
         return cfg.model
 
     bare = _bare_model(requested)
@@ -350,6 +369,8 @@ def resolve_model_id(requested: str | None, cfg: ProviderConfig) -> str:
             return product_backend_model(deep=True)
         if bare == OCR_LANE:
             return ocr_backend_model()
+        if bare == SCORE2_LANE:
+            return score2_backend_model()
         # Kimi / other labels remounted onto DeepSeek → use product default
         return cfg.model
 
@@ -378,6 +399,8 @@ def runtime_policy_for_model(model: str | None) -> dict[str, object]:
     thinking = bool(deep)
     if low == OCR_LANE:
         backend = fallback = ocr_backend_model()
+    elif low == SCORE2_LANE:
+        backend = fallback = score2_backend_model()
     else:
         backend = product_backend_model(deep=deep)
         fallback = product_backend_model(deep=bool(gpt_brain or deep))

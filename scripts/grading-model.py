@@ -3,7 +3,9 @@
 
 Owner 11-02「阅卷需要单列，至于用哪个模型 我需要灵活可方便切换」. Marking tickets
 (``ai:exam-grading``) read ``data/grading-models.json`` inside pico-api on each call:
-``ocr`` = handwriting transcription (lane ``pico-ocr``), ``score`` = scoring.
+``ocr`` = handwriting transcription (lane ``pico-ocr``), ``score`` = scoring,
+``score2`` = the second scorer edu averages in on some kinds (lane ``pico-score2``,
+edu-core#4576; unset = ``score``).
 
 1. Preflight the new model straight at the relay on the marking token
    (``PICO_GRADING_API_KEY``, New API group ``grading``) — that group is exactly
@@ -36,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[1]
 API = "pico-pico-api-1"
 CONFIG = "/app/data/grading-models.json"
 TRAIL = Path.home() / "pico-env-changes.log"
-ROLES = ("ocr", "score")
+ROLES = ("ocr", "score", "score2")
 
 
 def _brain_switch():
@@ -73,7 +75,7 @@ def write_config(data: dict) -> None:
 
 def env_defaults(env: dict[str, str]) -> dict[str, str]:
     """What marking uses with no file entry (Pico's own fallback, same order)."""
-    return {"ocr": env.get("PICO_OCR_MODEL", ""), "score": env.get("DEEPSEEK_MODEL", "")}
+    return {"ocr": env.get("PICO_OCR_MODEL", ""), "score": env.get("DEEPSEEK_MODEL", ""), "score2": ""}
 
 
 def effective(data: dict, school: str | None, env: dict[str, str]) -> dict[str, str]:
@@ -85,6 +87,7 @@ def effective(data: dict, school: str | None, env: dict[str, str]) -> dict[str, 
         for role in ROLES:
             if str(layer.get(role) or "").strip():
                 base[role] = str(layer[role]).strip()
+    base["score2"] = base["score2"] or base["score"]  # Pico's own fallback (score2_backend_model)
     return base
 
 
@@ -96,7 +99,7 @@ def preflight(base: str, key: str, changes: dict[str, str], long_only: frozenset
             ok = False
             continue
         row = {"image": bs.relay_probe(base, key, model, bs.image_content(bs.IMAGE_ASK), bs.IMAGE_WANT)}
-        if role == "score":
+        if role in ("score", "score2"):
             row["text"] = bs.relay_probe(base, key, model, bs.TEXT_ASK, bs.TEXT_WANT)
         print(json.dumps({"preflight": role, "model": model, **row}, ensure_ascii=False), flush=True)
         if not all(r["ok"] for r in row.values()):
@@ -121,6 +124,7 @@ def main() -> int:
         if name == "set":
             p.add_argument("--ocr", default="", help="handwriting transcription model")
             p.add_argument("--score", default="", help="scoring model")
+            p.add_argument("--score2", default="", help="second scoring model (edu averages it in on some kinds)")
             p.add_argument("--dry-run", action="store_true", help="preflight only, write nothing")
         p.add_argument("--card", required=True)
         p.add_argument("--why", required=True)
@@ -143,7 +147,7 @@ def main() -> int:
     else:
         changes = {r: getattr(args, r).strip() for r in ROLES if getattr(args, r).strip()}
         if not changes:
-            print("set 要 --ocr 或 --score")
+            print("set 要 --ocr / --score / --score2")
             return 2
         base, key = env.get("DEEPSEEK_BASE_URL", ""), env.get("PICO_GRADING_API_KEY", "")
         if not base or not key:

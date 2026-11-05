@@ -120,3 +120,30 @@ def test_marking_channel_gap_does_not_mark_chat_model_down(relay: Path) -> None:
     finally:
         provider._llm_client = orig
     assert not any(brain_ha.is_down(m) for m in ("deepseek-flash", "gemini-3.8-flash"))
+
+
+def test_second_scorer_lane_reads_score2_and_falls_back_to_score(relay: Path) -> None:
+    """edu-core#4576 ⑨c: edu averages a second scorer in on some kinds via lane pico-score2."""
+    from pico_orchestrator.provider import SCORE2_LANE
+
+    def second() -> str:
+        cfg = resolve_provider_for_model(SCORE2_LANE)
+        assert cfg is not None
+        return resolve_model_id(SCORE2_LANE, cfg)
+
+    _write(relay, {"default": {"score": "gemini-3.8-flash"}})
+    with grading_scope("g26"):
+        # no score2 = the scorer itself: nothing changes for edu
+        assert second() == "gemini-3.8-flash"
+    _write(relay, {"default": {"score": "gemini-3.8-flash", "score2": "deepseek-flash"}, "schools": {"g26": {"score": "gemini-3.8-flash"}}})
+    with grading_scope("g26"):
+        assert second() == "deepseek-flash"
+        assert _lanes() == ("gemini-3.8-flash", "gemini-3.8-flash")
+        policy = runtime_policy_for_model(SCORE2_LANE)
+        assert policy["backend_model"] == policy["fallback"] == "deepseek-flash"
+        assert policy["thinking"] is False
+        # DeepSeek on the wire: thinking object off, not Gemini's reasoning_effort
+        assert thinking_extra_body(SCORE2_LANE, thinking=False) == {"thinking": {"type": "disabled"}}
+        assert resolve_provider_for_model(SCORE2_LANE).api_key == "sk-grading"
+    # chat asking for the lane never reads the marking file
+    assert second() == "deepseek-flash"  # product brain (DEEPSEEK_MODEL), not score2
