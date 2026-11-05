@@ -6,8 +6,9 @@ Owner 11-02「阅卷需要单列，至于用哪个模型 我需要灵活可方�
 - the relay key is ``PICO_GRADING_API_KEY`` (New API token ``pico-grading``,
   group ``grading``: which channels answer marking is set there, not here);
   unset = the chat key, as before;
-- ``pico-ocr`` (handwriting transcription) → the ``ocr`` model, every other
-  lane (scoring) → the ``score`` model, from ``data/grading-models.json``::
+- ``pico-ocr`` (handwriting transcription) → the ``ocr`` model, ``pico-score2``
+  (edu's second scorer, edu-core#4576 ⑨c) → the ``score2`` model (unset = ``score``),
+  every other lane (scoring) → the ``score`` model, from ``data/grading-models.json``::
 
       {"default": {"ocr": "gemini-3.8-flash", "score": "deepseek-flash"},
        "schools": {"<school_id>": {"score": "gemini-3.8-flash"}}}
@@ -103,7 +104,7 @@ def _pick(data: dict, school_id: str | None, role: str) -> str:
 
 
 def grading_model(role: str, school_id: str | None = None) -> str:
-    """``role`` = ``ocr`` | ``score``; "" = no override (today's model)."""
+    """``role`` = ``ocr`` | ``score`` | ``score2``; "" = no override (today's model)."""
     return _pick(load_config(), school_id, role)
 
 

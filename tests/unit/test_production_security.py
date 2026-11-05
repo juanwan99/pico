@@ -84,6 +84,7 @@ def test_production_allows_deepseek_flash_brain_and_ocr_lane() -> None:
     settings = _valid_production(deepseek_model="deepseek-flash")
     settings.validate_production()
     _assert_model_allowed("pico-ocr", settings)
+    _assert_model_allowed("pico-score2", settings)
     with pytest.raises(HTTPException):
         _assert_model_allowed("gemini-3.8-flash", settings)
 

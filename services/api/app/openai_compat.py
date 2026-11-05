@@ -362,8 +362,9 @@ def _assert_model_allowed(model: str, settings: Settings) -> None:
         return
     if product_surface.intersection(allowed) and normalized in deepseek_aliases:
         return
-    # pico-ocr: handwriting transcription lane, edu exam marking only (edu-core#3522).
-    if normalized in {"pico-fast", "pico-deep", "pico-ocr"} and {
+    # pico-ocr: handwriting transcription lane, edu exam marking only (edu-core#3522);
+    # pico-score2: marking's second scorer (edu-core#4576).
+    if normalized in {"pico-fast", "pico-deep", "pico-ocr", "pico-score2"} and {
         "pico-fast",
         "pico-deep",
     }.intersection(allowed):

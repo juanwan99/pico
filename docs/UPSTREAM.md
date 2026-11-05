@@ -41,8 +41,8 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
   - 换脑用 `brain-switch.py --ocr <model>`：先预检转写模型能不能读图，切完后检里多一项 pico-ocr 读图。pico-api 起不来也自动回滚。
 - **阅卷单列**（pico#1379，业主 11-02「阅卷需要单列，至于用哪个模型 我需要灵活可方便切换」）：带 `ai:exam-grading` 的票（edu AI 阅卷的转写和评分）整次请求都在阅卷范围里（`grading_models.enter_grading`）。
   - 上游 key 换成 `PICO_GRADING_API_KEY`（New API 令牌 `pico-grading`，分组 `grading`）。哪些渠道接阅卷、谁主谁备，在 New API 这个分组里配（UU 优先级高、米醋备）。没设就用正式 key，和以前一样。
-  - 模型看 `data/grading-models.json`（容器 `/app/data`），按学校覆盖：`pico-ocr` 用 `ocr`，其他档（评分）用 `score`。顺序是学校、`default`、环境变量（`PICO_OCR_MODEL` / 主脑）。文件改了下一次调用就生效，不重启；文件写坏了，接着用上一份读通的。
-  - 切换：宿主上 `python3 scripts/grading-model.py show`，`set [--school <id>] --ocr <m> --score <m> --card … --why …`（可加 `--dry-run`），`clear --school <id>`。先用阅卷令牌直打中转预检：转写模型要读图，评分模型要文字加读图。不过就不写。写完在 `~/pico-env-changes.log` 记一行旧 → 新。
+  - 模型看 `data/grading-models.json`（容器 `/app/data`），按学校覆盖：`pico-ocr` 用 `ocr`，`pico-score2` 用 `score2`（edu 第二评分模型，某些题型两种模型各评两次取平均，edu-core#4576 ⑨c；没设就同 `score`），其他档（评分）用 `score`。顺序是学校、`default`、环境变量（`PICO_OCR_MODEL` / 主脑）。文件改了下一次调用就生效，不重启；文件写坏了，接着用上一份读通的。
+  - 切换：宿主上 `python3 scripts/grading-model.py show`，`set [--school <id>] --ocr <m> --score <m> --score2 <m> --card … --why …`（可加 `--dry-run`），`clear --school <id>`。先用阅卷令牌直打中转预检：转写模型要读图，评分模型要文字加读图。不过就不写。写完在 `~/pico-env-changes.log` 记一行旧 → 新。
   - 阅卷分组缺某个模型的渠道时，只在这一次调用里跳过它，不把聊天用的这个模型标坏（`mark_down`）。
   - 阅卷评分和转写一样，用阅卷那组名额（每把 key、每人各 16 个），不占聊天的 4 / 2。
   - 记账：用量行 `extra.lane = "grading"`，模型记实际发出的那个。edu 钱包据此单列「阅卷」。
