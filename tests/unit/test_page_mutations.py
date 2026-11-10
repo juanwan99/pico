@@ -105,6 +105,26 @@ def test_book_stages_only_known_writable_ids() -> None:
         book.propose({"affordance_id": "cell:c1:mon:3", "params": "not-an-object"})
 
 
+def test_direct_hand_says_no_confirm() -> None:
+    from pico_orchestrator.workbench_progress import sidebar_progress_delta
+
+    hands = normalize_affordances(
+        [{"id": "nav:go", "label": "去某页", "writable": True, "direct": True, "command": "shell.nav"}, *AFFORDANCES]
+    )
+    book = PageMutationBook(affordances=hands)
+    out = book.propose({"affordance_id": "nav:go", "params": {"tab": "school-affairs"}, "label": "打开组织架构"})
+    assert out["direct"] is True and "确认条" in out["note"] and "等老师在左边确认" not in out["note"]
+    plain = book.propose({"affordance_id": "cell:c1:mon:3", "params": {"subject": "英语"}})
+    assert "direct" not in plain and "等老师在左边确认" in plain["note"]
+    line = lambda result: sidebar_progress_delta(
+        "tool.result", {"tool": "propose_page_mutation", "ok": True, "result": result}
+    )
+    assert line(json.dumps(out, ensure_ascii=False)) == "已交给左边这页"
+    assert line(out) == "已交给左边这页"
+    assert line(json.dumps(plain, ensure_ascii=False)) == "已拟一条改动，等你确认"
+    assert line("not json") == "已拟一条改动，等你确认"
+
+
 def test_change_proposal_shape_matches_handoff_contract() -> None:
     book = PageMutationBook(affordances=normalize_affordances(AFFORDANCES), page_title="排课工作台")
     assert book.change_proposal() is None

@@ -54,6 +54,7 @@ field, present even when empty:
 
 - Streaming: the same field rides the final `finish_reason:"stop"` chunk (next to `usage`).
 - `affordanceId` is always one of the request's ids; anything else (including catalog command ids like `home.draft.grey`) is rejected with `page.affordance_unknown`. `params` is opaque to Pico. `tier` is copied from the affordance (`work` default, `final` for 回写/进绿/授权 — edu keeps them in separate confirm packs, edu-core#604 §5.3).
+- Affordance `direct: true` = edu runs it on arrival, no confirm card (跳页 `shell.nav`, 制卡调版面). Pico's note / progress for it never ask the teacher to confirm (edu-core#5138).
 - The human `content` stays human: no JSON blob for the shell to parse.
 - Pico also writes one ChangeProposal ledger row (`status=proposed`) per turn with mutations — the audit trail (contracts/change-handoff.md). Confirm/execute is the school's; Pico writes nothing to the school.
 

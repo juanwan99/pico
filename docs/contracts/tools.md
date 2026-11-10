@@ -100,7 +100,7 @@ Pico half of edu-core#604 (壳级拟议层). Visible **only** on a sidebar Pi tu
 
 **Arguments:** `{ "affordance_id": string, "params"?: object, "label"?: string }`  
 **Validation (Pico):** `affordance_id` must be one of this request's affordance ids; `writable: false` → `page.affordance_readonly`; unknown → `page.affordance_unknown`; no page → `page.no_affordances`. Pico does not interpret `params`.  
-**Result:** `{ "staged": true, "affordanceId", "label", "count", "note" }`  
+**Result:** `{ "staged": true, "affordanceId", "label", "count", "note" }`; affordance marked `direct: true` (edu runs it on arrival, no confirm card — 跳页 / 制卡调版面) adds `"direct": true`, its `note` and the sidebar progress line say 「已交给左边这页」 instead of 等老师确认 (edu-core#5138).  
 **Side effects:** one row in the Pico ChangeProposal ledger (`status=proposed`, payload `{domain:"page", action:"mutations", mutations[]}`) and the turn's `pico_mutations` envelope. **Nothing is written to the school.** edu shows the confirm card and runs its own command after the teacher confirms.
 
 ### 4.4 `web_search`  ★ #507 · DeepSeek official
