@@ -40,6 +40,7 @@ SIDEBAR_NO_HANDS_HINT = (
 SIDEBAR_PAGE_HANDS_HINT = (
     "左边这一页报了能力表（affordances）：人能填、能勾、能点的都在里面，带 id 和当前值。"
     "要改左页，用 propose_page_mutation 按 id 一条条提案；人确认后由学校执行，你不要当成已改。"
+    "标了 direct 的手（如跳页）网页拿到就做，不出确认条，回话不要叫人点确认。"
     "改左页不要用 workspace_write_file / 生成文件冒充。批量就多提几条，部分做不了逐条说原因。"
     "能力表里没有的东西，如实说这页今天没有这只手，缺的是什么。"
 )
@@ -164,13 +165,18 @@ class PageMutationBook:
             "status": "staged",
         }
         self.mutations.append(mutation)
-        return {
+        out = {
             "staged": True,
             "affordanceId": aid,
             "label": label,
             "count": len(self.mutations),
             "note": "已记入提案，等老师在左边确认；未确认前学校什么都没改。",
         }
+        # edu 标了 direct 的手（跳页、制卡调版面）网页拿到就做、不出确认条（edu-core#5138）
+        if row.get("direct") is True:
+            out["direct"] = True
+            out["note"] = "已交给左边这页，网页拿到就做，不出确认条；回话写做了什么，不要叫老师点确认。"
+        return out
 
     def change_proposal(self) -> dict[str, Any] | None:
         """Pico ledger row (contracts/change-handoff.md). None when nothing staged."""

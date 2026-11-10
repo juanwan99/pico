@@ -9,6 +9,7 @@ ledger events still render; they are not live teacher tools.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -242,10 +243,25 @@ def sidebar_progress_delta(event_type: str, payload: dict[str, Any] | None) -> s
         result = row.get("result")
         ok = not tool_result_failed(result) if isinstance(result, dict) else True
     line = workbench_tool_result_line(name, ok=bool(ok))
+    if ok and name == "propose_page_mutation" and _result_dict(row.get("result")).get("direct") is True:
+        line = "已交给左边这页"
     extra = str(row.get("user_message") or "").strip()
     if extra and not ok:
         return f"{line}：{extra}"
     return line
+
+
+def _result_dict(result: Any) -> dict[str, Any]:
+    """tool.result carries the tool's return as a dict or its JSON text."""
+    if isinstance(result, dict):
+        return result
+    if isinstance(result, str) and result.lstrip().startswith("{"):
+        try:
+            parsed = json.loads(result)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
 def workbench_tool_result_line(tool: str, *, ok: bool) -> str:
