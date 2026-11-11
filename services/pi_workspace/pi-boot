@@ -1,0 +1,12 @@
+#!/bin/sh
+# Box entrypoint (edu-core#5227): seed Pi's warm boot caches into the box's
+# fresh tmpfs /tmp, then run the given command. Every turn is a new read-only
+# box, so without this Pi re-transpiles the .ts extensions (jiti) and
+# recompiles its JS on each start (~0.45 s of the ~1.0 s boot).
+# A failed seed only means a cold start; the command still runs.
+if cp -a /opt/pico/boot-cache/jiti /opt/pico/boot-cache/node-cc /tmp/ 2>/dev/null; then
+  export NODE_COMPILE_CACHE=/tmp/node-cc
+else
+  echo "pi-boot: boot cache seed failed, cold start" >&2
+fi
+exec "$@"
