@@ -36,6 +36,7 @@ def test_rounds_take_first_model_output_only() -> None:
     t.see("agent_start", {}, 10.5)
     t.see("turn_start", {}, 10.6)
     t.see("message_start", {"message": {"role": "user"}}, 10.7)
+    t.see("message_end", {"message": {"role": "user"}}, 10.71)
     t.see("text_delta", {}, 11.6)
     t.see("text_delta", {}, 11.9)
     t.see("turn_start", {}, 12.0)

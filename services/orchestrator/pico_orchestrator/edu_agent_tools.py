@@ -258,11 +258,13 @@ async def steward_public_corpus(principal: Principal, args: dict[str, Any]) -> d
 QUERY_LIST_DESCRIPTION = (
     "List the school's read-only data queries for this teacher: who am I / which week, "
     "timetable, school calendar, bell schedule, a student's roster card, name to id. "
-    "Call it when the teacher asks for school data. Returns id, summary, params. No args."
+    "Call it when the teacher asks for school data and the edu attachment has no queries list "
+    "(edu-core#5227: the sidebar sends the same list there). Returns id, summary, params. No args."
 )
 QUERY_RUN_DESCRIPTION = (
     "Run one read-only school query as the teacher; the result is what the teacher can see "
-    "on the school pages, nothing more. Args: id (from edu_query_list), params (object). "
+    "on the school pages, nothing more. Args: id (from the attachment's queries, else "
+    "edu_query_list), params (object). "
     "Turn class / teacher / student names into ids with id=lookup.name first. "
     "Answer from the result; a 403/404 means the teacher cannot see it, say so."
 )
