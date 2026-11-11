@@ -487,3 +487,16 @@ def test_one_shot_callers_stay_off_aiproxy(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(web_tools.httpx, "AsyncClient", None)  # any request would blow up
     out = asyncio.run(web_tools._deepseek_web_search("今天天气"))
     assert out["honest_miss"] and "多轮会话" in out["message"]
+
+
+def test_proxy_notes_each_answered_model_call_for_run_timing(proxy) -> None:
+    """edu-core#5227: (reached pico-api, relay's first chunk) per model call, for run.timing."""
+    client, _seen = proxy
+    auth = {**H, "authorization": "Bearer boxtok"}
+    before = len(upstream.llm_calls("run5"))
+    r = client.post("/internal/ws-proxy/l/run5/v1/chat/completions", headers=auth, json={"model": "gpt-5.6-sol"})
+    assert r.status_code == 200
+    calls = upstream.llm_calls("run5")
+    assert len(calls) == before + 1
+    arrived, first = calls[-1]
+    assert arrived <= first

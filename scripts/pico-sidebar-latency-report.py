@@ -10,6 +10,8 @@
 带 run.timing（#5227 起）的运行再按 Pico 当场打的时间点细拆：就绪（到容器起命令）/
 Pi 起（就绪 → Pi 第一个事件）/ 首字合计（每轮开始 → 模型第一个输出之和）/
 生成与工具（其余到 agent_end）/ 收尾（agent_end → 完）/ 其中等落盘。
+首字再拆（带 llm_ms 且一轮一次模型请求的句子）：Pi 发请求（每轮开始 → 请求到 pico-api，
+含盒子 → runner 一跳）/ 上游首包（到 pico-api → New API 回第一块）/ 首包到首字（→ Pi 报第一个输出）。
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 SEGMENTS = ("合计", "起步", "模型", "工具", "收尾")
-FINE = ("就绪", "Pi 起", "首字合计", "生成与工具", "收尾", "等落盘")
+FINE = ("就绪", "Pi 起", "首字合计", "其中Pi发请求", "其中上游首包", "其中首包到首字", "生成与工具", "收尾", "等落盘")
 
 
 def at(s: str) -> datetime:
@@ -42,7 +44,16 @@ def split_timing(p: dict) -> dict | None:
         "生成与工具": ms["agent_end"] - rounds[0][0] - ttfb,
         "收尾": ms["done"] - ms["agent_end"],
         "等落盘": ms["landed"] - ms["agent_end"] if ms.get("landed") is not None else None,
+        "其中Pi发请求": None,
+        "其中上游首包": None,
+        "其中首包到首字": None,
     }
+    calls = p.get("llm_ms") or []
+    if len(calls) == len(rounds) and all(b is not None for _a, b in rounds):
+        # One model call per round (no retry / resume): split each round's first token.
+        fine["其中Pi发请求"] = sum(c[0] - r[0] for c, r in zip(calls, rounds))
+        fine["其中上游首包"] = sum(c[1] - c[0] for c in calls)
+        fine["其中首包到首字"] = sum(r[1] - c[1] for c, r in zip(calls, rounds))
     return {k: (None if v is None else v / 1000) for k, v in fine.items()}
 
 
