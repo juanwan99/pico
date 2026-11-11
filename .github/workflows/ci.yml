@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # catch_guard 对 HEAD^1（目标分支）比新改的行
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -45,6 +47,9 @@ jobs:
 
       - name: Ruff
         run: ruff check services tests scripts
+
+      - name: Catch guard（新改的行不许吞错，edu-core#5197）
+        run: python scripts/catch_guard.py
 
       - name: Agent pin check
         run: python scripts/check_agent_pin.py
