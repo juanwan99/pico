@@ -147,6 +147,7 @@ function registerTool(
   name: ToolName,
   description: string,
   parameters: ReturnType<typeof Type.Object>,
+  ends?: (args: Record<string, unknown>) => boolean,
 ) {
   if (!visibleAllowlist().has(name)) {
     return;
@@ -166,7 +167,8 @@ function registerTool(
       if (!out.ok) {
         return textResult({ error: out.error, code: out.code, tool: name });
       }
-      return toolResult(out.result ?? {});
+      const result = toolResult(out.result ?? {});
+      return ends?.(args) ? { ...result, terminate: true } : result;
     },
   });
 }
@@ -222,8 +224,58 @@ function lazyPageHands(pi: ExtensionAPI) {
   });
 }
 
+// edu-core#5227: a sidebar turn that only goes to a page ends with the jump —
+// no second model call just to say 「已经跳过去了」 (~1 s). The model usually
+// sends the jump with no words, so the reply becomes 「好的，这就打开校历。」 from
+// its own label. A turn that read school data, or offers a page as a button
+// (jump=false), still gets the model's own answer.
+const JUMP_ONLY_TOOLS = new Set<string>([
+  "propose_page_mutation",
+  "edu_catalog_find",
+  "edu_catalog_describe",
+  "edu_catalog_command",
+  "edu_query_list",
+]);
+
+type Call = { type?: string; name?: string; arguments?: Record<string, unknown> };
+
+function isJump(args: Record<string, unknown> | undefined): boolean {
+  const params = (args?.params ?? {}) as Record<string, unknown>;
+  return args?.affordance_id === "nav:go" && params.jump !== false;
+}
+
+function jumpLine(label: unknown): string {
+  const go = String(label ?? "").trim();
+  if (!go) return "好的，这就带你过去。";
+  return `好的，这就${/^(打开|去|带你)/.test(go) ? go : `去${go}`}。`;
+}
+
+function jumpEndsTurn(pi: ExtensionAPI) {
+  let other = false;
+  pi.on("before_agent_start", async () => {
+    other = false;
+    return undefined;
+  });
+  pi.on("tool_execution_end", async (event) => {
+    if (!JUMP_ONLY_TOOLS.has(event.toolName)) other = true;
+    return undefined;
+  });
+  pi.on("message_end", async (event) => {
+    const msg = event.message as { role?: string; content?: unknown };
+    if (other || msg.role !== "assistant" || !Array.isArray(msg.content)) return undefined;
+    const parts = msg.content as Call[];
+    const calls = parts.filter((part) => part.type === "toolCall");
+    const jumps = calls.length > 0 && calls.every((c) => c.name === "propose_page_mutation" && isJump(c.arguments));
+    const said = parts.some((part) => part.type === "text" && String((part as { text?: unknown }).text ?? "").trim());
+    if (!jumps || said) return undefined;
+    return { message: { ...msg, content: [{ type: "text", text: jumpLine(calls[0].arguments?.label) }, ...parts] } as any };
+  });
+  return (args: Record<string, unknown>) => !other && isJump(args);
+}
+
 export default function (pi: ExtensionAPI) {
   lazyPageHands(pi);
+  const jumpEnds = jumpEndsTurn(pi);
   // Free-form object args — Pico gateway validates per tool.
   const AnyArgs = Type.Object({}, { additionalProperties: true });
 
@@ -660,6 +712,7 @@ export default function (pi: ExtensionAPI) {
       },
       { additionalProperties: true },
     ),
+    jumpEnds,
   );
   registerTool(
     pi,
