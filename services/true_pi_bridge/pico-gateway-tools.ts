@@ -748,13 +748,13 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "edu_query_list",
-    "List the school's read-only data queries for this teacher: who am I / which week, timetable, school calendar, bell schedule, a student's roster card, name to id. Call it when the teacher asks for school data. Returns id, summary, params. No args.",
+    "List the school's read-only data queries for this teacher: who am I / which week, timetable, school calendar, bell schedule, a student's roster card, name to id. Call it when the teacher asks for school data and the edu attachment has no queries list (edu-core#5227: the sidebar sends the same list there). Returns id, summary, params. No args.",
     Type.Object({}, { additionalProperties: true }),
   );
   registerTool(
     pi,
     "edu_query",
-    "Run one read-only school query as the teacher; the result is what the teacher can see on the school pages, nothing more. Args: id (from edu_query_list), params (object). Turn class / teacher / student names into ids with id=lookup.name first. Answer from the result; a 403/404 means the teacher cannot see it, say so.",
+    "Run one read-only school query as the teacher; the result is what the teacher can see on the school pages, nothing more. Args: id (from the attachment's queries list or edu_query_list), params (object). When the query has a name param (name / class / teacher), pass the name as said: the school resolves it, no lookup.name first; otherwise turn names into ids with id=lookup.name first. A candidates result means several match: ask which one. Answer from the result; a 403/404 means the teacher cannot see it, say so.",
     Type.Object(
       {
         id: Type.String(),
