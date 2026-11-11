@@ -55,6 +55,8 @@ const ALLOWED = [
   "edu_catalog_describe",
   "edu_catalog_command",
   "edu_run_pack",
+  "edu_query_list",
+  "edu_query",
 ] as const;
 
 type ToolName = (typeof ALLOWED)[number];
@@ -686,6 +688,24 @@ export default function (pi: ExtensionAPI) {
         grant_id: Type.Optional(Type.String()),
         steps: Type.Optional(Type.Array(Type.Object({}, { additionalProperties: true }))),
         run_id: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  );
+  registerTool(
+    pi,
+    "edu_query_list",
+    "List the school's read-only data queries for this teacher: who am I / which week, timetable, school calendar, bell schedule, a student's roster card, name to id. Call it when the teacher asks for school data. Returns id, summary, params. No args.",
+    Type.Object({}, { additionalProperties: true }),
+  );
+  registerTool(
+    pi,
+    "edu_query",
+    "Run one read-only school query as the teacher; the result is what the teacher can see on the school pages, nothing more. Args: id (from edu_query_list), params (object). Turn class / teacher / student names into ids with id=lookup.name first. Answer from the result; a 403/404 means the teacher cannot see it, say so.",
+    Type.Object(
+      {
+        id: Type.String(),
+        params: Type.Optional(Type.Object({}, { additionalProperties: true })),
       },
       { additionalProperties: true },
     ),

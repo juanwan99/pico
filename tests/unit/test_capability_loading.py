@@ -41,7 +41,7 @@ def test_core_and_extended_partition_gateway():
     assert "inspect_document" not in EXTENDED_TOOLS
     assert "verify_document" not in EXTENDED_TOOLS
     assert "read_office_skill" not in EXTENDED_TOOLS
-    assert len(EXTENDED_TOOLS) == 9  # +propose_page_mutation (#975) − screenshot to CORE (#1209) + edu catalog (#1342)
+    assert len(EXTENDED_TOOLS) == 11  # +propose_page_mutation (#975) − screenshot to CORE (#1209) + edu catalog (#1342) + edu query (edu-core#5147)
     assert "generate_diagram" in CORE_VISIBLE_TOOLS
     assert "generate_diagram" in ALLOWED_GATEWAY_TOOLS
     assert "sandbox_office_lib" in CORE_VISIBLE_TOOLS

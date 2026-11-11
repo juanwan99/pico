@@ -95,6 +95,8 @@ ALLOWED_GATEWAY_TOOLS: frozenset[str] = frozenset(
         "edu_catalog_describe",
         "edu_catalog_command",
         "edu_run_pack",
+        "edu_query_list",
+        "edu_query",
     }
 )
 
