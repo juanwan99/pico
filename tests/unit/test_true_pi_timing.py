@@ -110,5 +110,40 @@ def test_report_splits_run_timing() -> None:
         "生成与工具": 1.2,
         "收尾": 0.8,
         "等落盘": 0.7,
+        "其中Pi发请求": None,
+        "其中上游首包": None,
+        "其中首包到首字": None,
     }
     assert _report().split_timing({"ms": {"ready": 1}, "rounds_ms": []}) is None
+
+
+def test_report_splits_first_token_by_model_call() -> None:
+    """edu-core#5227: where a round's first token waits — Pi / box hop, relay, or after the first chunk."""
+    fine = _report().split_timing(
+        {
+            "ms": {"ready": 90, "pi_first": 900, "agent_end": 4000, "done": 4100},
+            "rounds_ms": [[950, 2300], [2600, 3100]],
+            "llm_ms": [[1000, 2100], [2700, 3000]],
+        }
+    )
+    assert fine["其中Pi发请求"] == 0.15
+    assert fine["其中上游首包"] == 1.4
+    assert fine["其中首包到首字"] == 0.3
+    # A retried call (3 calls for 2 rounds) cannot be matched to rounds: no split.
+    fine = _report().split_timing(
+        {
+            "ms": {"ready": 90, "pi_first": 900, "agent_end": 4000, "done": 4100},
+            "rounds_ms": [[950, 2300], [2600, 3100]],
+            "llm_ms": [[1000, 1500], [1600, 2100], [2700, 3000]],
+        }
+    )
+    assert fine["其中上游首包"] is None
+
+
+def test_payload_carries_this_runs_model_calls() -> None:
+    from pico_orchestrator.true_pi.timing import TurnTiming
+
+    t = TurnTiming(10.0)
+    out = t.payload(14.0, [(9.0, 9.5), (11.0, 12.25)])
+    assert out["llm_ms"] == [[1000, 2250]]
+    assert "llm_ms" not in TurnTiming(10.0).payload(11.0)

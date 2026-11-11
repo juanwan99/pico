@@ -1503,7 +1503,7 @@ async def _run_true_pi_once(
                 "page.mutations",
                 {"count": len(page_book.mutations), "page_title": page_book.page_title, **tag},
             )
-        await emit("run.timing", {**timing.payload(loop.time()), **tag})
+        await emit("run.timing", {**timing.payload(loop.time(), upstream.llm_calls(rid)), **tag})
         await emit("run.status", {"status": "succeeded", **tag})
         return RunResult(
             status="succeeded",

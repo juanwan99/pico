@@ -213,6 +213,8 @@ class RunState:
     sent: int = 0
     # Requests the relay answered 2xx: New API logs each as one call (edu-core#4350).
     answered: int = 0
+    # Pi model calls on the loop clock: (reached pico-api, relay's first body chunk) (edu-core#5227).
+    llm_calls: list[tuple[float, float]] = field(default_factory=list)
 
 
 _RUNS: OrderedDict[str, RunState] = OrderedDict()
@@ -244,6 +246,17 @@ def note_answered(run_id: str | None = None) -> None:
     st = run_state(run_id or CALLER.get().run_id)
     if st is not None:
         st.answered += 1
+
+
+def note_llm_call(run_id: str | None, arrived: float, first: float) -> None:
+    st = run_state(run_id)
+    if st is not None:
+        st.llm_calls.append((arrived, first))
+
+
+def llm_calls(run_id: str | None) -> list[tuple[float, float]]:
+    st = _RUNS.get(run_id or "")
+    return [] if st is None else list(st.llm_calls)
 
 
 def answered_calls(run_id: str | None) -> int | None:

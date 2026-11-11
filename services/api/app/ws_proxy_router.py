@@ -301,6 +301,7 @@ def _raw_path_ok(request: Request) -> bool:
 
 @router.api_route("/internal/ws-proxy/l/{run_id}/v1/{path:path}", methods=["GET", "POST"])
 async def ws_llm(run_id: str, path: str, request: Request) -> Response:
+    arrived = asyncio.get_running_loop().time()
     if not _runner_ok(request):
         return _deny("auth.denied", 401)
     if path not in MODEL_PATHS or not _raw_path_ok(request):
@@ -351,7 +352,7 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
         headers[DOOR_HEADER] = "raced"
     token = upstream.CALLER.set(upstream.Caller(session=session, member=entry.member))
     try:
-        return await _stream(
+        resp = await _stream(
             request.method,
             target,
             headers,
@@ -363,6 +364,10 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
             run_id=run_id,
             bill_run=run_id,
         )
+        if request.method == "POST" and resp.status_code < 400:
+            # _stream returns at the relay's first body chunk (run.timing, edu-core#5227).
+            upstream.note_llm_call(run_id, arrived, asyncio.get_running_loop().time())
+        return resp
     finally:
         upstream.CALLER.reset(token)
 

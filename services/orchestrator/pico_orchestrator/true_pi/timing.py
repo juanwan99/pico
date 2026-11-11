@@ -34,13 +34,19 @@ class TurnTiming:
         elif self.rounds and self.rounds[-1][1] is None and _is_output(kind, raw):
             self.rounds[-1][1] = now
 
-    def payload(self, now: float) -> dict[str, Any]:
+    def payload(self, now: float, llm: list[tuple[float, float]] | None = None) -> dict[str, Any]:
+        """``llm`` = this run's model calls as pico-api saw them: (reached us, relay's first chunk)."""
+
         def ms(t: float | None) -> int | None:
             return None if t is None else round((t - self.t0) * 1000)
 
         marks = {k: ms(v) for k, v in sorted(self.marks.items(), key=lambda kv: kv[1])}
         marks["done"] = ms(now)
-        return {"ms": marks, "rounds_ms": [[ms(a), ms(b)] for a, b in self.rounds]}
+        out: dict[str, Any] = {"ms": marks, "rounds_ms": [[ms(a), ms(b)] for a, b in self.rounds]}
+        calls = [[ms(a), ms(b)] for a, b in (llm or []) if a >= self.t0]
+        if calls:
+            out["llm_ms"] = calls
+        return out
 
 
 def _is_output(kind: str, raw: dict[str, Any]) -> bool:
