@@ -7,6 +7,9 @@
 起步（运行开始 → run.model，含起容器）、模型（每轮 model → turn_end 之和）、
 工具（tool.call → tool.result 之和）、收尾（agent.end → run.status）、合计。
 --max-median 给了就判：合计中位超线 ❌ 退出 1（#5224 a2 验收用 4）。
+带 run.timing（#5227 起）的运行再按 Pico 当场打的时间点细拆：就绪（到容器起命令）/
+Pi 起（就绪 → Pi 第一个事件）/ 首字合计（每轮开始 → 模型第一个输出之和）/
+生成与工具（其余到 agent_end）/ 收尾（agent_end → 完）/ 其中等落盘。
 """
 
 from __future__ import annotations
@@ -19,10 +22,28 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 SEGMENTS = ("合计", "起步", "模型", "工具", "收尾")
+FINE = ("就绪", "Pi 起", "首字合计", "生成与工具", "收尾", "等落盘")
 
 
 def at(s: str) -> datetime:
     return datetime.fromisoformat(s)
+
+
+def split_timing(p: dict) -> dict | None:
+    ms, rounds = p.get("ms") or {}, p.get("rounds_ms") or []
+    need = ("ready", "pi_first", "agent_end", "done")
+    if any(ms.get(k) is None for k in need) or not rounds:
+        return None
+    ttfb = sum((b - a) for a, b in rounds if b is not None)
+    fine = {
+        "就绪": ms["ready"],
+        "Pi 起": ms["pi_first"] - ms["ready"],
+        "首字合计": ttfb,
+        "生成与工具": ms["agent_end"] - rounds[0][0] - ttfb,
+        "收尾": ms["done"] - ms["agent_end"],
+        "等落盘": ms["landed"] - ms["agent_end"] if ms.get("landed") is not None else None,
+    }
+    return {k: (None if v is None else v / 1000) for k, v in fine.items()}
 
 
 def split_run(started: str, ended: str, events: list[tuple[str, str, str]]) -> dict | None:
@@ -33,6 +54,7 @@ def split_run(started: str, ended: str, events: list[tuple[str, str, str]]) -> d
     calls: dict[str, datetime] = {}
     end_at = None
     tools: list[str] = []
+    fine = None
     for kind, created, payload in events:
         p = json.loads(payload or "{}")
         now = at(created)
@@ -53,11 +75,13 @@ def split_run(started: str, ended: str, events: list[tuple[str, str, str]]) -> d
                 seg["工具"] += (now - calls.pop(key)).total_seconds()
         elif kind == "agent.end":
             end_at = now
+        elif kind == "run.timing":
+            fine = split_timing(p)
         elif kind == "run.status" and p.get("status") == "succeeded" and end_at is not None:
             seg["收尾"] = (now - end_at).total_seconds()
     if seg["起步"] is None:
         return None
-    return {"seg": seg, "rounds": rounds, "tools": tools}
+    return {"seg": seg, "rounds": rounds, "tools": tools, "fine": fine}
 
 
 def pct(xs: list[float], q: float) -> float:
@@ -100,6 +124,13 @@ def main() -> int:
     for name in SEGMENTS:
         xs = [r["seg"][name] for r in rows if r["seg"][name] is not None]
         print(f"  {name}  {pct(xs, .5):6.2f} {pct(xs, .9):6.2f} {sum(xs) / len(xs):6.2f}")
+    fine = [r["fine"] for r in rows if r["fine"]]
+    if fine:
+        print(f"  细拆（带 run.timing 的 {len(fine)} 句）")
+        for name in FINE:
+            xs = [f[name] for f in fine if f[name] is not None]
+            if xs:
+                print(f"  {name:<6}{pct(xs, .5):6.2f} {pct(xs, .9):6.2f} {sum(xs) / len(xs):6.2f}")
     rounds = Counter(r["rounds"] for r in rows)
     print("  模型轮数：" + "、".join(f"{k} 轮 {v} 句" for k, v in sorted(rounds.items())))
     tools = Counter(t for r in rows for t in r["tools"])

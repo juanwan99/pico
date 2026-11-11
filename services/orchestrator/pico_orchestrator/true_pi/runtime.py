@@ -45,6 +45,7 @@ from pico_orchestrator.true_pi.config import (
 )
 from pico_orchestrator.true_pi.events import EventMapState, _text_from_message, map_event
 from pico_orchestrator.true_pi.runner import LOOK_CAP_STEER
+from pico_orchestrator.true_pi.timing import TurnTiming
 from pico_orchestrator.true_pi.tool_server import ToolServer
 from pico_orchestrator.user_errors import enrich_fail_payload
 from pico_orchestrator.workbench_progress import failed_write_user_message
@@ -488,6 +489,7 @@ async def _run_true_pi_once(
     timed_out = asyncio.Event()
     loop = asyncio.get_running_loop()
     started = loop.time()
+    timing = TurnTiming(started)
     from pico_orchestrator.run_caps import wall_deadline, wall_expired
 
     deadline = wall_deadline(started, int(getattr(caps, "max_seconds", 0) or 0))
@@ -779,6 +781,7 @@ async def _run_true_pi_once(
             if not start_task.done():
                 start_task.cancel()
         start_task.result()
+        timing.mark("ready", loop.time())
         if not shadow:
             # pico#1318: the teacher's next message steers this turn instead of stopping it.
             live_key = teacher_steer.turn_key(
@@ -874,6 +877,7 @@ async def _run_true_pi_once(
             async def _consume() -> None:
                 nonlocal last_progress_wall, last_tool_ok_wall, fuse_from
                 async for event in client.events():
+                    timing.see(event.type, event.raw, loop.time())
                     # Responses are handled by wait_response on SubprocessTransport;
                     # ignore type=response in the event stream if any leak through.
                     if event.type == "response":
@@ -961,7 +965,9 @@ async def _run_true_pi_once(
                 # Live Pi can stream text_delta before the prompt response;
                 # starting after prompt() made TTFB == generation wall time.
                 prompt_at = loop.time()
+                timing.mark("prompt_sent", prompt_at)
                 await client.prompt(prompt_text, images=images)
+                timing.mark("prompt_ack", loop.time())
                 while not state.settled and not stop.is_set():
                     if _hitl_ask_timed_out(transport):
                         await client.abort()
@@ -1389,6 +1395,7 @@ async def _run_true_pi_once(
                 emit=emit,
                 tag=tag,
             )
+            timing.mark("landed", loop.time())
 
         write_basis = state.tool_results
         if ws_on and tool_server is not None:
@@ -1467,6 +1474,7 @@ async def _run_true_pi_once(
                 "page.mutations",
                 {"count": len(page_book.mutations), "page_title": page_book.page_title, **tag},
             )
+        await emit("run.timing", {**timing.payload(loop.time()), **tag})
         await emit("run.status", {"status": "succeeded", **tag})
         return RunResult(
             status="succeeded",
