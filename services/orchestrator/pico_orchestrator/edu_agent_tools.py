@@ -265,7 +265,10 @@ QUERY_RUN_DESCRIPTION = (
     "Run one read-only school query as the teacher; the result is what the teacher can see "
     "on the school pages, nothing more. Args: id (from the attachment's queries list "
     "or edu_query_list), params (object). "
-    "Turn class / teacher / student names into ids with id=lookup.name first. "
+    "When the query has a name param (name / class / teacher), pass the name as said: "
+    "the school resolves it, no lookup.name first (edu-core#5227); "
+    "otherwise turn names into ids with id=lookup.name first. "
+    "A candidates result means several match: ask which one. "
     "Answer from the result; a 403/404 means the teacher cannot see it, say so."
 )
 
