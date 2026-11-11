@@ -263,8 +263,8 @@ QUERY_LIST_DESCRIPTION = (
 )
 QUERY_RUN_DESCRIPTION = (
     "Run one read-only school query as the teacher; the result is what the teacher can see "
-    "on the school pages, nothing more. Args: id (from the attachment's queries, else "
-    "edu_query_list), params (object). "
+    "on the school pages, nothing more. Args: id (from the attachment's queries list "
+    "or edu_query_list), params (object). "
     "Turn class / teacher / student names into ids with id=lookup.name first. "
     "Answer from the result; a 403/404 means the teacher cannot see it, say so."
 )
