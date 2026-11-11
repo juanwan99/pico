@@ -1252,8 +1252,28 @@ async def _run_true_pi_once(
                 and not await is_cancelled()
             )
 
+        from pico_orchestrator.true_pi.self_check import answer_claims_files
+
+        def box_untouched() -> bool:
+            # Only Pico's own hands ran so far (they live in pico-api, not the box)
+            # and this is not a restart resume: outputs/ cannot have changed.
+            return (
+                ws_on
+                and not float(getattr(caps, "outputs_since", 0) or 0) > 0
+                and ran_tools <= set(allowed)
+            )
+
         check_facts: list[str] = []
-        if ws_on and not toolless and await _turn_healthy():
+        if (
+            ws_on
+            and not toolless
+            and not (
+                box_untouched()
+                and state.final_parts
+                and not answer_claims_files(state.final_parts[-1])
+            )
+            and await _turn_healthy()
+        ):
             check_facts = await _self_check_now(client, state, ws_before, rid, prompt)
             if check_facts:
                 state.event_kinds.append("run.resume")
@@ -1390,8 +1410,7 @@ async def _run_true_pi_once(
             state.final_parts.append(transport.assistant_text)
 
         ws_landed: list[tuple[str, dict[str, Any]]] = []
-        resumed = float(getattr(caps, "outputs_since", 0) or 0) > 0
-        if ws_on and not resumed and ran_tools <= set(allowed):
+        if box_untouched():
             # Nothing to land: the reply does not wait ~0.7 s for the box to stop.
             close_later = True
         elif ws_on:
