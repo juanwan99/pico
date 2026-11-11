@@ -507,6 +507,10 @@ async def _run_true_pi_once(
     hang_limit = tool_hang_seconds()
     open_tools: dict[str, tuple[str, float, float]] = {}
     same_step = SameStep()
+    # Tool names Pi ran this turn. Only Pico's own hands (``allowed``) never touch
+    # the box workspace, so a turn that ran nothing else has no files to land (#5227).
+    ran_tools: set[str] = set()
+    close_later = False
 
     async def _watcher() -> None:
         while not stop.is_set():
@@ -901,6 +905,8 @@ async def _run_true_pi_once(
                             if live.seen(said):
                                 state.event_kinds.append("run.steer")
                                 await emit("run.steer", {"text": said[:500], **tag})
+                    if event.type == "tool_execution_start":
+                        ran_tools.add(str(event.raw.get("toolName") or event.raw.get("tool") or ""))
                     # Leftovers of an aborted turn (dropped below until agent_start) open nothing.
                     if not state.awaiting_start or event.type == "agent_start":
                         track_open_tool(open_tools, event.type, event.raw, loop.time(), hang_limit)
@@ -1384,7 +1390,11 @@ async def _run_true_pi_once(
             state.final_parts.append(transport.assistant_text)
 
         ws_landed: list[tuple[str, dict[str, Any]]] = []
-        if ws_on:
+        resumed = float(getattr(caps, "outputs_since", 0) or 0) > 0
+        if ws_on and not resumed and ran_tools <= set(allowed):
+            # Nothing to land: the reply does not wait ~0.7 s for the box to stop.
+            close_later = True
+        elif ws_on:
             ws_landed = await _land_workspace_outputs(
                 transport=transport,
                 before=ws_before,
@@ -1512,13 +1522,30 @@ async def _run_true_pi_once(
         watcher.cancel()
         with suppress(asyncio.CancelledError):
             await watcher
-        if client is not None:
+        if client is not None and close_later:
+            _close_in_background(client)
+        elif client is not None:
             with suppress(Exception):
                 # Let Pi flush the session jsonl before SIGTERM (T-LONG-HOLD).
                 await client.close(kill=True)
         if tool_server is not None:
             with suppress(Exception):
                 await tool_server.stop()
+
+
+_CLOSING: set[asyncio.Task[None]] = set()
+
+
+def _close_in_background(client: TruePiRpcClient) -> None:
+    """Stop the box after the reply. The next turn's workspace listing waits for it."""
+
+    async def _close() -> None:
+        with suppress(Exception):
+            await client.close(kill=True)
+
+    task = asyncio.create_task(_close())
+    _CLOSING.add(task)
+    task.add_done_callback(_CLOSING.discard)
 
 
 def _box_attachments(

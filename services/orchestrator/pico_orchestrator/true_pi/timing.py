@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 # First sign of model output inside a round (Pi streams these as it reads tokens).
-_OUTPUT_KINDS = frozenset({"text_delta", "thinking_delta", "toolcall_progress", "message_end"})
+_OUTPUT_KINDS = frozenset({"text_delta", "thinking_delta", "toolcall_progress"})
 
 
 class TurnTiming:
@@ -46,7 +46,8 @@ class TurnTiming:
 def _is_output(kind: str, raw: dict[str, Any]) -> bool:
     if kind in _OUTPUT_KINDS:
         return True
-    if kind == "message_start":
+    if kind in {"message_start", "message_end"}:
+        # The teacher's own prompt also starts and ends a message: not model output.
         msg = raw.get("message")
         return isinstance(msg, dict) and msg.get("role") == "assistant"
     return False

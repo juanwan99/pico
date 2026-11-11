@@ -262,10 +262,17 @@ async def test_restart_resume_lands_files_the_killed_box_wrote(monkeypatch, outp
 
     monkeypatch.setattr(runner, "list_outputs", fake_list)
     monkeypatch.setattr(runner, "land_outputs", fake_land)
+    # Fresh run: a box builtin wrote, so it lands. Resumed run: lands with no tool at all.
+    wrote = [] if outputs_since else [
+        {"type": "tool_execution_start", "toolName": "write", "toolCallId": "w1", "args": {}},
+        {"type": "tool_execution_end", "toolName": "write", "toolCallId": "w1", "isError": False,
+         "result": {"content": [{"type": "text", "text": "ok"}]}},
+    ]
     transport = FakeTransport(
         scripted=[
             {"type": "agent_start"},
             {"type": "turn_start"},
+            *wrote,
             {"type": "message_end", "message": _answer_assistant("好了")},
             {"type": "turn_end", "message": _answer_assistant("好了")},
             {"type": "agent_end"},
@@ -353,3 +360,56 @@ async def test_error_still_failing_after_retry_fails_the_run() -> None:
     )
     assert result.status == "failed"
     assert "finish_reason" in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_only_pico_hands_ran_no_landing_and_box_stops_after_reply(monkeypatch) -> None:
+    """edu-core#5227: Pico's own tools never touch the workspace, so the reply does not wait for the box."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from pico_orchestrator.true_pi import runner
+
+    async def fake_list(_key: Any) -> dict[str, Any]:
+        return {}
+
+    landed_calls: list[Any] = []
+
+    async def fake_land(**kw: Any) -> list[tuple[str, dict[str, Any]]]:
+        landed_calls.append(kw)
+        return []
+
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(k: str, p: dict[str, Any]) -> None:
+        events.append((k, p))
+
+    monkeypatch.setattr(runner, "list_outputs", fake_list)
+    monkeypatch.setattr(runner, "land_outputs", fake_land)
+    transport = FakeTransport(
+        scripted=[
+            {"type": "agent_start"},
+            {"type": "turn_start"},
+            {"type": "tool_execution_start", "toolName": "web_search", "toolCallId": "q1", "args": {}},
+            {"type": "tool_execution_end", "toolName": "web_search", "toolCallId": "q1", "isError": False,
+             "result": {"content": [{"type": "text", "text": "ok"}]}},
+            {"type": "message_end", "message": _answer_assistant("高一共 12 个班")},
+            {"type": "turn_end", "message": _answer_assistant("高一共 12 个班")},
+            {"type": "agent_end"},
+        ],
+        assistant_text="高一共 12 个班",
+    )
+    transport.runner = SimpleNamespace(key="ws-key")
+    result = await run_true_pi_agent(
+        prompt="高一几个班",
+        principal=Principal(),
+        emit=emit,
+        is_cancelled=_not_cancelled,
+        caps=RunCaps(min_artifacts=0, max_seconds=8, allowed_tools=["web_search"]),
+        transport=transport,
+    )
+    assert result.status == "succeeded"
+    assert landed_calls == []
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert transport._closed
