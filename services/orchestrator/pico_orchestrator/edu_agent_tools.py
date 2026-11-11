@@ -1,4 +1,4 @@
-"""Thin HTTP adapter: edu catalog + run_pack as Pi tools.
+"""Thin HTTP adapter: edu catalog + run_pack + read-only queries as Pi tools.
 
 Membership JWT only (same person). No service account. Etag cache is per-run.
 500 catalog_budget_exceeded is passed through, never swallowed.
@@ -7,6 +7,7 @@ Membership JWT only (same person). No service account. Etag cache is per-run.
 from __future__ import annotations
 
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,14 +21,22 @@ CATALOG_DESCRIBE = "edu_catalog_describe"
 CATALOG_COMMAND = "edu_catalog_command"
 RUN_PACK = "edu_run_pack"
 STEWARD_CORPUS = "edu_steward_public_corpus"
+QUERY_LIST = "edu_query_list"
+QUERY_RUN = "edu_query"
 # School /agent/catalog/* is teacher-session only. Pico membership JWT
 # uses the existing /v1/pico/membership/catalog/* mouths (edu-core #1636).
 MEMBERSHIP_CATALOG = "/v1/pico/membership/catalog"
+# Read-only data as the teacher (edu-core #5140/#5147): the list is edu's
+# registry, fetched live, so a query edu registers shows up without a Pico change.
+MEMBERSHIP_QUERY = "/v1/pico/membership/query"
+_QUERY_ID = re.compile(r"^[a-z]+(\.[a-z_]+)+$")
 EDU_AGENT_TOOLS: tuple[str, ...] = (
     CATALOG_FIND,
     CATALOG_DESCRIBE,
     CATALOG_COMMAND,
     RUN_PACK,
+    QUERY_LIST,
+    QUERY_RUN,
 )
 
 _ETAG_CACHE: dict[tuple[str, str, str], tuple[str, dict[str, Any]]] = {}
@@ -176,6 +185,24 @@ async def catalog_command(principal: Principal, args: dict[str, Any]) -> dict[st
     )
 
 
+async def query_list(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+    del args
+    return await edu_request(principal, "GET", MEMBERSHIP_QUERY)
+
+
+async def query_run(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+    qid = str(args.get("id") or "").strip()
+    if not _QUERY_ID.match(qid):
+        raise ToolError("tool.invalid_arguments", "id 必填，取 edu_query_list 里的 id")
+    params = args.get("params")
+    if params is None:
+        # Models sometimes flatten params next to id; edu keeps only registered keys.
+        params = {k: v for k, v in args.items() if k not in ("id", "params")}
+    if not isinstance(params, dict):
+        raise ToolError("tool.invalid_arguments", "params 要是对象")
+    return await edu_request(principal, "POST", f"{MEMBERSHIP_QUERY}/{qid}", body=params)
+
+
 async def run_pack(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
     school = str(getattr(principal, "school_id", "") or "").strip()
     if not school:
@@ -228,6 +255,19 @@ async def steward_public_corpus(principal: Principal, args: dict[str, Any]) -> d
     return data
 
 
+QUERY_LIST_DESCRIPTION = (
+    "List the school's read-only data queries for this teacher: who am I / which week, "
+    "timetable, school calendar, bell schedule, a student's roster card, name to id. "
+    "Call it when the teacher asks for school data. Returns id, summary, params. No args."
+)
+QUERY_RUN_DESCRIPTION = (
+    "Run one read-only school query as the teacher; the result is what the teacher can see "
+    "on the school pages, nothing more. Args: id (from edu_query_list), params (object). "
+    "Turn class / teacher / student names into ids with id=lookup.name first. "
+    "Answer from the result; a 403/404 means the teacher cannot see it, say so."
+)
+
+
 def register_edu_agent_tools(gateway: Any) -> None:
     gateway.register(
         ToolSpec(
@@ -270,6 +310,22 @@ def register_edu_agent_tools(gateway: Any) -> None:
                 "Args: steps, grant_id?, run_id?"
             ),
             handler=run_pack,
+            school_scoped=True,
+        )
+    )
+    gateway.register(
+        ToolSpec(
+            name=QUERY_LIST,
+            description=QUERY_LIST_DESCRIPTION,
+            handler=query_list,
+            school_scoped=True,
+        )
+    )
+    gateway.register(
+        ToolSpec(
+            name=QUERY_RUN,
+            description=QUERY_RUN_DESCRIPTION,
+            handler=query_run,
             school_scoped=True,
         )
     )

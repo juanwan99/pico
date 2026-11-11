@@ -11,6 +11,9 @@ from pico_orchestrator.edu_agent_tools import (
     _ETAG_CACHE,
     CATALOG_DESCRIBE,
     MEMBERSHIP_CATALOG,
+    MEMBERSHIP_QUERY,
+    QUERY_LIST,
+    QUERY_RUN,
     RUN_PACK,
     STEWARD_CORPUS,
     _mint_steward,
@@ -18,6 +21,8 @@ from pico_orchestrator.edu_agent_tools import (
     catalog_command_id,
     catalog_describe,
     catalog_find,
+    query_list,
+    query_run,
     register_edu_agent_tools,
     run_pack,
     steward_public_corpus,
@@ -29,14 +34,69 @@ from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 
 
 def test_tools_on_gateway_and_the_sidebar_not_the_workbench():
-    for name in (CATALOG_DESCRIBE, RUN_PACK, "edu_catalog_find", "edu_catalog_command"):
+    for name in (CATALOG_DESCRIBE, RUN_PACK, "edu_catalog_find", "edu_catalog_command", QUERY_LIST, QUERY_RUN):
         assert name in ALLOWED_GATEWAY_TOOLS
         assert name not in CORE_VISIBLE_TOOLS  # beside a school page only (#1342)
         assert name in EDU_SIDEBAR_DEFAULT_TOOLS
     gw = AllowlistGateway()
     register_edu_agent_tools(gw)
     assert CATALOG_DESCRIBE in gw.tools
+    assert QUERY_LIST in gw.tools and QUERY_RUN in gw.tools
     assert STEWARD_CORPUS not in ALLOWED_GATEWAY_TOOLS
+
+
+@pytest.mark.asyncio
+async def test_query_list_and_run_hit_membership_mouth():
+    """edu-core #5147: list is edu's registry (live), run posts params as the teacher."""
+    principal = SimpleNamespace(school_id="s1", membership_id="m1")
+    with patch(
+        "pico_orchestrator.edu_agent_tools.edu_request",
+        new=AsyncMock(return_value={"queries": [{"id": "lookup.name"}]}),
+    ) as req:
+        await query_list(principal, {"anything": "ignored"})
+        await query_run(principal, {"id": "lookup.name", "params": {"kind": "class", "q": "七年级(1)班"}})
+        await query_run(principal, {"id": "timetable.week", "class_id": "c1"})
+        await query_run(principal, {"id": "me.whoami"})
+    calls = req.await_args_list
+    assert [(c.args[1], c.args[2]) for c in calls] == [
+        ("GET", MEMBERSHIP_QUERY),
+        ("POST", f"{MEMBERSHIP_QUERY}/lookup.name"),
+        ("POST", f"{MEMBERSHIP_QUERY}/timetable.week"),
+        ("POST", f"{MEMBERSHIP_QUERY}/me.whoami"),
+    ]
+    assert calls[1].kwargs["body"] == {"kind": "class", "q": "七年级(1)班"}
+    assert calls[2].kwargs["body"] == {"class_id": "c1"}  # flattened params still reach edu
+    assert calls[3].kwargs["body"] == {}
+    assert all("scopes" not in c.kwargs for c in calls)  # default ai:read only, never ai:delegate
+
+
+@pytest.mark.asyncio
+async def test_query_run_bad_id_never_calls_edu():
+    principal = SimpleNamespace(school_id="s1", membership_id="m1")
+    with patch("pico_orchestrator.edu_agent_tools.edu_request", new=AsyncMock()) as req:
+        for bad in ("", "scores", "../admin.x", "lookup.name/../x", "Lookup.Name"):
+            with pytest.raises(ToolError) as ei:
+                await query_run(principal, {"id": bad})
+            assert ei.value.code == "tool.invalid_arguments"
+        with pytest.raises(ToolError):
+            await query_run(principal, {"id": "me.whoami", "params": ["x"]})
+    assert req.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_query_errors_passed_through():
+    principal = SimpleNamespace(school_id="s1", membership_id="m1")
+    for code in ("not_found", "forbidden", "pico_query_missing", "edu.error"):
+
+        async def boom(*_a, _code=code, **_k):
+            raise ToolError(_code, "学校拒绝了这次调用")
+
+        with (
+            patch("pico_orchestrator.edu_agent_tools.edu_request", new=boom),
+            pytest.raises(ToolError) as ei,
+        ):
+            await query_run(principal, {"id": "student.card", "params": {"student_id": "x"}})
+        assert ei.value.code == code
 
 
 def test_catalog_command_id():
