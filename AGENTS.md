@@ -86,6 +86,7 @@ Helper（非真源）：`bash scripts/oneflow-status.sh`
 | 人 | 本窗合一：改、测、合、部同一窗 |
 | 隔离 | 一件事一分支一 PR。翻车回原 PR |
 | 绿档 | CI 绿即可合 |
+| 吞错 | PR 新改的 Python 行（只查 services/ packages/ scripts/ tests/）不许空 except、不许 except 里不记原因就 return 常量 / continue；CI `scripts/catch_guard.py` 挡，确有理由行尾写 `# swallow-ok: <原因>`（edu-core#5197） |
 | 黄/红 | 另一双眼睛、exact SHA；换核/密钥/租户业主抽检。CLAIM-WB 不代签 |
 | 工位 | 写码在本机线树 `~/wt/pico--<线>`；**发版目录只有 `/opt/pico`**，只 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`。ECS 的 `/home/ops/pico` 不是发版目录，禁止从它 compose/build（#1186） |
 | 过门 | 公网看得见结果句。CI/API 200 不算过门 |
