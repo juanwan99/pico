@@ -5,7 +5,7 @@ PR 新改的行里出现下面两种写法就报红，没改的旧行不查：
   - 空 except：`except ...: pass` / `...`
   - except 不记原因就走：分支里只有 return 常量（None / 0 / "" / [] / {} …）、continue、break、pass，
     没有 raise、没调任何函数（日志、打印、上报都算记了）
-只查 pico 自家的 Python；apps/（librechat）不查。
+只查 pico 自家的 Python（services/ packages/ scripts/ tests/）；apps/（librechat）、testdata/ 不查。
 确有理由不记：在 except 那行行尾写 `# swallow-ok: <原因>`。
 
   python scripts/catch_guard.py              # 本机：对 origin/main 的分叉点比（含没提交的改动）
@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SKIP_PREFIXES = ("apps/",)
+OWN_PREFIXES = ("services/", "packages/", "scripts/", "tests/")
 EXEMPT = "swallow-ok:"
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
@@ -42,7 +42,7 @@ def changed_lines(root: Path, base: str, head: str | None) -> dict[str, set[int]
         if line.startswith("+++ "):
             path = line[4:]
             cur = path[2:] if path.startswith("b/") else None
-            if cur and (cur.startswith(SKIP_PREFIXES) or "/node_modules/" in cur):
+            if cur and (not cur.startswith(OWN_PREFIXES) or "/node_modules/" in cur):
                 cur = None
             continue
         m = HUNK.match(line)
