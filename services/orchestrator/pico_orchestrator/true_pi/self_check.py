@@ -136,6 +136,22 @@ def _num(raw: str) -> int:
     return int(raw) if raw.isdigit() else _CN_NUM.get(raw, 0)
 
 
+def answer_claims_files(answer: str) -> bool:
+    """Whether the answer could draw a fact when outputs/ got nothing new this turn.
+
+    With no new or changed file, ``self_check_facts`` only speaks to a delivery
+    claim or a named file; an answer with neither needs no box check (edu-core#5227).
+    """
+    text = (answer or "").strip()
+    if not text or looks_like_clarification(text):
+        return False
+    return bool(
+        looks_like_delivery_claim(text)
+        or looks_like_redelivery_claim(text)
+        or _NAMED_FILE.search(text)
+    )
+
+
 def self_check_facts(
     answer: str, report: Mapping[str, Any], *, had_files_before: bool, asked: str = ""
 ) -> list[str]:

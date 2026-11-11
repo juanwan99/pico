@@ -20,6 +20,7 @@ from pico_orchestrator.true_pi.client import FakeTransport
 from pico_orchestrator.true_pi.runtime import run_true_pi_agent
 from pico_orchestrator.true_pi.self_check import (
     _BOX_SCRIPT,
+    answer_claims_files,
     box_check_command,
     parse_box_report,
     self_check_facts,
@@ -269,3 +270,41 @@ async def test_check_that_cannot_run_never_blocks(monkeypatch) -> None:
     assert result.status == "succeeded"
     assert not [k for k, _ in events if k == "run.resume"]
     assert sum(1 for c in transport.sent if c.get("type") == "prompt") == 1
+
+
+def test_answer_claims_files_only_on_a_claim_or_a_named_file() -> None:
+    """edu-core#5227: with nothing new in outputs/, only these two can draw a fact."""
+    assert not answer_claims_files("高一共 12 个班，其中 701 班 48 人。")
+    assert not answer_claims_files("")
+    assert answer_claims_files(_CLAIM)
+    assert answer_claims_files("见「成绩单.xlsx」")
+    for answer in ("高一共 12 个班。", _CLAIM, "见「成绩单.xlsx」"):
+        if not answer_claims_files(answer):
+            assert self_check_facts(answer, _report(), had_files_before=False) == []
+
+
+@pytest.mark.asyncio
+async def test_data_answer_with_only_pico_hands_skips_the_box_check(monkeypatch) -> None:
+    transport = FakeTransport(scripted=_turn("高一共 12 个班。"), bash_outputs=[_MISSING], assistant_text="")
+    result, _events = await _run(monkeypatch, transport)
+    assert result.status == "succeeded"
+    assert not [c for c in transport.sent if c.get("type") == "bash"]
+
+
+@pytest.mark.asyncio
+async def test_box_tool_ran_still_checks_a_data_answer(monkeypatch) -> None:
+    msg = {"role": "assistant", "content": [{"type": "text", "text": "高一共 12 个班。"}], "stopReason": "stop"}
+    wrote = [
+        {"type": "agent_start"},
+        {"type": "turn_start"},
+        {"type": "tool_execution_start", "toolName": "write", "toolCallId": "w1", "args": {}},
+        {"type": "tool_execution_end", "toolName": "write", "toolCallId": "w1", "isError": False,
+         "result": {"content": [{"type": "text", "text": "ok"}]}},
+        {"type": "message_end", "message": msg},
+        {"type": "turn_end", "toolResults": [], "message": msg},
+        {"type": "agent_end", "willRetry": False, "messages": []},
+    ]
+    transport = FakeTransport(scripted=wrote, bash_outputs=[json.dumps({"files": [], "names": []})], assistant_text="")
+    result, _events = await _run(monkeypatch, transport)
+    assert result.status == "succeeded"
+    assert len([c for c in transport.sent if c.get("type") == "bash"]) == 1
