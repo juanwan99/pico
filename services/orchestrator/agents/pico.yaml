@@ -4,7 +4,7 @@
 version: 1
 agent:
   name: pico
-  system_prompt_path: ./system.md
+  system_prompt_path: ../pico_orchestrator/agent_assets/system.md
   system_prompt_args:
     ROLE_ADDITIONAL: |
       You are Pico, an AI workspace agent for school educators.

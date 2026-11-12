@@ -222,12 +222,12 @@ if [ -f .env ] && grep -Eq '^PICO_RUNNER_TOKEN=.{24,}' .env; then
   docker compose -f "$COMPOSE_FILE" build pi-runner pi-workspace
 fi
 
-# Teacher runs live inside the pico-api process; recreating pico-api kills them.
-# Owner rule (2026-09-09): deploy may interrupt, but wait first. Poll the live
+# Teacher runs are owned by the pico-api process. Wait first: poll the live
 # /health inflight_runs (old image without the field, or API down, counts as 0).
-# Past the budget we warn and continue — no drain mode, no cross-process resume.
 # #1104 T4: long office tasks run 5–10 min (LT6 570s); the wait covers a whole
 # one so a deploy lands between tasks, not inside one. Tunable via .env.
+# Past the budget we warn and recreate: workspace runs carry on in the same Pi
+# session after restart (#1133 run_resume.py); the rest fail in teacher words.
 inflight_runs_now() {
   local body
   body="$(curl -sf --max-time 2 http://127.0.0.1:18765/health 2>/dev/null || true)"
@@ -269,8 +269,8 @@ fi
 
 # Recreate only when the image or compose config actually changed.
 # --force-recreate took the public site down 1–3 min on every SHA, including
-# no-op rebuilds. Teacher runs still die if pico-api itself recreates; the
-# inflight wait above stays. Do not invent a drain OS / second proxy.
+# no-op rebuilds. A pico-api recreate hands workspace runs to restart resume
+# (#1133); the inflight wait above stays. Do not invent a drain OS / second proxy.
 docker compose -f "$COMPOSE_FILE" up -d pico-api librechat pico-sandbox pico-office meilisearch pico-edu-gw-host edu-pico-gw
 if [ "$RUNNER_ON" = "1" ]; then
   # Recreates only when runner code/config changed; boxes of a restarted
@@ -549,5 +549,11 @@ if ! PICO_SMOKE_EXPECT_SHA="$CURRENT_SHA" bash "$SMOKE" --prod; then
   exit 16
 fi
 echo "[pico] e2e smoke ok"
+
+# Long-run continuity (edu-core#5337 · long-haul E1 resume / E3 stop): the last
+# 7 days of the ledger. Report only — never fails the deploy.
+echo "[pico] run continuity (7d):"
+docker compose -f "$COMPOSE_FILE" exec -T pico-api python - --days 7 <"$ROOT/scripts/run-continuity-report.py" \
+  || echo "[pico] WARN run continuity report did not run" >&2
 
 echo "[pico] done — open https://pico.aivia.asia/login"
