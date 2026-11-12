@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from pico_orchestrator.edu_agent_tools import EDU_AGENT_TOOLS
 from pico_orchestrator.edu_sidebar import (
     EDU_SIDEBAR_DEFAULT_TOOLS,
     HONEST_MISS_SUMMARY,
@@ -104,18 +105,23 @@ def test_sidebar_enters_pi_helpers() -> None:
     assert edu_sidebar_tool_ceiling(None) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
     assert edu_sidebar_tool_ceiling([]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
     assert edu_sidebar_tool_ceiling(["web_search", "web_fetch"]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
-    assert "generate_html_document" in EDU_SIDEBAR_DEFAULT_TOOLS
-    assert "generate_image" in EDU_SIDEBAR_DEFAULT_TOOLS
-    assert "sandbox_office_lib" in EDU_SIDEBAR_DEFAULT_TOOLS
-    assert "generate_pptx_document" not in EDU_SIDEBAR_DEFAULT_TOOLS
-    # edu-core#3728: the rail cannot show or answer a parked ask (180s hang).
-    assert "ask_user" not in EDU_SIDEBAR_DEFAULT_TOOLS
+    # edu-core#5324: school hands only; office / files out / browser / web stay
+    # on the workbench. edu-core#3728: no ask_user (the rail cannot answer it).
+    assert EDU_SIDEBAR_DEFAULT_TOOLS == (
+        *EDU_AGENT_TOOLS,
+        "kb_search",
+        "workspace_list_files",
+        "workspace_read_file",
+    )
     hinted = with_sidebar_workbench_hint("附属，不是用户要求")
     assert SIDEBAR_WORKBENCH_HINT in hinted
     assert "不得调用" not in hinted
-    assert "同一套手" in hinted
+    assert "同一套手" not in hinted
     assert "inspect_document" not in hinted
-    assert "sandbox_office_lib" in hinted
+    assert "sandbox_office_lib" not in hinted
+    # Files out / web fill: one line pointing at the rail's 工作台 link.
+    assert "右上角「工作台」" in hinted
+    assert "workspace_read_file" in hinted
     assert "工具结果回来后再决定下一手" in hinted
     assert "只认当前页名" in hinted
     assert "不要声称已读完全文" in hinted
@@ -124,7 +130,7 @@ def test_sidebar_enters_pi_helpers() -> None:
 
 def test_sidebar_hints_split_by_path() -> None:
     """Each path only hears about hands it can actually call."""
-    # Pi run: workbench CORE, no page affordances.
+    # Pi run: school hands, no page affordances.
     assert "fill_cells" not in SIDEBAR_WORKBENCH_HINT
     assert "insert_col" not in SIDEBAR_WORKBENCH_HINT
     # json_only propose: page affordances, no Pico tools.

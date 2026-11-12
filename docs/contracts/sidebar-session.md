@@ -10,8 +10,8 @@ UPSTREAM DESIGN: edu-core#604 (壳级 Pico 拟议层 · 2026-08-15 业主锁) ·
 
 ## 0. One sentence
 
-The sidebar is the same Pico as the workbench (same true Pi, same CORE hands,
-same ledger), embedded next to a school page. It sees only **this teacher,
+The sidebar is the same Pico as the workbench (same true Pi, same ledger) with
+school hands only (edu-core#5324), embedded next to a school page. It sees only **this teacher,
 this page, this conversation**, and can **propose** changes to the left page
 that the school executes after the teacher confirms.
 
@@ -22,8 +22,8 @@ that the school executes after the teacher confirms.
 | `Authorization` | edu-minted JWT; `school_id` / `membership_id` come from claims only | AI 权 = 人权 |
 | `messages[0].role=system` | contains the marker `附属，不是用户要求` and the page short profile as JSON (`{"page": {"title": …, "table"?: …, "affordances"?: […]}}`) | Pico recognises a sidebar turn by this marker, nothing else |
 | `X-Conversation-Id` | **required** and **stable**; its lifetime is edu's call (today: one per teacher per browser tab, kept in sessionStorage, renewed only on 新对话 / logout / 换校 — edu-core#833 「会话跟人走，手跟页走」). Pico never generates one. | Pi memory lives in a session file keyed by `school / membership / conversation`. Pico does **not** replay `messages[]` history on the Pi path. |
-| `model` | any allowed id; a sidebar turn that is not json_only always runs on Pi | same hands is not a side effect of the SKU string |
-| `allowed_tools` | ignored for sidebar turns (`[]`, web-only lists are not a castration) | #905 |
+| `model` | any allowed id; a sidebar turn that is not json_only always runs on Pi | the hands are not a side effect of the SKU string |
+| `allowed_tools` | ignored for sidebar turns: Pico always gives the school hands of §2.4 | edu-core#5324 |
 | `affordances[]` | optional; in `metadata.affordances`, or in the system JSON (`affordances` / `page.affordances`), or in the json_only user JSON | see §3 |
 | `"output":"json_only_no_files"` / `X-Pico-Output` | the one-shot propose contract (#577); unchanged by this document | |
 | `reasoning_effort` | OpenAI-standard, per request. `"none"` turns model thinking off on the wire (direct path **and** Pi); `low/medium/high` turns it on; absent = lane default (fast off / deep on). Sidebar turns stay off regardless. Exam transcription sends `"none"` (#1183) | #1183 |
@@ -33,7 +33,7 @@ that the school executes after the teacher confirms.
 1. **No cabinet.** SYSTEM never carries this teacher's workbench day-use block (recent ledger titles). #761.
 2. **No cross-teacher session.** Session dir is `school / membership / conversation`; two teachers on the same page-keyed conversation id never share a Pi session file.
 3. **History semantics.** Pi path ignores `messages[]` beyond the last user turn; continuity comes from the session file above. If edu omits `X-Conversation-Id`, every turn is a fresh session (allowed, but the rail is then stateless).
-4. **Same hands.** CORE (`generate_html_document`, `sandbox_office_lib`, `generate_image`, `workspace_*`, `web_*`, `kb_search`, sandbox doors) — **not** `ask_user`: the rail streams `content` only and has no way to show or answer a parked choice, so a question is the turn's reply and the teacher's next turn answers it (edu-core#3728). Thinking off; tool progress rides `content` so the rail can show it.
+4. **School hands only** (edu-core#5324, owner 11-11 via agent-policy#272「侧栏只挂 edu 发来的业务工具，浏览器沙箱 / 办公只留工作台」): `edu_catalog_*` / `edu_run_pack` / `edu_query_list` / `edu_query`, `kb_search`, `workspace_list_files` / `workspace_read_file`. No workspace box, so Pi's own bash / read / write / edit are off; no office, files out, browser sandbox or web — the model answers 「这件请点侧栏右上角「工作台」」. Attachments arrive as text in the turn (edu inlines them) plus `workspace_read_file` by Pico file id; images ride the turn as images. **Not** `ask_user`: the rail streams `content` only and has no way to show or answer a parked choice, so a question is the turn's reply and the teacher's next turn answers it (edu-core#3728). Thinking off; tool progress rides `content` so the rail can show it.
 5. **Left-page hand.** When `affordances[]` is present: one extra tool `propose_page_mutation` (contracts/tools.md §4.7). Otherwise the model has no way to touch the left page and must say so — Pico puts that sentence in SYSTEM (`SIDEBAR_NO_HANDS_HINT`): no JSON / `affordanceId` / 「请确认」 in prose pretending to be a proposal.
 
 ## 3. Mutations envelope (Pico → edu)

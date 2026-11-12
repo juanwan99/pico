@@ -362,6 +362,20 @@ class _FailoverGate:
             await self._emit(kind, payload)
 
 
+def box_mode_for(caps: Any, school_id: str, membership_id: str) -> bool:
+    """Run this turn in a workspace box (Pi builtins on)?
+
+    Tenant fail-closed: no box without both ids (legacy spawn keeps builtins
+    off). The edu sidebar never gets one: school hands only, no shell
+    (edu-core#5324).
+    """
+    from pico_orchestrator.true_pi.runner import runner_enabled
+
+    if not (school_id and membership_id) or getattr(caps, "edu_sidebar", False):
+        return False
+    return runner_enabled(membership_id)
+
+
 def pi_wire(
     backend_model: str, *, openai_brain: bool, openai_overlay: bool, thinking_on: bool
 ) -> tuple[str, str]:
@@ -452,14 +466,11 @@ async def _run_true_pi_once(
     allowed = resolve_visible_tools(caps.allowed_tools)
     if page_book is not None and PAGE_TOOL not in allowed:
         allowed = [*allowed, PAGE_TOOL]
-    from pico_orchestrator.true_pi.runner import BOX_HIDDEN_TOOLS, runner_enabled
+    from pico_orchestrator.true_pi.runner import BOX_HIDDEN_TOOLS
 
     school_key = str(getattr(principal, "school_id", "") or "")
     member_key = str(getattr(principal, "membership_id", "") or "")
-    # Tenant fail-closed: no box without both ids (legacy spawn keeps builtins off).
-    box_mode = (
-        transport is None and bool(school_key and member_key) and runner_enabled(member_key)
-    )
+    box_mode = transport is None and box_mode_for(caps, school_key, member_key)
     if box_mode:
         allowed = [name for name in allowed if name not in BOX_HIDDEN_TOOLS]
     gateway = gateway.restricted_to(allowed)

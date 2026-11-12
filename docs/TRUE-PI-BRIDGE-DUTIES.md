@@ -30,7 +30,7 @@ v9（观察回执）：写/改/打开工具回 `observation`（落地事实，�
 
 ## 允许的工具
 
-**不要手抄本表当 CORE。** Pi 默认可见 = `CORE_VISIBLE_TOOLS`（`capability_loading.py`）。执行天花板 = `ALLOWED_GATEWAY_TOOLS`（`true_pi/config.py`）+ 隔离工作区 Pi 内建工具（业主 2026-09-28 A，实现走第 1 张卡）。成熟文档 skill 可常驻。网页手（`PAGE_HAND_TOOLS`，`sandbox_browser_*` 除 open）随 CORE 注册，但桥扩展开工时把它们移出模型工具表，`sandbox_browser_open` 成功（或本会话之前开过网页）后 `setActiveTools` 加回（#1342），加回时一律按注册顺序排，这一轮和之后每轮的工具表一模一样（Pi 按表的顺序发工具、重建系统提示，顺序一变上游缓存整段丢，#1346）；edu_catalog / edu_run_pack / edu_query_list / edu_query 只在 edu 侧栏的 Pi 运行里给（`edu_sidebar_tool_ceiling`）；edu_query 系列按老师本人票调 edu 只读查询，清单是 edu 登记表现拉的，edu 加查询不用改 Pico（edu-core#5147）。
+**不要手抄本表当 CORE。** Pi 默认可见 = `CORE_VISIBLE_TOOLS`（`capability_loading.py`）。执行天花板 = `ALLOWED_GATEWAY_TOOLS`（`true_pi/config.py`）+ 隔离工作区 Pi 内建工具（业主 2026-09-28 A，实现走第 1 张卡）。成熟文档 skill 可常驻。网页手（`PAGE_HAND_TOOLS`，`sandbox_browser_*` 除 open）随 CORE 注册，但桥扩展开工时把它们移出模型工具表，`sandbox_browser_open` 成功（或本会话之前开过网页）后 `setActiveTools` 加回（#1342），加回时一律按注册顺序排，这一轮和之后每轮的工具表一模一样（Pi 按表的顺序发工具、重建系统提示，顺序一变上游缓存整段丢，#1346）；edu_catalog / edu_run_pack / edu_query_list / edu_query 只在 edu 侧栏的 Pi 运行里给，侧栏也只给这几只 + kb_search + workspace 读（`edu_sidebar_tool_ceiling`，侧栏不进盒子，edu-core#5324）；edu_query 系列按老师本人票调 edu 只读查询，清单是 edu 登记表现拉的，edu 加查询不用改 Pico（edu-core#5147）。
 
 ```text
 现行原则（2026-09-28 · #1090）：
@@ -47,7 +47,7 @@ v9（观察回执）：写/改/打开工具回 `observation`（落地事实，�
 v1 曾增加：skill_instruction 注入、近 N 条 user/assistant history 文本、skill_snapshot 工具交并集。  
 v2（#507）：DeepSeek 官方 `web_search` 转发 + 网关 `web_fetch`（SSRF 拒绝内网/metadata/管理域）。仍禁 bash / 任意 FS / 浏览器代登。  
 v3（#608）：改已有 `.docx`/`.pptx` 走 PyPI `python-docx` / `python-pptx` 薄适配（禁止 `generate_*` 另造冒充改原件）。出图曾接 SiliconFlow（**业主 2026-08-27 已否决 · 废路径**；现只待智谱 glm-image）。侧栏进 Pi。  
-v10（#857）：侧栏能读办公/PDF 正文；像素仍不进脑。旧 `.doc/.ppt/.xls` 人话另存。**其中「侧栏天花板固定读+网、禁 generate/出图」一句已被 #905（`af0c431b`）推翻：侧栏与工作台同一套 CORE 手，不裁割。** `inspect_document` 已随 #953 下架。侧栏 Pi 会话目录按 `school / membership / conversation` 分，SYSTEM 不带 day-use 柜（#975）。  
+v10（#857）：侧栏能读办公/PDF 正文；像素仍不进脑。旧 `.doc/.ppt/.xls` 人话另存。**其中「侧栏天花板固定读+网、禁 generate/出图」一句曾被 #905（`af0c431b`）推翻为「同一套 CORE 手」；11-11 起又按 edu-core#5324 收成只给学校业务手（不进盒子、无出文件 / 浏览器 / 网搜）。** `inspect_document` 已随 #953 下架。侧栏 Pi 会话目录按 `school / membership / conversation` 分，SYSTEM 不带 day-use 柜（#975）。  
 v4（#646 T-GROK-PATH）：禁止把 Skill / Landing / 历史焊进 `prompt()`。短纪律进 Pi `SYSTEM.md`（通用，无场景 if）。`prompt()` 只留老师原文。工具白名单仍挂载，模型决定调不调。跑后门只认「声称交件却没落盘」，不认正文词表。  
 v5（选型）：办公见 [`docs/ADR-OFFICE-DOC-PIPELINE.md`](./ADR-OFFICE-DOC-PIPELINE.md)。天花板已是隔离库，不是再加 inspect/render/edit 专用动词。禁桥内 bash、禁宿主机即兴 python-docx、禁 MCP 办公室栈。  
 v11（#936/#938/#942）：`sandbox_office_lib` + `read_office_skill` + 已有文件 `artifact_id`。  
