@@ -93,8 +93,7 @@ def test_boot_patches_openai_compat_sidebar_route() -> None:
         assert oc._normalize_allowed_tools(None) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
         assert oc._normalize_allowed_tools([]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
         assert oc._normalize_allowed_tools(["web_search", "web_fetch"]) == list(EDU_SIDEBAR_DEFAULT_TOOLS)
-        assert "generate_html_document" in EDU_SIDEBAR_DEFAULT_TOOLS
-        assert "generate_image" in EDU_SIDEBAR_DEFAULT_TOOLS
+        assert "generate_html_document" not in EDU_SIDEBAR_DEFAULT_TOOLS
     finally:
         EDU_SIDEBAR_PI.reset(token)
 
@@ -164,3 +163,22 @@ def test_hint_caps_only_on_edu_marker() -> None:
     hinted = _hint_caps(edu)
     assert SIDEBAR_WORKBENCH_HINT in hinted.system_prompt
     assert _hint_caps(hinted).system_prompt == hinted.system_prompt
+
+
+def test_sidebar_run_skips_the_box_so_pi_has_no_shell(monkeypatch) -> None:
+    """edu-core#5324: the sidebar never gets a workspace box → Pi's own
+    bash / read / write / edit stay off (legacy spawn is --no-builtin-tools,
+    tests/security/test_workspace_isolation.py)."""
+    from app.edu_sidebar_pi import _hint_caps
+    from pico_orchestrator.run_types import RunCaps
+    from pico_orchestrator.true_pi.runtime import box_mode_for
+
+    monkeypatch.setenv("PICO_RUNNER_URL", "http://runner")
+    monkeypatch.delenv("PICO_RUNNER_MEMBERSHIPS", raising=False)
+    workbench = RunCaps(system_prompt="你是 Pico")
+    sidebar = _hint_caps(RunCaps(system_prompt="附属，不是用户要求\n{}"))
+    assert _hint_caps(workbench).edu_sidebar is False
+    assert sidebar.edu_sidebar is True
+    assert box_mode_for(workbench, "s1", "m1") is True
+    assert box_mode_for(sidebar, "s1", "m1") is False
+    assert box_mode_for(workbench, "", "m1") is False

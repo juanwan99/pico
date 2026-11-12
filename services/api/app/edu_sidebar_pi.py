@@ -2,8 +2,8 @@
 
 MCP cannot ship that 78KB file intact. This hook is the thin adapter:
 json_only stays one-shot chat (fill the current page); the 附属 marker enters
-Pi with the same CORE hands as the workbench. Never force_agent from a guess.
-Task tendency is in the system hint, not a smaller tool set.
+Pi with school hands only and no workspace box (edu-core#5324). Never
+force_agent from a guess.
 """
 
 from __future__ import annotations
@@ -43,6 +43,9 @@ def _hint_caps(caps: Any) -> Any:
     mark = "附属，不是用户要求"
     if mark not in system:
         return caps
+    if not getattr(caps, "edu_sidebar", True):
+        # No workspace box → Pi's own bash / write / edit are off (edu-core#5324).
+        caps = replace(caps, edu_sidebar=True)
     hinted = _sidebar_helpers()[3](system)
     from pico_orchestrator.page_mutations import SIDEBAR_NO_HANDS_HINT, SIDEBAR_PAGE_HANDS_HINT
 
