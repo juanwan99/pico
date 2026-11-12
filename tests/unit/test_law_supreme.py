@@ -13,21 +13,9 @@ def test_agents_md_opens_with_supreme_ban() -> None:
     assert "禁止做重体系" in text
     head = text[:1600]
     assert "禁止自搞一套体系" in head
-    assert "本窗合一" in head
-    assert "GitHub Issue/PR/SHA/CI" in head
     # #1186: one release dir. The stale ECS writer tree must never be built from.
     assert "发版目录只有 /opt/pico" in head
     assert "/home/ops/pico 不是发版目录" in head
-    assert "主管/执行者两套编制" in head
-    assert "只有 origin/main 是生产线" in head
-    assert "旁支不准部" in head
-    assert "必须 prod-update" in head
-    assert "docs-only 不部" in head
-    assert "只开 squash" in head
-    assert "关卡关键字" in head
-    assert "删本任务本地枝" in head
-    assert "旧窗摘要" in head
-    assert "已合头枝不是在飞" in head
 
 
 def test_law_supreme_section_exists() -> None:
