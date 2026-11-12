@@ -1,165 +1,50 @@
-# Pico agent rules (binding)
+# Pico agent rules
 
-> **现况只认下面框。其余当索引不当现况。卡面四行。怎么跟业主说话不限。**
-
-```text
-最高: 禁止自搞一套体系。禁止做重体系 / 厚桥 / 第二能力核。
-      只允许薄适配。桥变厚=违法。详见 docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md §0-supreme
-真源: GitHub Issue/PR/SHA/CI + 公网 tip。聊天/磁盘/STATE-NOW/旧窗摘要都不是账本。
-人:   本窗合一。不设主管/执行者编制。业主抽检与 CLAIM-WB 不代签。
-版本: 只有 origin/main 是生产线。旁支不准部。长分叉只移植、禁止整枝合。
-      live = curl tip，必须是 origin/main 上的 SHA。GitHub 旁支头不是版本。
-工位: 写码在本机线树 ~/wt/pico--<线>（TASK-POLICY）· 发版目录只有 /opt/pico，只 prod-update（干净+detached）
-      ECS 的 /home/ops/pico 不是发版目录：禁止从它 compose/build；落后树会把线上打回去（#1186）
-环:   从 origin/main 开枝 → 改+测 → PR → CI绿 → squash 合 main
-      → 必须 prod-update → curl tip = origin/main。业主靠现网看效果。
-合:   GitHub 只开 squash；合完自动删头枝。写仓回 main，删本任务本地枝。不攒着清。
-禁止: 主管/执行者两套编制 · mailbox · 在 /opt/pico 改业务 · docker compose 当发布
-      旁支部 live · 整枝合长分叉 · 直推 main · 合了不部 · docs-only 不部
-      PR/commit 正文写 GitHub 关卡关键字（Closes / Fixes / close #数字）
-      「Do not close #数字」也会被当成关卡。过门后手关 Issue。
-      为卫生自建清理器或第二套记忆账本
-      把 Pico `/p/{id}` 或老师确认条当成发布能力（发布=Edu 申请+校管批准）
-新窗: curl tip + 开 PR 最多 1。无在飞则讨论。已合头枝不是在飞。
-```
-
-
-## HARD SCOPE — READ FIRST
-
-```
-REPO_OF_RECORD: juanwan99/pico ONLY
-FORBIDDEN: any clone/edit/PR/CI/merge on juanwan99/edu-cloud (or any other repo)
-OWNER_ORDER: 你只管 pico — permanent; not optional; not overridden by "Phase 3" wording
-```
-
-| Allowed | Forbidden |
-|---------|-----------|
-| Read/write **this** repo (`pico`) | Write/PR/CI/merge on **edu-cloud** |
-| Docs, API, UI, orchestrator, tests **in pico** | Implementing edu issuer/modules/frontend |
-| Phase 2/3 **Pico-side** adapters/hooks/docs | Dual AI ledger / dual-run with edu AI |
-| **Read-only** reference to edu AGENTS for product patterns | Copying edu ECS/1908x/mcu.asia as if pico owned them; **`juanwan99/oneflow` archived · not BINDING** |
-| Pico **OneFlow 适配版** (`docs/ONEFLOW.md`) | Pretending full GHCR→UAT auto-prod exists before stage B |
-
-If work needs edu source changes → **stop and say so**; do not open edu.
-
-
-## LAW — NO SELF-BUILD · THIN ADAPTER ONLY（BINDING）
-
-**全文：** [`docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md`](docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md)
+协作流程只认正本 `$AGENT_POLICY_ROOT/TASK-POLICY.md`（默认 `/home/liang/agent-policy`），本文只写在 pico 里怎么写代码。
 
 ```text
-最高：禁止自搞一套体系。禁止做重体系。
-Pico 禁止自研内核/协议栈/Agent OS/第二编排真源。
-只允许对成熟上游做薄适配（接线·白名单·账本·门闩·人包·门脸）。
-桥变厚 = 违法。真核 = 上游 Pi harness，不是 Pi-inspired 自写 loop 冒充。
+最高: 禁止自搞一套体系。禁止做重体系。只对成熟上游做薄适配，桥变厚=违法（docs/LAW-NO-SELF-BUILD-THIN-ADAPTER.md）
+发版: 发版目录只有 /opt/pico：PICO_DEPLOY_SHA=<40位> bash /opt/pico/scripts/prod-update.sh（合了就部，docs 也部）
+      /home/ops/pico 不是发版目录，禁止从它 compose/build（#1186）。tip: curl -fsS https://pico.aivia.asia/api/pico/tip
 ```
 
-| Allowed | Forbidden |
-|---------|-----------|
-| 真 Pi RPC/SDK 薄客户端 + gateway 回调 | 自研 agent loop 当长期主核加厚 |
-| 事件映射进唯一 Pico 账本 | 第二套账本 / 第二默认核 |
-| 门闩·人包·假绿防护·租户 | 自研 MCP 协议栈 / 向量库内核 |
-| 隔离工作区 / 专用执行机 Pi 内建工具（全出网；禁内网/宿主/元数据） | 桥内再造 delivery 全家桶 / 私有 OS / 自搞一套重体系 / 生产机宿主 shell |
+## 写法
 
-PR 必须能回答：适配哪段？上游是谁？升级是否只改适配层？
+- `services/api/app/`：FastAPI，一个功能一个文件、各带 `router`；新路由在 `main.py` import + `app.include_router`。整组要登录写 `APIRouter(dependencies=[Depends(require_person)])`（例 `edu_school.py`）。
+- `services/orchestrator/pico_orchestrator/`：模型、真 Pi（`true_pi/`）、办公（`office/`）、用量钩子。Pi 看到的工具说明在 `services/true_pi_bridge/pico-gateway-tools.ts` + `agent_assets/system.md`。
+- 库：SQLAlchemy async + sqlite，表在 `db.py`；没有 alembic，加列写进 `_migrate_sqlite_sync`。
+- 配置：`settings.py` `get_settings()`（lru_cache，字段名大写即环境变量）；测试改环境要 `get_settings.cache_clear()` 并把 `db._engine` / `db._Session` 置 None。
+- 日志 `logger = logging.getLogger(__name__)`；报错 `HTTPException(detail={"code","message"})`。
+- 测：`make install` 后 `pytest -q tests/unit/<文件>`；CI 另跑 `ruff check services tests scripts`（行宽 100）、`scripts/catch_guard.py`、`tests/security`、`tests/integration`。
 
----
+## 现成函数（先找这些，别另写）
 
----
+| 要做的 | 用 |
+|---|---|
+| 鉴权 / 计费方 | `app/auth.py` `require_scope` `require_person` `require_service_token` `payer_for` `enforce_feature` |
+| 记账（唯一 AI 账） | `app/usage_ledger.py` `record_usage_event`（不抛错）`emit_llm_usage_after_run` `enforce_allowance` `export_usage_events`；工具用量 `usage_hook.emit_*_usage`；token 解析 `usage_parse.parse_usage_blob` |
+| 调模型 | `provider.py` `resolve_provider` `call_once` `stream_chat` `thinking_extra_body`；备用链 `brain_ha.brain_candidates`；重试 `upstream.race` / `worth_retry`；带图换模型 `vision.vision_model_for_images` |
+| 解析模型 JSON | `packages/exam-answer-extract/extract.py` `strip_fence` `parse_json_array`；读卷入口 `extract_pages` |
+| 给老师看的报错 | `teacher_text.teacher_safe` `user_errors.user_message_for_error`；脱敏 `redact.redact_tenant_payload` |
+| 文件 / 办公 | `app/artifact_store.py` `LedgerArtifactStore`；`office/sandbox_lib.run_office_lib_source_async` |
+| 出网 / 本机判断 | `web_guard.assert_public_http_url`（防 SSRF）；`app/loopback.request_on_loopback_socket` |
+| 真 Pi / edu | `true_pi/client.TruePiRpcClient`（单测用 `FakeTransport`）；`edu_adapter.list_classes` |
 
-## Execution workflow (binding) — **本窗合一 · GitHub 唯一真源**
+## 常见坑（详见 docs/EXPERIENCE.md 对应条）
 
-形状指针：[`docs/ONEFLOW.md`](docs/ONEFLOW.md)（机械门留下；主管/执行者编制已废）。  
-节奏：[`docs/FAST-PATH.md`](docs/FAST-PATH.md)。版本：[`docs/VERSIONING.md`](docs/VERSIONING.md)。  
-Helper（非真源）：`bash scripts/oneflow-status.sh`
+- 模型只走 New API（`127.0.0.1:3000/v1`），不直连厂牌；Responses 必须 `stream:true`（§34）。现网主力与备用链看 §51 / §110。
+- Gemini 3.x 走 Vertex `global`，`us-central1` 会 404（§99）；思考档位走 `extra_body.google.thinking_config`（§109）。
+- token 拿不到记 unknown，不按字数估；edu 只拉 export（§36）。测试花的也是现网钥（§105）。
+- 改 Python 里的工具说明 Pi 看不见，要改 `pico-gateway-tools.ts` / SYSTEM.md（§14 / §31）。
+- `LedgerArtifactStore.read` 要传 `title=`（§30）；办公测试用 `PICO_OFFICE_URL=embedded`，生产禁用（§48）。
+- git SHA 不当 Docker build-arg（§15）；同机只能一个 prod-update（flock，§97）；生产容器不继承宿主代理（§96）。
+- 吞错：`catch_guard.py` 挡新改行里的空 except / 不记原因就 return·continue；确有理由行尾写 `# swallow-ok: <原因>`。
 
-```text
-从 origin/main 开枝 → 改+测 → PR → CI 绿 → squash 合 main
-  → 必须 prod-update（/opt/pico）→ curl tip = origin/main
-  → 公网看得见再关。业主靠现网看效果。小改可无卡，但合了仍必须部。
-```
+## E2E 过门登记（`ap-check` 机读，格式固定，每条独占一行）
 
-| 门 | |
-|----|---|
-| 真源 | GitHub Issue/PR/SHA/CI + `curl -fsS https://pico.aivia.asia/api/pico/tip` |
-| 版本 | 只部 `origin/main` 上的 SHA。旁支不是 live。长分叉只移植 |
-| 人 | 本窗合一：改、测、合、部同一窗 |
-| 隔离 | 一件事一分支一 PR。翻车回原 PR |
-| 绿档 | CI 绿即可合 |
-| 吞错 | PR 新改的 Python 行（只查 services/ packages/ scripts/ tests/）不许空 except、不许 except 里不记原因就 return 常量 / continue；CI `scripts/catch_guard.py` 挡，确有理由行尾写 `# swallow-ok: <原因>`（edu-core#5197） |
-| 黄/红 | 另一双眼睛、exact SHA；换核/密钥/租户业主抽检。CLAIM-WB 不代签 |
-| 工位 | 写码在本机线树 `~/wt/pico--<线>`；**发版目录只有 `/opt/pico`**，只 `PICO_DEPLOY_SHA=<40> bash /opt/pico/scripts/prod-update.sh`。ECS 的 `/home/ops/pico` 不是发版目录，禁止从它 compose/build（#1186） |
-| 过门 | 公网看得见结果句。CI/API 200 不算过门 |
-| 卫生 | 开窗 curl tip + 开 PR≤1。收工 tip=origin/main、写仓 `main` 干净、本任务本地枝已删。GitHub 合完删头枝。禁止自建清理器 |
-
-Do **not** invent coordinators, mailboxes, leases, or auto-dispatchers.
-
-**Tooling contract:** [`docs/TOOLING-CATALOG.md`](docs/TOOLING-CATALOG.md) · probe: `bash scripts/tool-status.sh --json` · card header: [`docs/templates/CARD-HEADER-TOOLING.md`](docs/templates/CARD-HEADER-TOOLING.md).  
-Do **not** route Cool/Keel/supervisor/mailbox/relay/self-drive. Visual Ready still requires [#384](https://github.com/juanwan99/pico/issues/384) frames — catalog does not replace reading PNGs.
-
----
-
-## Corrected goals snapshot
-
-开场只读文首 + `docs/EXPERIENCE.md` 点名段。下面是索引；SUPERSEDED / 考古不当现况。
-
-Owner-aligned goals: [`docs/DIRECTION-NOW.md`](docs/DIRECTION-NOW.md) §0-star v1.6 + [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md) v3.1。[`docs/CORRECTED-GOALS.md`](docs/CORRECTED-GOALS.md) = 考古，文中 Kimi 优先句已废，**勿当当前目标**。
-
-**Truth freeze:** [`docs/TRUTH-FREEZE.md`](docs/TRUTH-FREEZE.md)  
-**What is Pico:** [`docs/WHAT-IS-PICO.md`](docs/WHAT-IS-PICO.md)  
-**Current snapshot:** [`docs/STATE-NOW.md`](docs/STATE-NOW.md) — **开窗索引**（三行）。对不上以 GitHub 执行卡 + 公网 tip 为准。  
-**Memory reset:** [`docs/MEMORY-RESET.md`](docs/MEMORY-RESET.md) — **本周 ≤3 坑**，禁止加长。  
-**Stage package:** [`docs/STAGE-PACKAGE-MODE.md`](docs/STAGE-PACKAGE-MODE.md) — 单窗阶段包（废默认多窗碎卡）。  
-**Task card format:** [`docs/ONEFLOW.md`](docs/ONEFLOW.md) + [`docs/TASK-CARD-STANDARD.md`](docs/TASK-CARD-STANDARD.md) — Issue 用标准任务卡。禁止 315。禁止用四行短卡当已派。  
-**开工先读：** [`docs/EXPERIENCE.md`](docs/EXPERIENCE.md)。派发条点名编号，不抄全文。调查写进 Issue。  
-**Doc index (truth order):** [`docs/README.md`](docs/README.md) — prefer GitHub over prose.
-
-**Context policy:** [`docs/CONTEXT-POLICY.md`](docs/CONTEXT-POLICY.md)（默认不清理上下文）  
-**Controller bot:** [`docs/CONTROLLER-BOT.md`](docs/CONTROLLER-BOT.md) — 定时已停；**派工只认 GitHub 执行卡**  
-**Controller poll:** [`docs/CONTROLLER-POLL.md`](docs/CONTROLLER-POLL.md) — 非真源  
-**Execution queue:** [`docs/EXECUTION-QUEUE.md`](docs/EXECUTION-QUEUE.md) — **SUPERSEDED** 自动 E1/E2/E3；勿当现行派工  
-**Validation queue:** [`docs/VALIDATION-QUEUE.md`](docs/VALIDATION-QUEUE.md)  
-**FAST sprint:** [`docs/SPRINT-FAST.md`](docs/SPRINT-FAST.md)  
-**P0 security:** [`docs/P0-SECURITY-HARDENING.md`](docs/P0-SECURITY-HARDENING.md)  
-**Test window:** [`docs/TEST-WINDOW.md`](docs/TEST-WINDOW.md)  
-**24h Standalone AI:** [`docs/STANDALONE-AI-24H.md`](docs/STANDALONE-AI-24H.md) (historical baseline)  
-**Current dispatch:** GitHub 执行卡（最多 1）· [`docs/STATE-NOW.md`](docs/STATE-NOW.md) 三行只是索引。`DAY-TASK-*` / #310 / #627 / 已关 #646 **不当现况**。   
-**Kimi legacy:** [`docs/KIMI-AGENT-GAP.md`](docs/KIMI-AGENT-GAP.md) 仅考古/回滚；**产品默认 = Pi**  
-**KA-4:** soft historical [`docs/KA4-SOFT.md`](docs/KA4-SOFT.md) **superseded** · ops: [`docs/OPS-RUNBOOK-STABILIZE.md`](docs/OPS-RUNBOOK-STABILIZE.md)  
-**Skill ADR:** [`docs/ADR-SKILL-CATALOG.md`](docs/ADR-SKILL-CATALOG.md).  
-**Completed foundation sprint:** [`docs/SPRINT-3DAY-PUSH.md`](docs/SPRINT-3DAY-PUSH.md) (COMPLETED).  
-**Completed day task (do not re-open):** [`docs/DAY-TASK-2026-07-30-SKILL-UX.md`](docs/DAY-TASK-2026-07-30-SKILL-UX.md)
-
-Do **not** use `docs/archive/**`、新 HANDOFF markdown、或已 SUPERSEDED 的 `HANDOFF-NEW-WINDOW-2026-08-23.md` 当现况。
-
-## Product rules
-- **Org:** **本窗合一**（写/合/部/收尾同一窗）。旧窗1/2/4 与主管/执行者是历史别名，不是编制。见 [docs/MEMORY-RESET.md](docs/MEMORY-RESET.md)。
-- **Ship steps:** [docs/FAST-PATH.md](docs/FAST-PATH.md) — change → merge → prod-update → chat/stop → 3-line report. **One window** runs the chain; no multi-issue process OS.
-- **Product goal:** Web WorkBuddy degree — [docs/DIRECTION-NOW.md](docs/DIRECTION-NOW.md) §0-star v1.6。第一需求 = 长任务高质量跑完。办公（Word/Excel/HTML/PPT）与编程并列，对标 Codex / Claude Code。能力并列。隔离工作区交上游 Pi（内建工具打开）。不碰生产机宿主 shell。
-- **Default runtime:** true Pi (`health.default_runtime=pi-true`). Chat/image = **New API**（`openai-responses` / Gemini 渠道；现网模型见 EXPERIENCE §34，不是「DeepSeek 聊天核」）。**Gemini 3.x 文本/识图必须 Vertex `global`（EXPERIENCE §99），禁止 `us-central1`。** 计量：New API 管渠道，Pico 记用量，edu 只认 export。Kimi Agent = **legacy rollback only**. Self-built `run_agent_loop` stays **deleted**.
-- **Prod flags:** `PICO_TRUE_PI_DEFAULT=1` → `health.default_runtime=pi-true`; hosted rollback = `PICO_HOSTED_LOOP=1`; legacy Kimi only if emergency. `CLAIM-WB-DEGREE-WEB` 已是业主 YES @ `dcb47c00…`（2026-08-26）；工程禁改口/再代签。
-- **KA-4 HARD:** `run_agent_loop` / `runner.py` **removed**. Rollback multi-step = redeploy prior tip or legacy flag — not revive loop.
-- **Speed:** deploy + smoke beat new process docs; see `docs/VELOCITY-CLEAN.md`.
-- Tenant fail-closed; **Pico owns the unique AI ledger**.
-- Prefer smallest correct fix; no dual-run; no dual-kernel product truth.
-
-## Speed vs safety
-
-**Default org:** 本窗合一 + 阶段包 ([STAGE-PACKAGE-MODE](docs/STAGE-PACKAGE-MODE.md))。  
-**Default tech rhythm:** [docs/FAST-PATH.md](docs/FAST-PATH.md) 同一窗串行。
-
-**KEEP:** secrets out of git; allowlist tools; exact-SHA deploy; CI green; no fake global / WB CLAIM; no dual-run; **true-Pi default**.
-
-**CUT:** 主管/执行者编制、stamp-ok/派发条/收尾六步/CANDIDATE 总线、多窗日常派、碎卡、mailbox、旁支部 live、整枝合长分叉、把 ECS 当账本、Kimi-as-only-goal、Dify-as-product。
-
-PRs stay (one writer / one branch / CI). Do **not** split one theme into many waiting rounds or many windows.
-
-
-## E2E 过门登记（agent-policy TASK-POLICY.md §1 · `ap-check` 机读，格式固定，每条独占一行）
-
-命中下列路径的 PR，回执必须附 `E2E: <命令> → <结果> @<环境>`；`prod-update` 末尾强制跑同一条冒烟，失败即部署失败（#1095）。
+命中下列路径的 PR，回执附 `E2E: <命令> → <结果> @<环境>`；`prod-update` 末尾跑同一条冒烟，失败即部署失败（#1095）。
 
 E2E-PATHS: services/api/app/ scripts/prod-update.sh scripts/prod-update.impl.sh scripts/e2e-smoke.sh scripts/apply-gateway-nginx.sh docker-compose.host.yml Dockerfile.pico-api.true-pi Dockerfile.pico-api librechat.yaml .github/workflows/
 E2E-SMOKE: bash scripts/e2e-smoke.sh --prod
 
-制卡解析（edu-core#3703 · 验证分四类 ④）：改了制卡读卷的提示词或读法（`packages/exam-answer-extract/`、`services/api/app/exam_answer_extract.py`），或换了读卷用的模型，PR 先起本 PR 的临时栈，再在 edu-core 跑十份固定真卷回归：`bash scripts/exam-card-parse-regress.sh --pico <临时栈地址>`（钥匙自己 `export PICO_EDU_ISS` / `PICO_EDU_JWT_SECRET`）。合入发版后再跑一次 `--prod`。回执写 `E2E: bash scripts/exam-card-parse-regress.sh --pico <url> → PASS（对 n，已知未修 k，新错 0） @<环境>`。有新错先修，修不了不合。样卷与标注在 edu-core `apps/bff/src/modules/exam/fixtures/card-parse-regress/`。
+制卡解析（edu-core#3703）：改了读卷提示词或读法（`packages/exam-answer-extract/`、`services/api/app/exam_answer_extract.py`）或换读卷模型，先起本 PR 临时栈，在 edu-core 跑十份固定真卷回归 `bash scripts/exam-card-parse-regress.sh --pico <临时栈地址>`（自己 `export PICO_EDU_ISS` / `PICO_EDU_JWT_SECRET`），合入发版后再跑 `--prod`。回执写 `E2E: bash scripts/exam-card-parse-regress.sh --pico <url> → PASS（对 n，已知未修 k，新错 0） @<环境>`；有新错先修，修不了不合。样卷在 edu-core `apps/bff/src/modules/exam/fixtures/card-parse-regress/`。
