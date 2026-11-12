@@ -342,7 +342,7 @@ def _resolve_bill_to(explicit: str | None) -> str:
 def _resolve_entry() -> str:
     try:
         from pico_orchestrator.usage_hook import current_usage_entry
-    except ImportError:
+    except ImportError:  # swallow-ok: 只装了 api 没装编排包（单测 / 老镜像），入口记 unknown，和上面 bill_to 记 member 同理
         return "unknown"
     return current_usage_entry()
 
