@@ -339,6 +339,14 @@ def _resolve_bill_to(explicit: str | None) -> str:
     return "member"
 
 
+def _resolve_entry() -> str:
+    try:
+        from pico_orchestrator.usage_hook import current_usage_entry
+    except ImportError:
+        return "unknown"
+    return current_usage_entry()
+
+
 def _personal_bill_clause():
     """Teacher/personal reads skip school-billed rows. Missing tag = member (old rows)."""
     col = func.json_extract(UsageEventRow.extra_json, "$.bill_to")
@@ -418,6 +426,8 @@ async def _record_usage_event_inner(
     extra_clean = _strip_money_keys(extra if isinstance(extra, dict) else None)
     extra_clean.pop("bill_to", None)
     extra_clean["bill_to"] = _resolve_bill_to(bill_to)
+    # edu-core#5288: entry comes from the ticket (or tool bind), never from the caller's extra.
+    extra_clean["entry"] = _resolve_entry()
     model_n = (model or "").strip() or None
     if is_ui_lane(model_n):
         extra_clean.setdefault("ui_model", model_n)
@@ -797,6 +807,11 @@ def _row_bill_to(row: UsageEventRow) -> str:
     return str(_row_extra(row).get("bill_to") or "member")
 
 
+def _row_entry(row: UsageEventRow) -> str:
+    """Which AI place the row came from; rows before edu-core#5288 are unknown."""
+    return str(_row_extra(row).get("entry") or "unknown")
+
+
 def _row_calls(row: UsageEventRow) -> int:
     """Upstream requests behind the row, the way usage-reconcile counts them (edu-core#4350):
     a chat run carries its answered count (0 allowed); other rows that record ``calls``
@@ -854,12 +869,23 @@ async def owner_usage_today(session: AsyncSession) -> dict[str, Any]:
         }
         for kind, g in sorted(groups.items())
     ]
+    entries = [
+        {
+            "entry": entry,
+            "event_count": g["event_count"],
+            "calls": g["calls"],
+            "total_tokens": g["total_tokens"],
+            "points": _rollup_points(g),
+        }
+        for entry, g in sorted(_rollup(rows, _row_entry).items())
+    ]
     return {
         "ok": True,
         "billing": False,
         "source": "pico_usage_events",
         "day": today,
         "kinds": kinds,
+        "entries": entries,
         "note": "老师用量。管道成本在 New API。钱在 edu-core。",
     }
 
@@ -1251,6 +1277,22 @@ async def school_month_usage(
         }
         for mid, bt, kind, n, c, p, o, t, u in (await session.execute(q)).all()
     ]
+    # edu-core#5288: the same month by AI place (workbench / sidebar / brain / exam).
+    entry = func.coalesce(func.json_extract(extra, "$.entry"), "unknown")
+    eq = (
+        select(entry, func.count(), func.sum(calls), func.sum(UsageEventRow.total_tokens))
+        .where(
+            UsageEventRow.school_id == principal.school_id,
+            UsageEventRow.created_at >= start,
+            UsageEventRow.created_at < end,
+        )
+        .group_by(entry)
+        .order_by(entry)
+    )
+    entries = [
+        {"entry": e, "event_count": int(n or 0), "calls": int(c or 0), "total_tokens": int(t or 0)}
+        for e, n, c, t in (await session.execute(eq)).all()
+    ]
     return {
         "billing": False,
         "schema": USAGE_EXPORT_SCHEMA,
@@ -1258,6 +1300,7 @@ async def school_month_usage(
         "month": month.strip(),
         "tz": "Asia/Shanghai",
         "rows": rows,
+        "entries": entries,
     }
 
 

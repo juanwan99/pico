@@ -17,6 +17,7 @@ from pico_orchestrator.features import (
     allowance_millipoints,
     feature_enabled,
 )
+from pico_orchestrator.usage_hook import use_entry_of
 
 from app.settings import Settings, get_settings
 
@@ -288,14 +289,16 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
     if (not production and token in _dev_proxy_keys(s)) or (
         production and token == _production_proxy_key(s)
     ):
-        return Principal(
-            school_id="school-a",
-            membership_id=LEGACY_PROXY_MEMBERSHIP_ID,
-            scopes=["ai:run", "ai:read", "ai:confirm"],
-            iss=s.pico_jwt_iss,
-            aud=s.pico_jwt_aud,
-            exp=int(time.time()) + 3600,
-            raw={"proxy": True},
+        return use_entry_of(
+            Principal(
+                school_id="school-a",
+                membership_id=LEGACY_PROXY_MEMBERSHIP_ID,
+                scopes=["ai:run", "ai:read", "ai:confirm"],
+                iss=s.pico_jwt_iss,
+                aud=s.pico_jwt_aud,
+                exp=int(time.time()) + 3600,
+                raw={"proxy": True},
+            )
         )
 
     # 1) Phase 1 test issuer
@@ -367,7 +370,8 @@ def decode_token(token: str, settings: Settings | None = None) -> Principal:
             },
         )
 
-    return _principal_from_claims(data)
+    # edu-core#5288: usage rows of this request carry the ticket's entry tag.
+    return use_entry_of(_principal_from_claims(data))
 
 
 def scope_proxy_principal(

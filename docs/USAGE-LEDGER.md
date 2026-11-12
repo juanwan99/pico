@@ -64,7 +64,7 @@ schema 与 JSON 合同禁止 money 字段
 | `task_id` | string \| null | 关联 Task（运行账本） |
 | `run_id` | string \| null | 关联 Run |
 | `source` | string | 写入点：`openai_compat` / `run_service` / 后续卡 |
-| `extra_json` | object | 非钱元数据（时长、查询次数、`bill_to`=`member`\|`school`\|`personal`） |
+| `extra_json` | object | 非钱元数据（时长、查询次数、`bill_to`=`member`\|`school`\|`personal`、`entry`） |
 | `idempotency_key` | string unique | 失败重试不重复记账 |
 | `created_at` | datetime UTC | 记账时间 |
 
@@ -179,7 +179,7 @@ await record_usage_event(
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/v1/usage/summary` | 按北京日 × kind × `bill_to` 汇总：`event_count`、`calls`、`points`（无 token） |
-| GET | `/v1/usage/school-month?month=YYYY-MM` | **仅 `ai:admin`**：本校北京月按账号 × `bill_to` × kind，`prompt/completion/total_tokens`（只加已知行）、`unknown_count`、`event_count`、`calls`；edu 用量页读这个 |
+| GET | `/v1/usage/school-month?month=YYYY-MM` | **仅 `ai:admin`**：本校北京月按账号 × `bill_to` × kind，`prompt/completion/total_tokens`（只加已知行）、`unknown_count`、`event_count`、`calls`；edu 用量页读这个。另带 `entries`：同月按入口 `event_count` / `calls` / `total_tokens` |
 | GET | `/v1/usage/events` | 明细列表 |
 | GET | `/v1/usage/events/{id}` | 单条明细（跨账号 404） |
 | GET | `/v1/usage` | 极简「我的用量」HTML（只读 · 非运营后台） |
@@ -188,6 +188,8 @@ await record_usage_event(
 | GET | `/v1/internal/usage/export` | **edu 拉数**：`PICO_HOOK_SERVICE_TOKEN` · 见 [usage-export.md](./contracts/usage-export.md) |
 
 查询参数：`kind` · `day=YYYY-MM-DD`（北京日）· `limit` · `offset` · `membership_id`（仅 admin 且必须同校）。
+
+**入口（edu-core#5288）：** `extra.entry` = edu 票上的 `<定位>.<来源>`（定位 `workbench` / `sidebar` / `brain` / `exam`），由验票时记进本请求上下文、工具调用随 bind 带；LibreChat 代理来的记 `workbench.web`，Pico 自动任务 `workbench.automation`；没带或格式不对记 `unknown`，调用方 `extra` 写的不算。业主今日用量和 `school-month` 都带 `entries`；现网 `scripts/pico-usage-by-entry.py --hours 24` 按入口出数。
 
 **学校账也是老师的用量（edu-core#4350）：** 汇总和明细列出本人所有行，`bill_to=school`（学校付）、`member`（本人）分开标；只有额度门（§9）只算 `member`。日界、月界一律北京时间（Asia/Shanghai），与额度门同一天。
 

@@ -17,6 +17,7 @@ import time
 from dataclasses import fields, replace
 from typing import Any
 
+from pico_orchestrator.usage_hook import use_entry_of
 from sqlalchemy import select
 
 from app.auth import Principal, payer_for
@@ -220,7 +221,7 @@ async def resume_run(run_id: str) -> None:
             return bool(row and (row.cancel_requested or row.status == "cancelled"))
 
     try:
-        principal = Principal(**spec["principal"])
+        principal = use_entry_of(Principal(**spec["principal"]))
         known = {f.name for f in fields(RunCaps)}
         caps = RunCaps(**{k: v for k, v in dict(spec["caps"]).items() if k in known})
         started = float(spec.get("started") or 0)

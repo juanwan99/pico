@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 from pico_orchestrator.gateway import AllowlistGateway, Principal, ToolError
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
-from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
+from pico_orchestrator.usage_hook import bind_usage_context, entry_of, reset_usage_context
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +193,7 @@ class ToolServer:
             bill_to=getattr(self.principal, "bill_to", None),
             scopes=getattr(self.principal, "scopes", None),
             emit=self.emit,
+            entry=entry_of(self.principal),
         )
         try:
             result = await self.gateway.invoke(self.principal, name, args)
