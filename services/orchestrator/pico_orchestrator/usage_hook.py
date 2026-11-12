@@ -7,6 +7,7 @@ Never raises into the tool path. See docs/USAGE-LEDGER.md §5.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -41,6 +42,44 @@ _SANDBOX_TOOLS = frozenset(
 )
 
 
+# edu-core#5288 (#5285 P0-2): which of the four AI places a call came from —
+# ``<place>.<source>`` on the edu ticket (claim ``entry``). Workbench chat comes
+# through the LibreChat proxy key (no edu ticket), Pico automations have no ticket.
+ENTRY_UNKNOWN = "unknown"
+ENTRY_WORKBENCH_PROXY = "workbench.web"
+ENTRY_WORKBENCH_AUTOMATION = "workbench.automation"
+_ENTRY_RE = re.compile(r"^(workbench|sidebar|brain|exam)\.[a-z0-9][a-z0-9-]{0,39}$")
+_ENTRY: ContextVar[str | None] = ContextVar("pico_usage_entry", default=None)
+
+
+def valid_entry(raw: Any) -> str | None:
+    return raw if isinstance(raw, str) and _ENTRY_RE.fullmatch(raw) else None
+
+
+def entry_of(principal: Any) -> str:
+    """Entry tag of a principal. A malformed claim counts as no claim."""
+    raw = getattr(principal, "raw", None) or {}
+    if raw.get("proxy"):
+        return ENTRY_WORKBENCH_PROXY
+    if raw.get("automation_id"):
+        return ENTRY_WORKBENCH_AUTOMATION
+    return valid_entry(raw.get("entry")) or ENTRY_UNKNOWN
+
+
+def use_entry_of(principal: Any) -> Any:
+    """Tag this request / task's usage rows with the principal's entry. Returns the principal."""
+    _ENTRY.set(entry_of(principal))
+    return principal
+
+
+def current_usage_entry() -> str:
+    """Entry for a usage row: tool bind first, then the request's principal, else unknown."""
+    bind = _BIND.get()
+    if bind is not None and bind.entry:
+        return bind.entry
+    return _ENTRY.get() or ENTRY_UNKNOWN
+
+
 def bill_to_from_scopes(scopes: Any) -> str:
     """Same rule as app.auth: ai:school-run → school, else member."""
     try:
@@ -60,6 +99,7 @@ class UsageBind:
     conversation_id: str | None = None
     bill_to: str = "member"
     emit: Any = None
+    entry: str | None = None
 
 
 _BIND: ContextVar[UsageBind | None] = ContextVar("pico_usage_bind", default=None)
@@ -76,6 +116,7 @@ def bind_usage_context(
     bill_to: str | None = None,
     scopes: Any = None,
     emit: Any = None,
+    entry: str | None = None,
 ) -> object:
     """Set request-scoped identity for search/fetch emits. Returns a token to reset."""
     payer = (bill_to or "").strip().lower()
@@ -91,6 +132,7 @@ def bind_usage_context(
             conversation_id=(conversation_id or "").strip() or None,
             bill_to=payer,
             emit=emit,
+            entry=valid_entry(entry) or _ENTRY.get(),
         )
     )
 

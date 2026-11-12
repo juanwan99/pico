@@ -29,7 +29,7 @@ from pico_orchestrator.sandbox_session_event import (
     sandbox_session_payload,
 )
 from pico_orchestrator.tools_builtin import build_default_gateway, openai_tool_schemas
-from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
+from pico_orchestrator.usage_hook import bind_usage_context, entry_of, reset_usage_context
 from pico_orchestrator.user_errors import PERSONAL_ENDPOINT_ERROR_TAG, enrich_fail_payload
 
 RUNTIME_LABEL = "pi-agent"
@@ -551,6 +551,7 @@ async def run_pi_agent(
                     ),
                     bill_to=getattr(principal, "bill_to", None),
                     scopes=getattr(principal, "scopes", None),
+                    entry=entry_of(principal),
                 )
                 try:
                     result = await gateway.invoke(principal, name, arguments)

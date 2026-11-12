@@ -8,6 +8,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from pico_orchestrator.usage_hook import use_entry_of
 from sqlalchemy import select
 
 from app import run_service
@@ -158,14 +159,16 @@ async def _fire_due() -> int:
         )
         due = list(q.scalars().all())
         for auto in due:
-            principal = Principal(
-                school_id=auto.school_id,
-                membership_id=auto.membership_id,
-                scopes=["ai:run", "ai:read"],
-                iss="pico-automation",
-                aud="pico",
-                exp=0,
-                raw={"automation_id": auto.id},
+            principal = use_entry_of(
+                Principal(
+                    school_id=auto.school_id,
+                    membership_id=auto.membership_id,
+                    scopes=["ai:run", "ai:read"],
+                    iss="pico-automation",
+                    aud="pico",
+                    exp=0,
+                    raw={"automation_id": auto.id},
+                )
             )
             title = f"[自动] {auto.name}"[:80]
             try:

@@ -32,6 +32,7 @@ from pico_orchestrator.sse_keepalive import (
     SSE_STREAM_HEADERS,
     iter_with_idle_ticks,
 )
+from pico_orchestrator.usage_hook import use_entry_of
 from pico_orchestrator.user_errors import is_wall_timeout_code, user_message_for_error
 from pydantic import BaseModel
 
@@ -302,14 +303,16 @@ def _principal_from_auth(
         if (not production and token in _dev_proxy_keys(settings)) or (
             production and token == _production_proxy_key(settings)
         ):
-            return Principal(
-                school_id="school-a",
-                membership_id=LEGACY_PROXY_MEMBERSHIP_ID,
-                scopes=["ai:run", "ai:read", "ai:confirm"],
-                iss=settings.pico_jwt_iss,
-                aud=settings.pico_jwt_aud,
-                exp=int(time.time()) + 3600,
-                raw={"proxy": True},
+            return use_entry_of(
+                Principal(
+                    school_id="school-a",
+                    membership_id=LEGACY_PROXY_MEMBERSHIP_ID,
+                    scopes=["ai:run", "ai:read", "ai:confirm"],
+                    iss=settings.pico_jwt_iss,
+                    aud=settings.pico_jwt_aud,
+                    exp=int(time.time()) + 3600,
+                    raw={"proxy": True},
+                )
             )
         if production and token in _dev_proxy_keys(settings):
             raise HTTPException(
