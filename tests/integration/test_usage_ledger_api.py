@@ -1253,3 +1253,37 @@ async def test_chat_run_row_records_answered_calls(client: AsyncClient):
     )
     row = next(e for e in exported.json()["events"] if e["run_id"] == "run-calls-1")
     assert row["extra"]["calls"] == 3
+
+
+async def test_failed_turn_is_on_the_bill_with_why_and_filters_by_status(client: AsyncClient):
+    """edu-core#5295: a failed direct turn still writes its llm row, tagged status / error_code / http_status."""
+    from app.db import session_factory
+    from app.openai_compat import _finalize_run
+    from app.run_service import create_task
+
+    principal = _principal()
+    factory = session_factory()
+    async with factory() as session:
+        _, bad = await create_task(session, principal, "t", "will fail")
+        good_task, good = await create_task(session, principal, "t", "will answer")
+    await _finalize_run(bad.id, status="failed", error="Read timed out after 240s", task_id=bad.task_id)
+    await _finalize_run(good.id, status="succeeded", final_text="ok", task_id=good_task.id, user_prompt="will answer")
+
+    headers = await _auth(client)
+    r = await client.get("/v1/usage/events", headers=headers, params={"status": "failed"})
+    assert r.status_code == 200, r.text
+    failed = [e for e in r.json()["events"] if e["run_id"] in {bad.id, good.id}]
+    assert [e["run_id"] for e in failed] == [bad.id]
+    extra = failed[0]["extra"]
+    assert extra["status"] == "failed"
+    assert extra["error_code"] == "upstream_timeout"
+    assert extra["http_status"] == 504
+    assert "error" not in extra  # raw upstream text stays off the teacher view
+
+    r = await client.get("/v1/usage/events", headers=headers, params={"status": "succeeded"})
+    ok = [e["run_id"] for e in r.json()["events"] if e["run_id"] in {bad.id, good.id}]
+    assert ok == [good.id]
+
+    r = await client.get("/v1/usage/events", headers=headers, params={"status": "broken"})
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "usage.bad_status"

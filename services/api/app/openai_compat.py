@@ -1296,6 +1296,11 @@ async def _finalize_run(
     # Usage meter is best-effort and must never roll back the Run path.
     from app.usage_ledger import emit_llm_usage_after_run
 
+    failure = None
+    if status != "succeeded":
+        # Failed turns are on the bill too, with why (edu-core#5295).
+        http, code, _ = _failure_code(error, status=status, empty=error == _EMPTY_OUTPUT)
+        failure = {"error_code": code, "http_status": http, "error": str(error or "")[:200]}
     await emit_llm_usage_after_run(
         run_id,
         token_usage=token_usage,
@@ -1305,6 +1310,7 @@ async def _finalize_run(
         bill_to=bill_to,
         # Direct path: the model that answered, a backup after failover (#1248).
         model=backend_model,
+        failure=failure,
     )
 
 
@@ -1431,21 +1437,28 @@ _TIMEOUT_MARKS = ("timeout", "timed out", "524", "超时", "wall")
 _OVERLOAD_MARKS = ("429", "503", "529", "overload", "rate limit", "频繁")
 
 
+_EMPTY_OUTPUT = "empty model output"
+
+
+def _failure_code(error: str | None, *, status: str, empty: bool = False) -> tuple[int, str, bool]:
+    """(http, code, retryable) for a turn that did not succeed — reply body and usage row share it."""
+    low = str(error or "").lower()
+    if status == "cancelled":
+        return 409, "run_cancelled", False
+    if empty:
+        return 502, "empty_output", True
+    if any(mark in low for mark in _TIMEOUT_MARKS):
+        return 504, "upstream_timeout", True
+    if any(mark in low for mark in _OVERLOAD_MARKS):
+        return 503, "upstream_overloaded", True
+    return 502, "upstream_error", True
+
+
 def _failure_response(
     error: str | None, *, status: str, run_id: str, empty: bool = False
 ) -> JSONResponse:
     """OpenAI-style error body with a machine ``code`` and ``retryable``."""
-    low = str(error or "").lower()
-    if status == "cancelled":
-        http, code, retryable = 409, "run_cancelled", False
-    elif empty:
-        http, code, retryable = 502, "empty_output", True
-    elif any(mark in low for mark in _TIMEOUT_MARKS):
-        http, code, retryable = 504, "upstream_timeout", True
-    elif any(mark in low for mark in _OVERLOAD_MARKS):
-        http, code, retryable = 503, "upstream_overloaded", True
-    else:
-        http, code, retryable = 502, "upstream_error", True
+    http, code, retryable = _failure_code(error, status=status, empty=empty)
     message = user_message_for_error(error) if error else "这次没有返回内容，请再发一次。"
     return JSONResponse(
         status_code=http,
@@ -2169,7 +2182,7 @@ async def chat_completions(
                     await _finalize_run(
                         run_id,
                         status="failed",
-                        error="empty model output",
+                        error=_EMPTY_OUTPUT,
                         task_id=task_id,
                         token_usage=direct_usage or None,
                         bill_to=_bill_to_for_turn(principal),

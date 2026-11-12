@@ -122,6 +122,7 @@ REST `/v1/tasks` 在 `_execute_run` **commit 之后** 记账。
 - 优先用编排层 `token_usage`（Responses / chat.completions native）。
 - 提供方未回 usage：**记 unknown**，不要用 prompt+completion 字符估数当默认（估数会让 edu 收到 prompt_tokens=1 这种脏数）。
 - **失败可重试、不得打断 Run**：写入吞掉异常；SQLite lock 最多 5 次；重复 `idempotency_key` 视为成功。
+- **没成功的轮也记一行（edu-core#5295）**：终态不是 succeeded 的 llm 行带 `extra.status`（`failed` / `cancelled`）；`failed` 再带 `error_code`（`upstream_timeout` / `upstream_overloaded` / `empty_output` / `upstream_error`，与回给调用方的 `error.code` 同一判法）、`http_status`（504 / 503 / 502）、`error`（原文前 200 字，老师面不给）。没 `status` 的行 = 成功（含 11-12 之前的旧行）。
 
 true_pi / hosted Pi **不另开第二账本**：走上述终态钩子。真 Pi 本轮用量只从 `agent_end.messages[].usage` 与 `compaction_end` 入账；**禁止**对 `message_update` 累计值逐条加，**禁止**把会话 jsonl / `get_session_stats` 当本轮。Pi `cost` 剥掉。提供方未回 usage 仍记 **诚实 unknown**。
 
@@ -180,7 +181,7 @@ await record_usage_event(
 |------|------|------|
 | GET | `/v1/usage/summary` | 按北京日 × kind × `bill_to` 汇总：`event_count`、`calls`、`points`（无 token） |
 | GET | `/v1/usage/school-month?month=YYYY-MM` | **仅 `ai:admin`**：本校北京月按账号 × `bill_to` × kind，`prompt/completion/total_tokens`（只加已知行）、`unknown_count`、`event_count`、`calls`；edu 用量页读这个。另带 `entries`：同月按入口 `event_count` / `calls` / `total_tokens` |
-| GET | `/v1/usage/events` | 明细列表 |
+| GET | `/v1/usage/events` | 明细列表；可筛 `kind`、`day`、`membership_id`、`status`（`succeeded` / `failed` / `cancelled`，按 `extra.status`，无则算成功；别的值 400 `usage.bad_status`） |
 | GET | `/v1/usage/events/{id}` | 单条明细（跨账号 404） |
 | GET | `/v1/usage` | 极简「我的用量」HTML（只读 · 非运营后台） |
 | POST | `/v1/usage/points/quote` | 发任务 UX 预计积分（不写 token 列） |

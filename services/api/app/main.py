@@ -598,6 +598,7 @@ async def usage_events(
     kind: str | None = None,
     day: str | None = None,
     membership_id: str | None = None,
+    status: str | None = None,
     limit: int = 50,
     offset: int = 0,
     principal: Principal = Depends(require_scope("ai:read")),
@@ -611,6 +612,7 @@ async def usage_events(
         kind=kind,
         day=day,
         membership_id=membership_id,
+        status=status,
         limit=limit,
         offset=offset,
     )
