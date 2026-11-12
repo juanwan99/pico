@@ -30,6 +30,8 @@ from app.db import TaskRow, UsageEventRow, new_id, session_factory
 logger = logging.getLogger(__name__)
 
 USAGE_KINDS = frozenset({"llm", "search", "sandbox", "image", "api", "other"})
+# extra.status on llm rows (edu-core#5295); a row without it succeeded.
+USAGE_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
 USAGE_EXPORT_SCHEMA = "pico.usage.v1"
 BILLING_COLUMN_NAMES = frozenset(
     {
@@ -83,6 +85,7 @@ _TEACHER_EXTRA_DROP = frozenset(
         "completion_tokens",
         "total_tokens",
         "channel_id",
+        "error",
     }
 )
 _PUBLIC_RUN_USAGE_KEEP = frozenset({"skill_snapshot", "durable_checkpoint"})
@@ -545,11 +548,14 @@ async def emit_llm_usage_after_run(
     task_id: str | None = None,
     estimate_if_missing: bool = False,
     bill_to: str | None = None,
+    failure: dict[str, Any] | None = None,
 ) -> None:
     """Best-effort llm event for a finished Run. Safe to call after commit.
 
     Default is honest unknown when the provider did not return usage.
     ``estimate_if_missing`` is ignored — char/4 is never stored.
+    A run that did not succeed gets ``extra.status``; a failed one also gets the
+    caller's ``failure`` (error_code / http_status / error, edu-core#5295).
     """
     from app.db import RunRow
 
@@ -613,6 +619,10 @@ async def emit_llm_usage_after_run(
             extra["calls"] = calls
     except Exception:
         logger.debug("llm calls count skipped", exc_info=True)
+    if run_status and run_status != "succeeded":
+        extra["status"] = run_status
+        if run_status == "failed" and failure:
+            extra.update({k: v for k, v in failure.items() if v not in (None, "")})
     if fields.tokens_unknown:
         extra.setdefault("reason", "provider_usage_missing")
         if run_status == "failed":
@@ -897,6 +907,7 @@ async def list_usage_events(
     kind: str | None = None,
     day: str | None = None,
     membership_id: str | None = None,
+    status: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[UsageEventRow]:
@@ -919,6 +930,19 @@ async def list_usage_events(
     if day:
         start, end = _day_bounds(day)
         q = q.where(UsageEventRow.created_at >= start, UsageEventRow.created_at < end)
+    if status:
+        status_n = status.strip().lower()
+        if status_n not in USAGE_STATUSES:
+            from fastapi import HTTPException
+            from fastapi import status as http_status
+
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={"code": "usage.bad_status", "message": f"status must be one of {sorted(USAGE_STATUSES)}"},
+            )
+        col = func.json_extract(UsageEventRow.extra_json, "$.status")
+        # llm rows that did not succeed carry extra.status since #5295; no status = succeeded.
+        q = q.where(or_(col.is_(None), col == "succeeded") if status_n == "succeeded" else col == status_n)
     cap = max(1, min(int(limit or 50), 200))
     off = max(0, int(offset or 0))
     q = q.order_by(UsageEventRow.created_at.desc()).offset(off).limit(cap)
