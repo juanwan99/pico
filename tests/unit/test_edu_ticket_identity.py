@@ -13,7 +13,7 @@ from fastapi import HTTPException
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 
-from app.auth import LEGACY_PROXY_MEMBERSHIP_ID, decode_token
+from app.auth import LEGACY_PROXY_MEMBERSHIP_ID, decode_token, payer_for
 from app.settings import Settings
 
 EDU_ISS = "https://edu.weiyuji.cn/iss/pico"
@@ -48,8 +48,12 @@ def _edu_token(*, exp_offset: int = 600, **claims) -> str:
         "membership_id": MEMBER,
         "scopes": ["ai:run", "ai:read", "ai:confirm"],
         "sub": f"{SCHOOL}:{MEMBER}",
+        "entry": "sidebar.propose",
+        "bill": "member",
     }
     payload.update(claims)
+    for key in [k for k, v in payload.items() if v is None]:
+        payload.pop(key)  # claims=None drops a claim
     return jwt.encode(payload, EDU_SECRET, algorithm="HS256")
 
 
@@ -62,6 +66,38 @@ def test_edu_ticket_principal_is_membership_not_nextchat() -> None:
     assert p.aud == "pico-api"
     assert "ai:run" in p.scopes
     assert p.raw.get("proxy") is None
+
+
+SCHOOL_RUN = ["ai:run", "ai:read", "ai:school-run"]
+GRADING = [*SCHOOL_RUN, "ai:exam-grading"]
+
+
+def test_ticket_bill_decides_payer() -> None:
+    """edu-core#5598: bill_to comes from the ticket's bill, grading books to the school."""
+    cases = [(["ai:run", "ai:read"], "member", "member"), (SCHOOL_RUN, "school", "school"),
+             (GRADING, "grading", "school")]
+    for scopes, bill, payer in cases:
+        p = decode_token(_edu_token(scopes=scopes, bill=bill, entry="exam.score"), _settings())
+        assert (p.bill_to, payer_for(p)) == (payer, payer), bill
+
+
+def test_ticket_without_entry_or_bill_or_matching_scopes_is_refused() -> None:
+    """owner 11-14「每次调用必须同时带功能名和账别，缺一个就拒绝」(edu-core#5598)."""
+    bad = [
+        {"entry": None},
+        {"entry": "propose"},
+        {"bill": None},
+        {"bill": "personal"},
+        {"bill": "member", "scopes": SCHOOL_RUN},
+        {"bill": "school", "scopes": ["ai:run", "ai:read"]},
+        {"bill": "school", "scopes": GRADING},
+        {"bill": "grading", "scopes": SCHOOL_RUN},
+        {"bill": "grading", "scopes": ["ai:run", "ai:exam-grading"]},
+    ]
+    for claims in bad:
+        with pytest.raises(HTTPException) as exc:
+            decode_token(_edu_token(**claims), _settings())
+        assert (exc.value.status_code, exc.value.detail["code"]) == (401, "auth.invalid"), claims
 
 
 def test_expired_edu_ticket_is_auth_expired() -> None:

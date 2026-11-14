@@ -84,9 +84,11 @@ def test_production_allows_deepseek_flash_brain_and_ocr_lane() -> None:
     settings = _valid_production(deepseek_model="deepseek-flash")
     settings.validate_production()
     _assert_model_allowed("pico-ocr", settings)
-    _assert_model_allowed("pico-score2", settings)
     with pytest.raises(HTTPException):
         _assert_model_allowed("gemini-3.8-flash", settings)
+    # edu-core#5598: marking scores once; the second-scorer lane is gone.
+    with pytest.raises(HTTPException):
+        _assert_model_allowed("pico-score2", settings)
 
 def test_production_break_glass_is_explicit_and_logged(caplog: pytest.LogCaptureFixture) -> None:
     settings = _valid_production(

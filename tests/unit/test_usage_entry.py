@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import jwt
 import pytest
+from fastapi import HTTPException
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
@@ -60,6 +61,7 @@ def _ticket(**extra) -> str:
         "school_id": "school-a",
         "membership_id": "m1",
         "scopes": ["ai:run", "ai:read", "ai:confirm"],
+        "bill": "member",
         **extra,
     }
     return jwt.encode(payload, s.pico_jwt_secret, algorithm="HS256")
@@ -94,10 +96,11 @@ async def test_ticket_entry_lands_on_usage_row(usage_db) -> None:
     # Each request runs in its own task / context, like FastAPI.
     tagged = await asyncio.create_task(one(_ticket(entry="sidebar.propose"), "llm:entry-tagged"))
     assert tagged["entry"] == "sidebar.propose"
-    old = await asyncio.create_task(one(_ticket(), "llm:entry-old"))
-    assert old["entry"] == "unknown", "old ticket without entry"
-    bad = await asyncio.create_task(one(_ticket(entry="hack.me"), "llm:entry-bad"))
-    assert bad["entry"] == "unknown", "malformed entry is not stored"
+    # edu-core#5598: a ticket without a well-formed entry is refused, nothing is booked.
+    for token in (_ticket(), _ticket(entry="hack.me")):
+        with pytest.raises(HTTPException) as exc:
+            decode_token(token)
+        assert exc.value.status_code == 401
 
 
 @pytest.mark.asyncio
