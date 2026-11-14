@@ -17,7 +17,7 @@ from pico_orchestrator.features import (
     allowance_millipoints,
     feature_enabled,
 )
-from pico_orchestrator.usage_hook import use_entry_of
+from pico_orchestrator.usage_hook import use_entry_of, valid_entry
 
 from app.settings import Settings, get_settings
 
@@ -51,6 +51,10 @@ REGISTERED_SCOPES = frozenset(
 __all__ = ["allowance_millipoints", "feature_enabled"]
 BILL_TO_SCHOOL = "school"
 BILL_TO_MEMBER = "member"
+# edu-core#5598 (owner 11-14「每次调用必须同时带功能名和账别，缺一个就拒绝」): an
+# edu ticket's ``bill`` claim, from edu's AI feature table (aiFeatures.js). Marking
+# books to the school like school runs; its lane tag stays ``grading``.
+BILL_CLAIMS = {"member": BILL_TO_MEMBER, "school": BILL_TO_SCHOOL, "grading": BILL_TO_SCHOOL}
 # Persisted fallback ledger key. Rename only with a data migration; normal
 # LibreChat requests replace it with the authenticated membership header.
 LEGACY_PROXY_MEMBERSHIP_ID = "nextchat-user"
@@ -101,6 +105,10 @@ class Principal:
     def bill_to(self) -> str:
         if self.membership_id == STEWARD_PUBLIC_MEMBERSHIP_ID:
             return BILL_TO_SCHOOL
+        bill = BILL_CLAIMS.get(str((self.raw or {}).get("bill") or ""))
+        if bill:
+            return bill
+        # Pico's own principals (LibreChat proxy, automations, auto-land) carry no ticket.
         return bill_to_from_scopes(self.scopes)
 
 
@@ -110,11 +118,20 @@ def issue_test_token(
     membership_id: str,
     scopes: list[str] | None = None,
     settings: Settings | None = None,
+    entry: str = "sidebar.test",
+    bill: str | None = None,
 ) -> str:
-    """Phase 1 test issuer — same claim shape as edu Phase 3 issuer."""
+    """Phase 1 test issuer — same claim shape as edu Phase 3 issuer (entry + bill, #5598)."""
     s = settings or get_settings()
     now = datetime.now(UTC)
     exp = now + timedelta(seconds=s.pico_jwt_ttl_seconds)
+    scopes = scopes or ["ai:run", "ai:read", "ai:confirm"]
+    if bill is None:
+        bill = (
+            "grading"
+            if EXAM_GRADING_SCOPE in scopes
+            else "school" if SCHOOL_RUN_SCOPE in scopes else "member"
+        )
     payload = {
         "iss": s.pico_jwt_iss,
         "aud": s.pico_jwt_aud,
@@ -122,8 +139,10 @@ def issue_test_token(
         "exp": int(exp.timestamp()),
         "school_id": school_id,
         "membership_id": membership_id,
-        "scopes": scopes or ["ai:run", "ai:read", "ai:confirm"],
+        "scopes": scopes,
         "sub": f"{school_id}:{membership_id}",
+        "entry": entry,
+        "bill": bill,
     }
     return jwt.encode(payload, s.pico_jwt_secret, algorithm="HS256")
 
@@ -214,6 +233,29 @@ def _decode_with_key(
     return jwt.decode(token, key, **kwargs)
 
 
+def _require_entry_and_bill(data: dict[str, Any], scopes: list[str]) -> None:
+    """Every ticket names its feature (``entry``) and its bill; the bill must match the scopes.
+
+    edu-core#5598: no more inferring the payer from scopes or defaulting to the member.
+    school / grading need ``ai:school-run``; only grading carries ``ai:exam-grading``.
+    """
+    problem = ""
+    bill = data.get("bill")
+    if not valid_entry(data.get("entry")):
+        problem = "entry must be <place>.<source> from edu's AI feature table"
+    elif bill not in BILL_CLAIMS:
+        problem = "bill must be member | school | grading"
+    elif (SCHOOL_RUN_SCOPE in scopes) != (bill != "member") or (
+        EXAM_GRADING_SCOPE in scopes
+    ) != (bill == "grading"):
+        problem = f"bill {bill} does not match scopes"
+    if problem:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "auth.invalid", "message": problem},
+        )
+
+
 def _principal_from_claims(data: dict[str, Any]) -> Principal:
     school_id = data.get("school_id")
     membership_id = data.get("membership_id")
@@ -265,6 +307,7 @@ def _principal_from_claims(data: dict[str, Any]) -> Principal:
                 "message": f"unknown scopes: {sorted(unknown_scopes)}",
             },
         )
+    _require_entry_and_bill(data, scopes)
     return Principal(
         school_id=school_id,
         membership_id=membership_id,

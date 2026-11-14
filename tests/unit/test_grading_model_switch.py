@@ -14,15 +14,20 @@ ENV = {"PICO_OCR_MODEL": "gemini-3.8-flash", "DEEPSEEK_MODEL": "deepseek-flash"}
 
 
 def test_effective_layers_school_over_default_over_env() -> None:
-    assert gm.effective({}, "g26", ENV) == {"ocr": "gemini-3.8-flash", "score": "deepseek-flash", "score2": "deepseek-flash"}
+    assert gm.effective({}, "g26", ENV) == {"ocr": "gemini-3.8-flash", "score": "deepseek-flash"}
     data = {"default": {"score": "grok-x"}, "schools": {"g26": {"score": "gemini-3.8-flash"}}}
     assert gm.effective(data, "g26", ENV)["score"] == "gemini-3.8-flash"
     assert gm.effective(data, "fengxi", ENV)["score"] == "grok-x"
     assert gm.effective(data, None, ENV)["ocr"] == "gemini-3.8-flash"
-    # edu-core#4576 ⑨c: score2 unset follows the effective scorer; set at default it applies to every school.
-    assert gm.effective(data, "g26", ENV)["score2"] == "gemini-3.8-flash"
-    data["default"]["score2"] = "deepseek-flash"
-    assert gm.effective(data, "g26", ENV)["score2"] == "deepseek-flash"
+
+
+def test_write_drops_retired_score2(monkeypatch) -> None:
+    """edu-core#5598: marking scores once; a left-over score2 key goes with the next write."""
+    sent = {}
+    monkeypatch.setattr(gm.subprocess, "run", lambda *a, **k: sent.update(k))
+    gm.write_config({"default": {"score": "gemini-3.8-flash", "score2": "deepseek-flash"},
+                     "schools": {"g26": {"score2": "x", "ocr": "y"}}})
+    assert gm.json.loads(sent["input"]) == {"default": {"score": "gemini-3.8-flash"}, "schools": {"g26": {"ocr": "y"}}}
 
 
 def _fake(results: dict[tuple[str, str], bool]):

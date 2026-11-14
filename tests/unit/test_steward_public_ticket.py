@@ -10,6 +10,7 @@ from pathlib import Path
 
 import jwt
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,7 +40,9 @@ def _settings() -> Settings:
     )
 
 
-def _edu_ticket(*, scopes: list[str], membership_id: str | None = None) -> str:
+def _edu_ticket(
+    *, scopes: list[str], membership_id: str | None = None, bill: str | None = None
+) -> str:
     now = int(time.time())
     payload = {
         "iss": "edu-core",
@@ -48,6 +51,8 @@ def _edu_ticket(*, scopes: list[str], membership_id: str | None = None) -> str:
         "exp": now + 600,
         "school_id": "school-a",
         "scopes": scopes,
+        "entry": "brain.steward-public" if "ai:steward-public" in scopes else "sidebar.propose",
+        "bill": bill or ("school" if "ai:school-run" in scopes else "member"),
     }
     if membership_id is not None:
         payload["membership_id"] = membership_id
@@ -66,9 +71,15 @@ def test_steward_ticket_without_membership_books_per_school() -> None:
     assert issue_edu_write_token(p, s) is None
 
 
-def test_steward_ticket_bills_school_even_without_school_run_scope() -> None:
-    p = decode_token(_edu_ticket(scopes=["ai:run", "ai:steward-public"]), _settings())
-    assert p.bill_to == "school"
+def test_steward_ticket_never_bills_a_member() -> None:
+    """edu-core#5598: the patrol ticket says bill school and carries ai:school-run, else refused."""
+    for scopes, bill in [
+        (["ai:run", "ai:steward-public"], "school"),
+        (STEWARD_SCOPES, "member"),
+    ]:
+        with pytest.raises(HTTPException) as exc:
+            decode_token(_edu_ticket(scopes=scopes, bill=bill), _settings())
+        assert exc.value.status_code == 401
 
 
 def test_rebuilt_principal_on_steward_slot_is_still_the_patrol() -> None:

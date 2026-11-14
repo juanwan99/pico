@@ -30,6 +30,8 @@ def _edu_token(settings: Settings, *, scopes: list[str] | None = None) -> str:
         "exp": now + 600,
         "school_id": "school-a",
         "membership_id": "m-edu",
+        "entry": "sidebar.propose",
+        "bill": "member",
     }
     if scopes is not None:
         payload["scopes"] = scopes
