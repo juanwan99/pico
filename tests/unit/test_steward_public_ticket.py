@@ -75,6 +75,7 @@ def test_steward_ticket_never_bills_a_member() -> None:
     """edu-core#5598: the patrol ticket says bill school and carries ai:school-run, else refused."""
     for scopes, bill in [
         (["ai:run", "ai:steward-public"], "school"),
+        (["ai:run", "ai:steward-public"], "member"),
         (STEWARD_SCOPES, "member"),
     ]:
         with pytest.raises(HTTPException) as exc:

@@ -237,7 +237,8 @@ def _require_entry_and_bill(data: dict[str, Any], scopes: list[str]) -> None:
     """Every ticket names its feature (``entry``) and its bill; the bill must match the scopes.
 
     edu-core#5598: no more inferring the payer from scopes or defaulting to the member.
-    school / grading need ``ai:school-run``; only grading carries ``ai:exam-grading``.
+    school / grading need ``ai:school-run``; only grading carries ``ai:exam-grading``;
+    the patrol (``ai:steward-public``) never bills a member.
     """
     problem = ""
     bill = data.get("bill")
@@ -245,9 +246,11 @@ def _require_entry_and_bill(data: dict[str, Any], scopes: list[str]) -> None:
         problem = "entry must be <place>.<source> from edu's AI feature table"
     elif bill not in BILL_CLAIMS:
         problem = "bill must be member | school | grading"
-    elif (SCHOOL_RUN_SCOPE in scopes) != (bill != "member") or (
-        EXAM_GRADING_SCOPE in scopes
-    ) != (bill == "grading"):
+    elif (
+        (SCHOOL_RUN_SCOPE in scopes) != (bill != "member")
+        or (EXAM_GRADING_SCOPE in scopes) != (bill == "grading")
+        or (STEWARD_PUBLIC_SCOPE in scopes and bill == "member")
+    ):
         problem = f"bill {bill} does not match scopes"
     if problem:
         raise HTTPException(
