@@ -413,9 +413,11 @@ def _effective_max_tokens(
 ) -> int:
     # json_only callers (edu sidebar extraction) rarely send max_tokens; 2048
     # cut their JSON mid-array (#1116). A request that turns thinking on gets the
-    # ceiling: thinking tokens count against max_tokens, and at 8192 edu 细则生成 /
+    # doubled room: thinking tokens count against max_tokens, and at 8192 edu 细则生成 /
     # 解题分析 thought the whole budget away and came back empty (edu-core#5603).
-    default = cap if thinking else min(8192 if json_only else 2048, cap)
+    # Not the ceiling: a 16k gemini miss plus the deepseek fallback still has to fit
+    # edu's 240 s wait (picoJson), or the cancelled run is billed with no tokens.
+    default = min(16384 if thinking else 8192 if json_only else 2048, cap)
     return min(requested if requested and requested > 0 else default, cap)
 
 
