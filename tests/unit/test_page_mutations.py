@@ -125,6 +125,23 @@ def test_direct_hand_says_no_confirm() -> None:
     assert line("not json") == "已拟一条改动，等你确认"
 
 
+def test_required_params_sent_back_to_fill() -> None:
+    # edu-core#5680：跳页手标了 required=["tab"]，模型只写 reason 时退回，同一轮补齐再提
+    hands = normalize_affordances(
+        [{"id": "nav:go", "label": "去某页", "writable": True, "direct": True, "required": ["tab"]}, *AFFORDANCES]
+    )
+    book = PageMutationBook(affordances=hands)
+    for params in ({"reason": "去作业页看昨天的登记"}, {"tab": " ", "query": {"date": "yesterday"}}):
+        with pytest.raises(ToolError) as miss:
+            book.propose({"affordance_id": "nav:go", "params": params})
+        assert miss.value.code == "page.params_required" and "tab" in str(miss.value)
+    assert book.mutations == []
+    book.propose({"affordance_id": "nav:go", "params": {"tab": "homework", "query": {"date": "yesterday"}}})
+    # 没标 required 的手照旧
+    book.propose({"affordance_id": "cell:c1:mon:3"})
+    assert len(book.mutations) == 2
+
+
 def test_change_proposal_shape_matches_handoff_contract() -> None:
     book = PageMutationBook(affordances=normalize_affordances(AFFORDANCES), page_title="排课工作台")
     assert book.change_proposal() is None
