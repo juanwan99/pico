@@ -626,7 +626,8 @@ async def _run_true_pi_once(
                 membership_id=member_key,
             )
             mem_path = memory_extension_path()
-            if mem_dir is not None and mem_path.is_file():
+            # Lesson box (edu-core#5685) is school-billed: no teacher memory.
+            if mem_dir is not None and mem_path.is_file() and not caps.sidebar_box:
                 extra_ext.append(mem_path)
             plan_path = plan_mode_extension_path()
             if plan_path.is_file() and want_plan_mode_extension(plan_on=plan_on):

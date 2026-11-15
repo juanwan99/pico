@@ -108,3 +108,22 @@ def test_stream_routes_box_text_to_progress() -> None:
     src = (ROOT / "services" / "api" / "app" / "openai_compat.py").read_text(encoding="utf-8")
     assert src.count('("progress" if box_turn else "delta", text)') == 2
     assert 'yield chunk({}, extra={"pico_progress": str(payload)})' in src
+    # Status chrome (「正在准备…」/ heartbeat) rides the rail line too, never the error content.
+    status = src[src.index('elif kind == "status":') : src.index('elif kind == "error":')]
+    assert "if box_turn:" in status and "pico_progress" in status
+
+
+def test_box_turn_fails_loud_without_its_files() -> None:
+    """Source lock: the draft + cw only reach attachments/ in the materials block."""
+    src = (ROOT / "services" / "api" / "app" / "openai_compat.py").read_text(encoding="utf-8")
+    tail = src[src.index("inline_workspace_files(body.messages)") :]
+    handler = tail[tail.index("except Exception:") : tail.index('logger.exception("named school')]
+    assert "if box_turn:" in handler and "raise" in handler
+
+
+def test_box_turn_does_not_mount_teacher_memory() -> None:
+    """Source lock: school-billed lesson box gets no pi-mem tools or /memory."""
+    src = (
+        ROOT / "services" / "orchestrator" / "pico_orchestrator" / "true_pi" / "runtime.py"
+    ).read_text(encoding="utf-8")
+    assert "mem_path.is_file() and not caps.sidebar_box" in src

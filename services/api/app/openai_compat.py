@@ -1873,6 +1873,9 @@ async def chat_completions(
 
             prompt = inject_conversation_uploads(prompt, upload_items)
     except Exception:
+        if box_turn:
+            # The draft + cw only reach attachments/ here: no box without them.
+            raise
         logger.exception("named school materials inject failed")
     teacher_extra = day_use_block or ""
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
@@ -2884,7 +2887,11 @@ async def chat_completions(
                 elif kind == "status":
                     # Buffer status chrome; only flush on the failure path where
                     # no product text ever arrives (user still sees progress).
-                    if not saw_text:
+                    # Box turn: content is the answer only, chrome rides the rail line.
+                    if box_turn:
+                        last_wire = time.monotonic()
+                        yield chunk({}, extra={"pico_progress": f"\n{payload}\n"})
+                    elif not saw_text:
                         pending_status.append(str(payload))
                 elif kind == "error":
                     if not saw_text and pending_status:
