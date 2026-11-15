@@ -54,6 +54,9 @@ _MAX_EXTRACT_TEXT = 100_000
 _UNBOUND_UPLOAD_WINDOW = timedelta(minutes=3)
 _UNBOUND_CLUSTER = timedelta(seconds=90)
 _FILE_PART_TYPES = frozenset({"file", "input_file", "document"})
+# Meili runs its tasks one at a time: queue background projections so each delete / upsert
+# only waits on its own task and they hold one worker thread, not the shared pool (pico#1406 review).
+_PROJECT_LOCK = asyncio.Semaphore(1)
 
 
 class FileJsonIn(BaseModel):
@@ -775,14 +778,15 @@ async def _project_after_persist(
     (edu-core#5619: a two-line csv took 110 s in the sidebar). Tracked so a deploy drains it."""
     for artifact_id, kind_, body in projections:
         try:
-            await asyncio.to_thread(
-                project_material_artifact,
-                principal,
-                artifact_id=artifact_id,
-                title=title,
-                kind=kind_,
-                content=body,
-            )
+            async with _PROJECT_LOCK:
+                await asyncio.to_thread(
+                    project_material_artifact,
+                    principal,
+                    artifact_id=artifact_id,
+                    title=title,
+                    kind=kind_,
+                    content=body,
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning("meili project after file persist failed: %s", type(exc).__name__)
 

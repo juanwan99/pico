@@ -1056,3 +1056,40 @@ def test_upload_projects_to_meili_after_commit_off_the_loop(client: TestClient, 
     assert projected.wait(5)
     assert seen and all(off and free for _, off, free in seen), seen
     assert {k for k, _, _ in seen} >= {"kb_text"}
+
+
+def test_background_projections_queue_one_at_a_time(client: TestClient, monkeypatch) -> None:
+    """pico#1406 review: Meili runs tasks one at a time, so uploads in a row must not
+    project side by side (later deletes would time out and hog the shared thread pool)."""
+    import threading
+    import time
+
+    from app import edu_files
+
+    lock = threading.Lock()
+    state = {"now": 0, "peak": 0, "done": 0}
+
+    def fake_project(_principal, *, artifact_id, title, kind, content):
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time.sleep(0.05)
+        with lock:
+            state["now"] -= 1
+            state["done"] += 1
+        return True
+
+    monkeypatch.setattr(edu_files, "project_material_artifact", fake_project)
+    for i in range(3):
+        raw = _xlsx_bytes([["班", "周课时"], [f"{i}班", "5"]])
+        res = client.post(
+            "/v1/files",
+            headers={"authorization": f"Bearer {_token()}"},
+            json={"filename": f"课时{i}.xlsx", "content_b64": base64.b64encode(raw).decode("ascii")},
+        )
+        assert res.status_code == 200, res.text
+    deadline = time.monotonic() + 5
+    while state["done"] < 3 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert state["done"] >= 3, state
+    assert state["peak"] == 1, state
