@@ -408,10 +408,16 @@ def _coerce_default_model(model: str, settings: Settings) -> str:
     return model
 
 
-def _effective_max_tokens(requested: int | None, cap: int, *, json_only: bool = False) -> int:
+def _effective_max_tokens(
+    requested: int | None, cap: int, *, json_only: bool = False, thinking: bool = False
+) -> int:
     # json_only callers (edu sidebar extraction) rarely send max_tokens; 2048
-    # cut their JSON mid-array (#1116).
-    default = min(8192 if json_only else 2048, cap)
+    # cut their JSON mid-array (#1116). A request that turns thinking on gets the
+    # doubled room: thinking tokens count against max_tokens, and at 8192 edu 细则生成 /
+    # 解题分析 thought the whole budget away and came back empty (edu-core#5603).
+    # Not the ceiling: a 16k gemini miss plus the deepseek fallback still has to fit
+    # edu's 240 s wait (picoJson), or the cancelled run is billed with no tokens.
+    default = min(16384 if thinking else 8192 if json_only else 2048, cap)
     return min(requested if requested and requested > 0 else default, cap)
 
 
@@ -2033,7 +2039,7 @@ async def chat_completions(
         settings.pico_run_short_max_tokens if use_direct else settings.pico_run_max_tokens
     )
     effective_max_tokens = _effective_max_tokens(
-        body.max_tokens, token_ceiling, json_only=json_only
+        body.max_tokens, token_ceiling, json_only=json_only, thinking=thinking_override is True
     )
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
