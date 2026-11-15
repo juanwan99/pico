@@ -1009,17 +1009,22 @@ def test_native_input_file_pdf_rasters_to_images() -> None:
 
 
 def test_upload_projects_to_meili_after_commit_off_the_loop(client: TestClient, monkeypatch) -> None:
-    """#1135: Meili HTTP never runs on the event loop or under the SQLite write lock."""
+    """#1135: Meili HTTP never runs on the event loop or under the SQLite write lock.
+    edu-core#5619: the upload answers before the projection lands (each Meili write waits ~50 s)."""
     import asyncio
     import os
     import sqlite3
+    import threading
 
     from app import edu_files
 
     db_file = os.environ["PICO_DATABASE_URL"].split(":///", 1)[1]
     seen: list[tuple[str, bool, bool]] = []
+    answered = threading.Event()
+    projected = threading.Event()
 
     def fake_project(_principal, *, artifact_id, title, kind, content):
+        assert answered.wait(5), "upload waited for the Meili projection"
         try:
             asyncio.get_running_loop()
             off_loop = False
@@ -1035,6 +1040,8 @@ def test_upload_projects_to_meili_after_commit_off_the_loop(client: TestClient, 
         finally:
             conn.close()
         seen.append((kind, off_loop, free))
+        if kind != "kb_text":
+            projected.set()
         return True
 
     monkeypatch.setattr(edu_files, "project_material_artifact", fake_project)
@@ -1045,5 +1052,7 @@ def test_upload_projects_to_meili_after_commit_off_the_loop(client: TestClient, 
         json={"filename": "课时.xlsx", "content_b64": base64.b64encode(raw).decode("ascii")},
     )
     assert res.status_code == 200, res.text
+    answered.set()
+    assert projected.wait(5)
     assert seen and all(off and free for _, off, free in seen), seen
     assert {k for k, _, _ in seen} >= {"kb_text"}

@@ -761,19 +761,30 @@ async def persist_edu_file(
             session.add(excerpt)
         await session.commit()
     projections.append((src.id, artifact_kind, data if artifact_kind == KIND_SRC else stored))
+    from app.run_service import _track_inflight
+
+    _track_inflight(asyncio.create_task(_project_after_persist(principal, filename[:512], projections)))
+    return src.id
+
+
+async def _project_after_persist(
+    principal: Principal, title: str, projections: list[tuple[str, str, Any]]
+) -> None:
+    """Meili projection in the background: each write waits for Meili's task to land
+    (~50 s per file at 73k chunks x 2048 dims), so the upload must not wait on it
+    (edu-core#5619: a two-line csv took 110 s in the sidebar). Tracked so a deploy drains it."""
     for artifact_id, kind_, body in projections:
         try:
             await asyncio.to_thread(
                 project_material_artifact,
                 principal,
                 artifact_id=artifact_id,
-                title=filename[:512],
+                title=title,
                 kind=kind_,
                 content=body,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("meili project after file persist failed: %s", type(exc).__name__)
-    return src.id
 
 
 async def load_edu_file(principal: Principal, file_id: str) -> dict[str, Any] | None:
