@@ -59,7 +59,8 @@ def test_tool_call_progress_stays_out_of_product_bubble() -> None:
         if stripped.startswith("if edu_sidebar:"):
             gated = True
             continue
-        if 'q.put(("delta"' not in stripped:
+        # _sidebar_step: delta on the school rail, pico_progress in a box turn.
+        if 'q.put(("delta"' not in stripped and "q.put(_sidebar_step(" not in stripped:
             continue
         saw_delta = True
         assert gated, "tool.call must not write the workbench bubble"
