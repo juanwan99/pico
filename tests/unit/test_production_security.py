@@ -144,6 +144,10 @@ def test_requested_tokens_are_clamped_to_global_cap() -> None:
     assert _effective_max_tokens(None, 32_000, json_only=True) == 8192
     assert _effective_max_tokens(None, 4096, json_only=True) == 4096
     assert _effective_max_tokens(300, 32_000, json_only=True) == 300
+    # edu-core#5603: thinking on → room for the thinking, not 8192
+    assert _effective_max_tokens(None, 32_000, json_only=True, thinking=True) == 32_000
+    assert _effective_max_tokens(None, 32_000, thinking=True) == 32_000
+    assert _effective_max_tokens(4000, 32_000, json_only=True, thinking=True) == 4000
 
 
 async def test_chat_admission_enforces_concurrency_and_rpm() -> None:
