@@ -396,12 +396,16 @@ def thinking_extra_body(
     model: str | None,
     *,
     thinking: bool | None = None,
+    effort: str | None = None,
 ) -> dict[str, object]:
     """Honor Pico fast/deep thinking on the wire.
 
     DeepSeek v4: ``thinking.type`` disabled or the stream is HTTP 200 empty.
     Gemini 3.8: do **not** send DeepSeek's thinking object (empty content);
     both lanes use ``reasoning_effort``: fast = low, deep = high (pico#1320).
+    A thinking request that names its level (``effort``) gets that level on Gemini:
+    edu 细则生成 asks medium, sent as high it thought 15.7k of 16k and the JSON
+    was cut; medium thinks ~6k and finishes (edu-core#5603).
     """
     policy = runtime_policy_for_model(model)
     if thinking is None:
@@ -413,8 +417,10 @@ def thinking_extra_body(
         return {"thinking": {"type": "enabled" if thinking else "disabled"}}
     if is_gemini_model(backend) or is_gemini_model(model):
         # pico#1320 (owner 10-16): fast lane thinks lightly, deep lane thinks hard.
-        effort = "high" if thinking else "low"
-        return {"reasoning_effort": effort, **gemini_thinking_wire(effort)}
+        level = str(effort or "").strip().lower()
+        if not thinking or level not in _GEMINI_THINKING_LEVEL or level == "none":
+            level = "high" if thinking else "low"
+        return {"reasoning_effort": level, **gemini_thinking_wire(level)}
     return {"thinking": {"type": "enabled" if thinking else "disabled"}}
 
 
@@ -759,11 +765,14 @@ async def stream_chat(
     system: str | None = None,
     model: str | None = None,
     thinking: bool | None = None,
+    effort: str | None = None,
     usage_out: dict | None = None,
     finish_out: dict | None = None,
     images: list[dict] | None = None,
 ) -> AsyncIterator[str]:
     """Stream assistant text deltas from the real model API (token-level).
+
+    ``effort``: the request's named thinking level, honored on Gemini (thinking_extra_body).
 
     ``finish_out["finish_reason"]`` gets the upstream finish (e.g. ``length``).
 
@@ -791,7 +800,7 @@ async def stream_chat(
 
     messages = _messages_for_chat(prompt, history=history, system=system, images=images)
     model_id = resolve_model_id(model, cfg)
-    extra_body = thinking_extra_body(model, thinking=thinking)
+    extra_body = thinking_extra_body(model, thinking=thinking, effort=effort)
 
     async def _iter_chat_completions(
         provider: ProviderConfig, mid: str, think: bool | None
@@ -804,7 +813,7 @@ async def stream_chat(
             "max_tokens": max_tokens,
             # A backup model gets its own wire (Gemini must not see DeepSeek's).
             "extra_body": extra_body if mid == model_id else thinking_extra_body(
-                mid, thinking=think
+                mid, thinking=think, effort=effort
             ),
             "stream_options": {"include_usage": True},
             "user": upstream.caller("direct"),
