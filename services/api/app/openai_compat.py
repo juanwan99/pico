@@ -2072,7 +2072,11 @@ async def chat_completions(
             envelope = _mutations_envelope(page_affordances, mutations)
             if envelope:
                 payload.update(envelope)
-            if replay_key and payload["choices"][0]["finish_reason"] == "stop":
+            if (
+                replay_key
+                and payload["choices"][0]["finish_reason"] == "stop"
+                and json_only_replay.holds_json(text)
+            ):
                 json_only_replay.put(replay_key, payload)
             return payload
 

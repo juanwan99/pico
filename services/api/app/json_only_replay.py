@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 import time
 from collections import OrderedDict
 from typing import Any
@@ -35,6 +36,33 @@ def replay_key(*, school_id: str, membership_id: str, **model_input: Any) -> str
         default=str,
     )
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+_FENCE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
+
+
+def holds_json(text: str) -> bool:
+    """The answer carries a parseable JSON object / array (fenced or bare).
+
+    A model that slips a stray token into its JSON (edu-core#5619: ``… prisoners]}``)
+    still finishes with "stop"; keeping that answer would hand the same broken
+    reply to every re-send for 10 minutes instead of asking again.
+    """
+    raw = str(text or "").strip()
+    fence = _FENCE.search(raw)
+    blob = fence.group(1) if fence else raw
+    starts = [i for i in (blob.find("{"), blob.find("[")) if i >= 0]
+    if not starts:
+        return False
+    start = min(starts)
+    end = blob.rfind("}" if blob[start] == "{" else "]")
+    if end <= start:
+        return False
+    try:
+        json.loads(blob[start : end + 1])
+    except ValueError:  # swallow-ok: 解析不出就是不可回放，照常不存
+        return False
+    return True
 
 
 def get(key: str) -> dict[str, Any] | None:

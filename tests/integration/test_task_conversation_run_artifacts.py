@@ -1548,7 +1548,7 @@ async def test_json_only_replay_skips_header_only_and_failures(tmp_path, monkeyp
     """#1204: exam grading re-runs on purpose; a failed answer is never replayed."""
     settings = await _fresh_db(tmp_path, monkeypatch, "json-replay-skip.db")
     calls: list[str] = []
-    replies = iter(["", '{"ok":true}', '{"ok":true}', '{"ok":true}'])
+    replies = iter(["", '{"ok":true}', '{"ok":true}', '{"ok":true}', '{"items":[1] prisoners]}', '{"items":[1]}', '{"items":[1]}'])
 
     async def scripted_stream(*_args, **_kwargs) -> AsyncIterator[str]:
         calls.append("x")
@@ -1567,6 +1567,15 @@ async def test_json_only_replay_skips_header_only_and_failures(tmp_path, monkeyp
     again = await _json_only_call(settings, grading)
     assert not isinstance(again, JSONResponse)
     assert len(calls) == 4
+
+    # edu-core#5619: an answer that is not parseable JSON is asked again, not replayed
+    broken = '{"output":"json_only_no_files","asked":"建议"}'
+    await _json_only_call(settings, broken)
+    fixed = await _json_only_call(settings, broken)
+    assert fixed["choices"][0]["message"]["content"] == '{"items":[1]}'
+    replayed = await _json_only_call(settings, broken)
+    assert isinstance(replayed, JSONResponse) and replayed.headers["X-Pico-Replay"] == "1"
+    assert len(calls) == 6
 
 
 @pytest.mark.asyncio
