@@ -144,3 +144,10 @@ def test_next_run_starts_clean_and_catalog_lookups_do_not_count(tmp_path: Path) 
         ],
     )
     assert ends == [True]
+
+
+@needs_node
+def test_jump_without_a_tab_is_not_a_jump(tmp_path: Path) -> None:
+    # edu-core#5680：只写了 reason 的跳页会被退回补齐，不补「这就去」、不收尾
+    bare = {"affordance_id": "nav:go", "label": "打开荣誉墙", "params": {"reason": "打开荣誉墙"}}
+    assert _run(tmp_path, [["start"], ["say", [_call(bare)]], ["call", "propose_page_mutation", bare]]) == [None, False]
