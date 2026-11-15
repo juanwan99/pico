@@ -62,6 +62,7 @@ def test_is_teacher_material() -> None:
 def test_pico_write_is_a_draft_and_upload_is_material(ledger, monkeypatch) -> None:
     from app import edu_files
     from app.artifact_store import LedgerArtifactStore, pico_draft_ids
+    from app.run_service import drain_inflight_runs
 
     projected: list[str] = []
 
@@ -81,6 +82,7 @@ def test_pico_write_is_a_draft_and_upload_is_material(ledger, monkeypatch) -> No
             data="春季学期 3 月 1 日开学".encode(),
             extract={"kind": "md", "text": "春季学期 3 月 1 日开学", "status": "ok"},
         )
+        await drain_inflight_runs()  # projection runs in the background (edu-core#5619)
         return str(made["artifact_id"]), up
 
     made_id, up_id = asyncio.run(_go())

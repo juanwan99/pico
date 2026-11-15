@@ -1009,17 +1009,22 @@ def test_native_input_file_pdf_rasters_to_images() -> None:
 
 
 def test_upload_projects_to_meili_after_commit_off_the_loop(client: TestClient, monkeypatch) -> None:
-    """#1135: Meili HTTP never runs on the event loop or under the SQLite write lock."""
+    """#1135: Meili HTTP never runs on the event loop or under the SQLite write lock.
+    edu-core#5619: the upload answers before the projection lands (each Meili write waits ~50 s)."""
     import asyncio
     import os
     import sqlite3
+    import threading
 
     from app import edu_files
 
     db_file = os.environ["PICO_DATABASE_URL"].split(":///", 1)[1]
     seen: list[tuple[str, bool, bool]] = []
+    answered = threading.Event()
+    projected = threading.Event()
 
     def fake_project(_principal, *, artifact_id, title, kind, content):
+        assert answered.wait(5), "upload waited for the Meili projection"
         try:
             asyncio.get_running_loop()
             off_loop = False
@@ -1035,6 +1040,8 @@ def test_upload_projects_to_meili_after_commit_off_the_loop(client: TestClient, 
         finally:
             conn.close()
         seen.append((kind, off_loop, free))
+        if kind != "kb_text":
+            projected.set()
         return True
 
     monkeypatch.setattr(edu_files, "project_material_artifact", fake_project)
@@ -1045,5 +1052,44 @@ def test_upload_projects_to_meili_after_commit_off_the_loop(client: TestClient, 
         json={"filename": "课时.xlsx", "content_b64": base64.b64encode(raw).decode("ascii")},
     )
     assert res.status_code == 200, res.text
+    answered.set()
+    assert projected.wait(5)
     assert seen and all(off and free for _, off, free in seen), seen
     assert {k for k, _, _ in seen} >= {"kb_text"}
+
+
+def test_background_projections_queue_one_at_a_time(client: TestClient, monkeypatch) -> None:
+    """pico#1406 review: Meili runs tasks one at a time, so uploads in a row must not
+    project side by side (later deletes would time out and hog the shared thread pool)."""
+    import threading
+    import time
+
+    from app import edu_files
+
+    lock = threading.Lock()
+    state = {"now": 0, "peak": 0, "done": 0}
+
+    def fake_project(_principal, *, artifact_id, title, kind, content):
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time.sleep(0.05)
+        with lock:
+            state["now"] -= 1
+            state["done"] += 1
+        return True
+
+    monkeypatch.setattr(edu_files, "project_material_artifact", fake_project)
+    for i in range(3):
+        raw = _xlsx_bytes([["班", "周课时"], [f"{i}班", "5"]])
+        res = client.post(
+            "/v1/files",
+            headers={"authorization": f"Bearer {_token()}"},
+            json={"filename": f"课时{i}.xlsx", "content_b64": base64.b64encode(raw).decode("ascii")},
+        )
+        assert res.status_code == 200, res.text
+    deadline = time.monotonic() + 5
+    while state["done"] < 3 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert state["done"] >= 3, state
+    assert state["peak"] == 1, state
