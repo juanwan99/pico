@@ -476,7 +476,8 @@ async def _run_true_pi_once(
     gateway = gateway.restricted_to(allowed)
     # Caller asked for no Pico tools (edu json calls, #1195): one model answer,
     # so Pi retries once, no same-session resume, and a short wall that fails.
-    toolless = caps.allowed_tools is not None and not allowed
+    # A box turn still has Pi's own hands (edu-core#5685), so it is not toolless.
+    toolless = caps.allowed_tools is not None and not allowed and not box_mode
     if toolless:
         from dataclasses import replace as _dc_replace_toolless
 
@@ -625,7 +626,8 @@ async def _run_true_pi_once(
                 membership_id=member_key,
             )
             mem_path = memory_extension_path()
-            if mem_dir is not None and mem_path.is_file():
+            # Lesson box (edu-core#5685) is school-billed: no teacher memory.
+            if mem_dir is not None and mem_path.is_file() and not caps.sidebar_box:
                 extra_ext.append(mem_path)
             plan_path = plan_mode_extension_path()
             if plan_path.is_file() and want_plan_mode_extension(plan_on=plan_on):

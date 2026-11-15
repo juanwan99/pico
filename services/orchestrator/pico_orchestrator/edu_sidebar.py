@@ -65,6 +65,16 @@ EDU_SIDEBAR_DEFAULT_TOOLS: tuple[str, ...] = (
 )
 EDU_SIDEBAR_ALLOWED_TOOLS = frozenset(EDU_SIDEBAR_DEFAULT_TOOLS)
 
+# The one sidebar that works in the workspace box (edu-core#5685, owner 11-15):
+# the lesson-prep rail. Pi's own bash / read / write / edit there, no Pico hands
+# at all. The entry rides the edu-signed ticket, so a page cannot ask for it.
+SIDEBAR_BOX_ENTRIES = frozenset({"sidebar.lesson-chat"})
+
+
+def sidebar_box(*, edu_sidebar: bool, json_only: bool, entry: str) -> bool:
+    """A marked sidebar Pi turn whose ticket entry is a box entry."""
+    return bool(edu_sidebar and not json_only and entry in SIDEBAR_BOX_ENTRIES)
+
 
 def sidebar_chat_only(*, edu_sidebar: bool, json_only: bool) -> bool:
     """json_only stays one-shot. Edu sidebar is not chat_only: it enters Pi.

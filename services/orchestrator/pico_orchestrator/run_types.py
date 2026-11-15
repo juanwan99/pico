@@ -59,6 +59,9 @@ class RunCaps:
     # edu sidebar Pi turn: no workspace box, so Pi's own bash / read / write /
     # edit stay off; only the school hands it was given (edu-core#5324).
     edu_sidebar: bool = False
+    # edu lesson-prep rail (edu-core#5685): a sidebar turn that does get the box,
+    # with no Pico hands. Keeps thinking; the workbench hint does not apply.
+    sidebar_box: bool = False
     # Per-run spend cap in millipoints (#1104 IN3). 0 = off. Priced by
     # ``millipoints_for_usage(usage, model)`` which pico-api supplies from its
     # rate card; the orchestrator never carries prices itself. Hitting the cap

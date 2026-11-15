@@ -146,8 +146,13 @@ def resolve_visible_tools(allowed_tools: list[str] | tuple[str, ...] | None) -> 
     return _intersect_gateway(allowed_tools)
 
 
+# The bridge reads an empty / unset list as "every gateway tool". No tools must
+# still name something, and nothing is called "-".
+NO_VISIBLE_TOOLS = "-"
+
+
 def visible_tools_env(names: Iterable[str]) -> str:
-    return ",".join(_intersect_gateway(names))
+    return ",".join(_intersect_gateway(names)) or NO_VISIBLE_TOOLS
 
 
 def skill_catalog_block() -> str:

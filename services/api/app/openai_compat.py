@@ -22,6 +22,7 @@ from pico_orchestrator.edu_sidebar import (
     inject_web_hits,
     is_json_only_propose,
     shape_web_hits,
+    sidebar_box,
 )
 from pico_orchestrator.gateway import ToolError as ChannelToolError
 from pico_orchestrator.grading_models import enter_grading
@@ -959,6 +960,38 @@ def _caps_with_sidebar_thinking(caps: Any, *, edu_sidebar: bool) -> Any:
     return _dc_replace(caps, thinking_on=False)
 
 
+def _caps_with_sidebar(caps: Any, *, edu_sidebar: bool, box_turn: bool) -> Any:
+    """A box turn reads its own progress line (edu-core#5685): it keeps thinking."""
+    if box_turn:
+        from dataclasses import replace as _dc_replace
+
+        return _dc_replace(caps, sidebar_box=True)
+    return _caps_with_sidebar_thinking(caps, edu_sidebar=edu_sidebar)
+
+
+def _require_box_turn(conversation_id: str | None, membership_id: str | None) -> None:
+    """The box keys its files and workspace by conversation; no runner, no box."""
+    from pico_orchestrator.true_pi.runner import runner_enabled
+
+    if not conversation_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "conversation_required", "message": "X-Conversation-Id required"},
+        )
+    if not runner_enabled(membership_id):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "runner.unavailable", "message": "工作区盒子没开，这一步现在做不了。"},
+        )
+
+
+def _sidebar_step(text: str, *, box_turn: bool) -> tuple[str, str]:
+    """A tool step line: rides `content` on the school rail, its own line in a box turn."""
+    if box_turn:
+        return ("progress", f"\n{text}\n")
+    return ("delta", f"{text}\n")
+
+
 def _caps_with_page_hands(
     caps: Any, page_affordances: list[dict[str, Any]] | None, page_title: str
 ) -> Any:
@@ -1337,6 +1370,7 @@ async def _run_and_collect(
     plan_on: bool = False,
     native_files: list | None = None,
     edu_sidebar: bool = False,
+    box_turn: bool = False,
     page_affordances: list[dict[str, Any]] | None = None,
     page_title: str = "",
     thinking_override: bool | None = None,
@@ -1367,7 +1401,7 @@ async def _run_and_collect(
     # Dual-mode: Pico 快速 / Pico 深度 set their own steps/tokens/thinking.
     caps = _caps_with_dual_mode(caps, model)
     caps = _caps_with_request_thinking(caps, thinking_override)
-    caps = _caps_with_sidebar_thinking(caps, edu_sidebar=edu_sidebar)
+    caps = _caps_with_sidebar(caps, edu_sidebar=edu_sidebar, box_turn=box_turn)
     caps = _caps_with_plan(caps, plan_on)
     caps = _caps_with_images(caps, images)
     # Landing gate: force min_artifacts into Pi so chat-only "done" cannot succeed.
@@ -1746,13 +1780,23 @@ async def chat_completions(
             or body.metadata.get("skillId")
         )
     json_only = is_json_only_propose(raw_prompt_with_skill, output_header=x_pico_output)
+    from pico_orchestrator.usage_hook import entry_of
+
+    # Lesson-prep rail (edu-core#5685): Pi works in the box with its own hands only.
+    box_turn = sidebar_box(
+        edu_sidebar=edu_sidebar, json_only=json_only, entry=entry_of(principal)
+    )
     thinking_override = _thinking_override(body.reasoning_effort)
     native_files: list = []
     request_tools = _normalize_allowed_tools(body.allowed_tools)
     if request_tools is None:
         request_tools = _normalize_allowed_tools(body.tools)
+    if box_turn:
+        request_tools = []
     plan_on = _request_plan_on(body, x_pico_plan)
     conversation_id = _conversation_id_from(body, x_conversation_id)
+    if box_turn:
+        _require_box_turn(conversation_id, principal.membership_id)
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
     workspace_id = _workspace_id_from(body, x_workspace_id)
     # T-HARNESS-SLIM: do not fetch prior titles to guess a delivery plan.
@@ -1764,7 +1808,7 @@ async def chat_completions(
     # affordances gets propose_page_mutation. json_only keeps its own envelope.
     page_affordances: list[dict[str, Any]] = []
     page_title = ""
-    if edu_sidebar and not json_only:
+    if edu_sidebar and not json_only and not box_turn:
         from pico_orchestrator.page_mutations import (
             affordances_from_request,
             page_title_from_request,
@@ -1811,12 +1855,13 @@ async def chat_completions(
 
             if conversation_id and runner_enabled(principal.membership_id):
                 # Workspace box reads every upload itself (card #1093).
-                from app.edu_files import workspace_files_from_rows
+                from app.edu_files import inline_workspace_files, workspace_files_from_rows
 
+                box_files = await workspace_files_from_rows(named_session, list(upload_items))
+                if box_turn:
+                    box_files += inline_workspace_files(body.messages)
                 remember_conversation_files(
-                    principal.membership_id,
-                    conversation_id,
-                    await workspace_files_from_rows(named_session, list(upload_items)),
+                    principal.membership_id, conversation_id, box_files
                 )
             turn_images = merge_images(
                 turn_images,
@@ -1828,6 +1873,9 @@ async def chat_completions(
 
             prompt = inject_conversation_uploads(prompt, upload_items)
     except Exception:
+        if box_turn:
+            # The draft + cw only reach attachments/ here: no box without them.
+            raise
         logger.exception("named school materials inject failed")
     teacher_extra = day_use_block or ""
     turn_images = merge_images(turn_images, conversation_images(conversation_id))
@@ -2240,6 +2288,7 @@ async def chat_completions(
                     plan_on=plan_on,
                     native_files=native_files,
                     edu_sidebar=edu_sidebar,
+                    box_turn=box_turn,
                     page_affordances=page_affordances,
                     page_title=page_title,
                     thinking_override=thinking_override,
@@ -2519,7 +2568,7 @@ async def chat_completions(
                 # is the OOM we already banned on message_update.
                 text = str(payload.get("text") or "")
                 if text:
-                    await q.put(("delta", text))
+                    await q.put(("progress" if box_turn else "delta", text))
                 return
             async with factory() as session:
                 await append_event(session, run_id, event_type, payload)
@@ -2541,7 +2590,9 @@ async def chat_completions(
             if event_type == "message.delta":
                 text = str(payload.get("text") or "")
                 if text and not payload.get("ledger_only"):
-                    await q.put(("delta", text))
+                    # Box turn: talk between tool calls is the work line; the
+                    # answer is final_text at done (edu-core#5685).
+                    await q.put(("progress" if box_turn else "delta", text))
             elif event_type == "run.steer":
                 # pico#1318: a thought marks the turn; the workbench then opens a
                 # fresh text part below the teacher's interjection.
@@ -2586,7 +2637,7 @@ async def chat_completions(
 
                     text = sidebar_progress_delta(event_type, payload)
                     if text:
-                        await q.put(("delta", f"{text}\n"))
+                        await q.put(_sidebar_step(text, box_turn=box_turn))
             elif event_type == "tool.result":
                 if edu_sidebar:
                     from pico_orchestrator.workbench_progress import (
@@ -2595,7 +2646,7 @@ async def chat_completions(
 
                     text = sidebar_progress_delta(event_type, payload)
                     if text:
-                        await q.put(("delta", f"{text}\n"))
+                        await q.put(_sidebar_step(text, box_turn=box_turn))
             elif event_type == "run.heartbeat":
                 elapsed = payload.get("elapsed_seconds")
                 if elapsed is not None:
@@ -2632,7 +2683,7 @@ async def chat_completions(
                 # Stream path must apply the same dual-mode policy as non-stream.
                 caps = _caps_with_dual_mode(caps, model)
                 caps = _caps_with_request_thinking(caps, thinking_override)
-                caps = _caps_with_sidebar_thinking(caps, edu_sidebar=edu_sidebar)
+                caps = _caps_with_sidebar(caps, edu_sidebar=edu_sidebar, box_turn=box_turn)
                 caps = _caps_with_plan(caps, plan_on)
                 caps = _caps_with_images(caps, turn_images)
                 # Stream path must apply the same landing min as non-stream.
@@ -2819,6 +2870,10 @@ async def chat_completions(
                     pending_status.clear()
                     last_wire = time.monotonic()
                     yield chunk({"content": str(payload)})
+                elif kind == "progress":
+                    # Box turn work line (edu-core#5685): top-level, never `content`.
+                    last_wire = time.monotonic()
+                    yield chunk({}, extra={"pico_progress": str(payload)})
                 elif kind == "think":
                     # Official Pi thinking_delta → OpenAI reasoning_content.
                     # Must not become the product bubble (`content`).
@@ -2832,7 +2887,11 @@ async def chat_completions(
                 elif kind == "status":
                     # Buffer status chrome; only flush on the failure path where
                     # no product text ever arrives (user still sees progress).
-                    if not saw_text:
+                    # Box turn: content is the answer only, chrome rides the rail line.
+                    if box_turn:
+                        last_wire = time.monotonic()
+                        yield chunk({}, extra={"pico_progress": f"\n{payload}\n"})
+                    elif not saw_text:
                         pending_status.append(str(payload))
                 elif kind == "error":
                     if not saw_text and pending_status:
