@@ -83,6 +83,20 @@ def test_fast_lane_thinks_low_on_both_wires() -> None:
     assert model["thinkingLevelMap"]["low"] == "low"
 
 
+def test_named_level_reaches_gemini() -> None:
+    """edu-core#5603: 细则生成 asks medium; sent as high it thought the whole 16k away."""
+    wire = thinking_extra_body("gemini-3.8-flash", thinking=True, effort="medium")
+    assert wire["reasoning_effort"] == "medium"
+    assert wire["extra_body"] == {"google": {"thinking_config": {"thinking_level": "medium"}}}
+    assert thinking_extra_body("gemini-3.8-flash", thinking=True, effort="HIGH")["reasoning_effort"] == "high"
+    # Off stays low whatever the word; no or unknown level keeps the lane's high.
+    assert thinking_extra_body("gemini-3.8-flash", thinking=False, effort="none")["reasoning_effort"] == "low"
+    assert thinking_extra_body("gemini-3.8-flash", thinking=True, effort=None)["reasoning_effort"] == "high"
+    assert thinking_extra_body("gemini-3.8-flash", thinking=True, effort="banana")["reasoning_effort"] == "high"
+    # DeepSeek only has on / off.
+    assert thinking_extra_body("deepseek-flash", thinking=True, effort="medium") == {"thinking": {"type": "enabled"}}
+
+
 def test_pi_deep_lane_and_non_flash_do_not_pin_budget_zero() -> None:
     deep = true_pi_models_document(
         provider="openai",
