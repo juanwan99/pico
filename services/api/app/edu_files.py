@@ -355,6 +355,21 @@ def iter_native_file_parts(messages: list[Any]) -> list[dict[str, Any]]:
     return out
 
 
+def inline_workspace_files(messages: list[Any]) -> list[tuple[str, bytes]]:
+    """File parts of the latest user turn as (filename, bytes) for the box's attachments/.
+
+    The lesson-prep box turn (edu-core#5685) brings its courseware and tool in
+    the request, not through /v1/files (that lands in the teacher's files).
+    """
+    out: list[tuple[str, bytes]] = []
+    for part in iter_native_file_parts(messages):
+        name = _part_filename(part)
+        data = _file_data_bytes(part)
+        if name and data:
+            out.append((name, data))
+    return out
+
+
 def images_from_native_pdf_parts(messages: list[Any]) -> list[dict[str, Any]]:
     """Forbidden thick bridge: do not raster PDF into Pi images[].
 
