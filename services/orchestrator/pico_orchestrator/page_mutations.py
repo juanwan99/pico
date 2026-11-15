@@ -116,6 +116,13 @@ def page_title_from_request(client_system: str | None) -> str:
     return ""
 
 
+def _required_keys(row: dict[str, Any]) -> list[str]:
+    raw = row.get("required")
+    if not isinstance(raw, list):
+        return []
+    return [str(k) for k in raw if isinstance(k, str) and k.strip()]
+
+
 @dataclass
 class PageMutationBook:
     """One run's proposals against one page. Lives only for the run."""
@@ -154,6 +161,14 @@ class PageMutationBook:
             raise ToolError("tool.invalid_arguments", "params 必须是对象。")
         if len(json.dumps(params, ensure_ascii=False)) > _MAX_PARAMS_CHARS:
             raise ToolError("tool.invalid_arguments", "params 太大，拆成多条提案。")
+        # edu 给手标了必填参数（required，如跳页的 tab）：漏填就退回，模型同一轮照 hint 补齐再提，
+        # 不收一条网页做不了的提案（edu-core#5680：跳页只写了 reason，回话说「这就去」却没跳）
+        missing = [k for k in _required_keys(row) if not str(params.get(k) or "").strip()]
+        if missing:
+            raise ToolError(
+                "page.params_required",
+                f"「{row.get('label') or aid}」要在 params 里填 {'、'.join(missing)}，照这只手的 hint 填好再提。",
+            )
         if len(self.mutations) >= _MAX_MUTATIONS:
             raise ToolError("page.too_many_mutations", "这一轮提案已满，先让老师确认这一批。")
         label = str(args.get("label") or row.get("label") or aid).strip()[:_MAX_LABEL]

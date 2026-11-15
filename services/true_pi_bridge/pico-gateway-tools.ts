@@ -239,9 +239,11 @@ const JUMP_ONLY_TOOLS = new Set<string>([
 
 type Call = { type?: string; name?: string; arguments?: Record<string, unknown> };
 
+// No tab = not a jump yet: the gateway sends it back (page.params_required) and the
+// model fills it in the same turn — no 「这就去」 line for a call that goes nowhere (edu-core#5680).
 function isJump(args: Record<string, unknown> | undefined): boolean {
   const params = (args?.params ?? {}) as Record<string, unknown>;
-  return args?.affordance_id === "nav:go" && params.jump !== false;
+  return args?.affordance_id === "nav:go" && params.jump !== false && String(params.tab ?? "").trim() !== "";
 }
 
 function jumpLine(label: unknown): string {
