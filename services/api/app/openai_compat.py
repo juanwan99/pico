@@ -1337,7 +1337,7 @@ async def _finalize_run(
     failure = None
     if status != "succeeded":
         # Failed turns are on the bill too, with why (edu-core#5295).
-        http, code, _ = _failure_code(error, status=status, empty=error == _EMPTY_OUTPUT)
+        http, code, _ = _failure_code(error, status=status, empty=error in (_EMPTY_OUTPUT, _EXHAUSTED_OUTPUT))
         failure = {"error_code": code, "http_status": http, "error": str(error or "")[:200]}
     await emit_llm_usage_after_run(
         run_id,
@@ -1477,6 +1477,16 @@ _OVERLOAD_MARKS = ("429", "503", "529", "overload", "rate limit", "频繁")
 
 
 _EMPTY_OUTPUT = "empty model output"
+# Thinking spent the whole max_tokens and wrote nothing (finish = length): the same
+# prompt will spend it again, so callers must not resend it as-is (edu-core#5941).
+_EXHAUSTED_OUTPUT = "empty model output: thinking used the whole token budget"
+
+
+def _empty_output_error(finish: str | None, usage: dict[str, Any] | None, max_tokens: int) -> str:
+    """Empty reply: exhausted only when the output tokens really reached max_tokens. The provider also
+    says length for a short think that wrote nothing (#1116); that one is worth one more ask."""
+    spent = int((usage or {}).get("completion_tokens") or 0)
+    return _EXHAUSTED_OUTPUT if finish == "length" and spent >= max_tokens else _EMPTY_OUTPUT
 
 
 def _failure_code(error: str | None, *, status: str, empty: bool = False) -> tuple[int, str, bool]:
@@ -1484,6 +1494,8 @@ def _failure_code(error: str | None, *, status: str, empty: bool = False) -> tup
     low = str(error or "").lower()
     if status == "cancelled":
         return 409, "run_cancelled", False
+    if error == _EXHAUSTED_OUTPUT:
+        return 502, "output_exhausted", False
     if empty:
         return 502, "empty_output", True
     if any(mark in low for mark in _TIMEOUT_MARKS):
@@ -1498,7 +1510,10 @@ def _failure_response(
 ) -> JSONResponse:
     """OpenAI-style error body with a machine ``code`` and ``retryable``."""
     http, code, retryable = _failure_code(error, status=status, empty=empty)
-    message = user_message_for_error(error) if error else "这次没有返回内容，请再发一次。"
+    if code == "output_exhausted":
+        message = "模型把这次的额度都用在推理上，没写出内容；原样再问也一样。"
+    else:
+        message = user_message_for_error(error) if error else "这次没有返回内容，请再发一次。"
     return JSONResponse(
         status_code=http,
         content={
@@ -2237,15 +2252,23 @@ async def chat_completions(
                     )
                     return _failure_response(str(e), status="failed", run_id=run_id)
                 if not text.strip():
+                    empty_error = _empty_output_error(
+                        direct_finish.get("finish_reason"), direct_usage, effective_max_tokens
+                    )
                     await _finalize_run(
                         run_id,
                         status="failed",
-                        error=_EMPTY_OUTPUT,
+                        error=empty_error,
                         task_id=task_id,
                         token_usage=direct_usage or None,
                         bill_to=_bill_to_for_turn(principal),
                     )
-                    return _failure_response(None, status="failed", run_id=run_id, empty=True)
+                    return _failure_response(
+                        empty_error if empty_error == _EXHAUSTED_OUTPUT else None,
+                        status="failed",
+                        run_id=run_id,
+                        empty=True,
+                    )
                 await _finalize_run(
                     run_id,
                     status="succeeded",

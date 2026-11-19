@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import json
 
-from app.openai_compat import _failure_response
+from app.openai_compat import (
+    _EMPTY_OUTPUT,
+    _EXHAUSTED_OUTPUT,
+    _empty_output_error,
+    _failure_code,
+    _failure_response,
+)
 from pico_orchestrator.provider import _messages_for_chat, _responses_input_from_messages
 
 
@@ -53,3 +59,20 @@ def test_failure_codes() -> None:
     assert (status, err["code"]) == (502, "empty_output")
     status, err = _body(_failure_response(None, status="cancelled", run_id="r"))
     assert (status, err["code"], err["retryable"]) == (409, "run_cancelled", False)
+
+
+def test_thinking_used_whole_budget_is_not_retryable() -> None:
+    """edu-core#5941: finish=length with no text — resending the same prompt burns the budget again."""
+    status, err = _body(_failure_response(_EXHAUSTED_OUTPUT, status="failed", run_id="r", empty=True))
+    assert (status, err["code"], err["retryable"]) == (502, "output_exhausted", False)
+    assert "原样再问也一样" in err["message"]
+    # usage row shares the code
+    assert _failure_code(_EXHAUSTED_OUTPUT, status="failed", empty=True)[1] == "output_exhausted"
+
+
+def test_only_a_full_budget_counts_as_exhausted() -> None:
+    """edu-core#5941 review: length with a short think (provider rewrites #1116) stays retryable."""
+    assert _empty_output_error("length", {"completion_tokens": 16384}, 16384) == _EXHAUSTED_OUTPUT
+    assert _empty_output_error("length", {"completion_tokens": 300}, 16384) == _EMPTY_OUTPUT
+    assert _empty_output_error("stop", {"completion_tokens": 16384}, 16384) == _EMPTY_OUTPUT
+    assert _empty_output_error("length", None, 16384) == _EMPTY_OUTPUT
