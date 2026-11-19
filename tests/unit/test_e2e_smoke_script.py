@@ -22,10 +22,20 @@ def _routes(sha: str) -> dict[str, tuple[int, object]]:
     return {
         "/v1/meta/tip": (200, {"ok": True, "git_sha": sha}),
         "/api/pico/tip": (200, {"ok": True, "git_sha": sha}),
-        "/health": (200, {"ok": True, "service": "pico-api", "git_sha": sha, "default_runtime": "pi-true"}),
+        "/health": (
+            200,
+            {"ok": True, "service": "pico-api", "git_sha": sha, "default_runtime": "pi-true"},
+        ),
         "/login": (200, "<html>login</html>"),
         "/api/config": (200, {"appTitle": "Pico"}),
-        "/v1/me": (200, {"school_id": "smoke-school", "membership_id": "smoke-e2e", "scopes": ["ai:read", "ai:run"]}),
+        "/v1/me": (
+            200,
+            {
+                "school_id": "smoke-school",
+                "membership_id": "smoke-e2e",
+                "scopes": ["ai:read", "ai:run"],
+            },
+        ),
         "/v1/models": (200, {"object": "list", "data": [{"id": "pico-fast"}, {"id": "pico-deep"}]}),
         "/v1/skills/catalog": (200, {"skills": [{"id": "skill-deliverable"}]}),
         "/v1/tools": (200, {"tools": []}),
@@ -53,13 +63,20 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         authed = bool(self.headers.get("Authorization"))
         self.server.seen.append((path, authed))
-        if path.startswith("/v1/") and path != "/v1/meta/tip" and not authed and not self.server.open_auth:
+        if (
+            path.startswith("/v1/")
+            and path != "/v1/meta/tip"
+            and not authed
+            and not self.server.open_auth
+        ):
             code, body = 401, {"detail": {"code": "auth.missing"}}
         else:
             code, body = self.server.routes.get(path, (404, {"detail": "not found"}))
         raw = body.encode() if isinstance(body, str) else json.dumps(body).encode()
         self.send_response(code)
-        self.send_header("Content-Type", "text/html" if isinstance(body, str) else "application/json")
+        self.send_header(
+            "Content-Type", "text/html" if isinstance(body, str) else "application/json"
+        )
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
@@ -81,7 +98,9 @@ def fake_pico():
         srv.server_close()
 
 
-def _run(base: str, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _run(
+    base: str, *args: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [BASH, SMOKE.as_posix(), *args],
         env={
@@ -113,7 +132,20 @@ def test_smoke_reports_anonymous_and_authenticated_paths(fake_pico) -> None:
     base = fake_pico(_routes(SHA))
     result = _run(base)
     assert result.returncode == 0, result.stdout + result.stderr
-    for name in ("tip", "health", "ui-login", "ui-config", "auth-401", "me", "models", "skills", "tools", "tasks", "usage", "my-folders"):
+    for name in (
+        "tip",
+        "health",
+        "ui-login",
+        "ui-config",
+        "auth-401",
+        "me",
+        "models",
+        "skills",
+        "tools",
+        "tasks",
+        "usage",
+        "my-folders",
+    ):
         assert f"ok   {name}" in result.stdout
 
 
@@ -169,7 +201,12 @@ def test_smoke_prod_mode_requires_proxy_key(fake_pico, tmp_path: Path) -> None:
     result = _run(
         base,
         "--prod",
-        env={"PICO_SMOKE_KEY": "", "PICO_ROOT": str(tmp_path), "PICO_SMOKE_PUBLIC": base},
+        env={
+            "PICO_SMOKE_KEY": "",
+            "PICO_ROOT": str(tmp_path),
+            "PICO_SMOKE_PUBLIC": base,
+            "PICO_SMOKE_TIP_PROXY": "",
+        },
     )
     assert result.returncode == 1
     assert "FAIL key" in result.stdout
@@ -181,11 +218,35 @@ def test_smoke_prod_mode_reads_key_from_env_file(fake_pico, tmp_path: Path) -> N
     result = _run(
         base,
         "--prod",
-        env={"PICO_SMOKE_KEY": "", "PICO_ROOT": str(tmp_path), "PICO_SMOKE_PUBLIC": base},
+        env={
+            "PICO_SMOKE_KEY": "",
+            "PICO_ROOT": str(tmp_path),
+            "PICO_SMOKE_PUBLIC": base,
+            "PICO_SMOKE_TIP_PROXY": "",
+        },
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.rstrip().splitlines()[-1] == "smoke 12/12 PASS (prod)"
     assert KEY not in result.stdout
+
+
+def test_smoke_prod_mode_sends_public_tip_through_proxy(fake_pico, tmp_path: Path) -> None:
+    # ECS 直连 pico.aivia.asia 被掐（edu-core#5873）：--prod 的公网 tip 走出口代理，其余仍打本机回环
+    base = fake_pico(_routes(SHA))
+    (tmp_path / ".env").write_text(f"PICO_OPENAI_PROXY_KEY={KEY}\n")
+    result = _run(
+        base,
+        "--prod",
+        env={
+            "PICO_SMOKE_KEY": "",
+            "PICO_ROOT": str(tmp_path),
+            "PICO_SMOKE_PUBLIC": base,
+            "PICO_SMOKE_TIP_PROXY": "http://127.0.0.1:9",
+        },
+    )
+    assert result.returncode == 1
+    assert "FAIL tip" in result.stdout
+    assert "ok   health" in result.stdout
 
 
 def test_smoke_rejects_unknown_argument() -> None:
