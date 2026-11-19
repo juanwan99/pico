@@ -10,12 +10,16 @@
 #   bash scripts/e2e-smoke.sh --public   anonymous read-only against https://pico.aivia.asia
 #                                        (authenticated checks only when PICO_SMOKE_KEY is set)
 #   bash scripts/e2e-smoke.sh --prod     on the production host: loopback API/UI + public tip,
-#                                        key read from $PICO_ROOT/.env (never printed)
+#                                        key read from $PICO_ROOT/.env (never printed); the
+#                                        public tip goes through the host's egress proxy
+#                                        (ECS → pico.aivia.asia direct TCP is blocked since
+#                                        11-16, edu-core#5873; PICO_SMOKE_TIP_PROXY= to go direct)
 #   --no-ui                              drop the LibreChat checks (API-only dev box)
 #
 # Env overrides: PICO_SMOKE_API, PICO_SMOKE_UI, PICO_SMOKE_PUBLIC, PICO_SMOKE_KEY,
 #   PICO_SMOKE_TENANT (default smoke-school:smoke-e2e), PICO_SMOKE_EXPECT_SHA,
-#   PICO_SMOKE_TIMEOUT (seconds per request, default 10).
+#   PICO_SMOKE_TIMEOUT (seconds per request, default 10),
+#   PICO_SMOKE_TIP_PROXY (--prod only, default http://127.0.0.1:7893; empty = direct).
 #
 # Read-only by design: GET only, a dedicated smoke tenant, no chat, no kb/search
 # (that records a usage event), no writes to real teacher data.
@@ -44,6 +48,7 @@ PUBLIC="${PICO_SMOKE_PUBLIC:-https://pico.aivia.asia}"
 TIMEOUT="${PICO_SMOKE_TIMEOUT:-10}"
 TENANT="${PICO_SMOKE_TENANT:-smoke-school:smoke-e2e}"
 KEY="${PICO_SMOKE_KEY:-}"
+TIP_ARGS=()
 
 case "$MODE" in
   local)
@@ -67,6 +72,8 @@ case "$MODE" in
     # Shared ECS: LibreChat loopback is 18088 — never 8080 (edu-core-bff).
     UI="${PICO_SMOKE_UI:-${LIBRECHAT_URL:-http://127.0.0.1:18088}}"
     TIP_URL="$PUBLIC/api/pico/tip"
+    TIP_PROXY="${PICO_SMOKE_TIP_PROXY-http://127.0.0.1:7893}"
+    [ -n "$TIP_PROXY" ] && TIP_ARGS=(-x "$TIP_PROXY")
     HEALTH_URL="$API/health"
     HEALTH_JSON=1
     if [ -z "$KEY" ]; then
@@ -201,7 +208,7 @@ check() {
 }
 
 JSON_ARGS=("${PICO_SMOKE_EXPECT_SHA:-}")
-if check tip 200 tip GET "$TIP_URL"; then
+if check tip 200 tip GET "$TIP_URL" ${TIP_ARGS[@]+"${TIP_ARGS[@]}"}; then
   TIP_SHA="$(json tip "${PICO_SMOKE_EXPECT_SHA:-}")"
 fi
 
