@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import json
 
-from app.openai_compat import _EXHAUSTED_OUTPUT, _failure_code, _failure_response
+from app.openai_compat import (
+    _EMPTY_OUTPUT,
+    _EXHAUSTED_OUTPUT,
+    _empty_output_error,
+    _failure_code,
+    _failure_response,
+)
 from pico_orchestrator.provider import _messages_for_chat, _responses_input_from_messages
 
 
@@ -63,3 +69,10 @@ def test_thinking_used_whole_budget_is_not_retryable() -> None:
     # usage row shares the code
     assert _failure_code(_EXHAUSTED_OUTPUT, status="failed", empty=True)[1] == "output_exhausted"
 
+
+def test_only_a_full_budget_counts_as_exhausted() -> None:
+    """edu-core#5941 review: length with a short think (provider rewrites #1116) stays retryable."""
+    assert _empty_output_error("length", {"completion_tokens": 16384}, 16384) == _EXHAUSTED_OUTPUT
+    assert _empty_output_error("length", {"completion_tokens": 300}, 16384) == _EMPTY_OUTPUT
+    assert _empty_output_error("stop", {"completion_tokens": 16384}, 16384) == _EMPTY_OUTPUT
+    assert _empty_output_error("length", None, 16384) == _EMPTY_OUTPUT

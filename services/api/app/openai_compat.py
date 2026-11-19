@@ -1482,6 +1482,13 @@ _EMPTY_OUTPUT = "empty model output"
 _EXHAUSTED_OUTPUT = "empty model output: thinking used the whole token budget"
 
 
+def _empty_output_error(finish: str | None, usage: dict[str, Any] | None, max_tokens: int) -> str:
+    """Empty reply: exhausted only when the output tokens really reached max_tokens. The provider also
+    says length for a short think that wrote nothing (#1116); that one is worth one more ask."""
+    spent = int((usage or {}).get("completion_tokens") or 0)
+    return _EXHAUSTED_OUTPUT if finish == "length" and spent >= max_tokens else _EMPTY_OUTPUT
+
+
 def _failure_code(error: str | None, *, status: str, empty: bool = False) -> tuple[int, str, bool]:
     """(http, code, retryable) for a turn that did not succeed — reply body and usage row share it."""
     low = str(error or "").lower()
@@ -2245,8 +2252,8 @@ async def chat_completions(
                     )
                     return _failure_response(str(e), status="failed", run_id=run_id)
                 if not text.strip():
-                    empty_error = (
-                        _EXHAUSTED_OUTPUT if direct_finish.get("finish_reason") == "length" else _EMPTY_OUTPUT
+                    empty_error = _empty_output_error(
+                        direct_finish.get("finish_reason"), direct_usage, effective_max_tokens
                     )
                     await _finalize_run(
                         run_id,
