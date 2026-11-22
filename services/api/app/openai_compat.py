@@ -231,7 +231,9 @@ def _turn_has_tools(
     )
 
 
-def _model_preference_from_prompt(prompt: str) -> str | None:
+def _model_preference_from_prompt(
+    prompt: str, *, trial_models: frozenset[str] = frozenset()
+) -> str | None:
     """Resolve the workbench model preference from a strict allowlist."""
     import re
 
@@ -257,7 +259,14 @@ def _model_preference_from_prompt(prompt: str) -> str | None:
 
     from pico_orchestrator.provider import KNOWN_DEEPSEEK_MODELS, KNOWN_KIMI_MODELS
 
-    allowed = {"pico-agent", "pico-fast", "pico-deep", *KNOWN_DEEPSEEK_MODELS, *KNOWN_KIMI_MODELS}
+    allowed = {
+        "pico-agent",
+        "pico-fast",
+        "pico-deep",
+        *KNOWN_DEEPSEEK_MODELS,
+        *KNOWN_KIMI_MODELS,
+        *trial_models,
+    }
     return normalized if normalized in allowed else None
 
 
@@ -362,7 +371,7 @@ def _assert_model_allowed(model: str, settings: Settings) -> None:
     allowed = {_normalized_model(item) for item in settings.allowed_model_list}
     product_surface = {"pico-fast", "pico-deep", "pico-agent", "pico"}
     deepseek_aliases = {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
-    if normalized in allowed:
+    if normalized in allowed or model in settings.rail_trial_model_set:
         return
     if product_surface.intersection(allowed) and normalized in deepseek_aliases:
         return
@@ -890,7 +899,9 @@ def _personal_cfg_for_images(cfg: Any, images: list[dict[str, Any]] | None) -> A
     return cfg if model_accepts_image(getattr(cfg, "model", None)) else None
 
 
-def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
+def _caps_with_dual_mode(
+    caps: Any, model: str | None, *, trial_model: str | None = None
+) -> Any:
     """Apply the dual-mode runtime policy onto RunCaps (Pico 快速 / Pico 深度).
 
     LAW #865: lanes do not hard-cap the upstream window. Deep lane thinks;
@@ -901,7 +912,7 @@ def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
 
     from pico_orchestrator.provider import runtime_policy_for_model
 
-    low = (model or "").strip().lower()
+    low = "pico-fast" if trial_model else (model or "").strip().lower()
     if low not in {"pico-fast", "pico-deep"}:
         return caps
     policy = runtime_policy_for_model(low)
@@ -910,7 +921,7 @@ def _caps_with_dual_mode(caps: Any, model: str | None) -> Any:
         "max_tokens": int(policy.get("max_tokens", caps.max_tokens)),
         "thinking_on": bool(policy.get("thinking", False)),
         "ui_model": low,
-        "backend_model": str(policy.get("backend_model") or ""),
+        "backend_model": trial_model or str(policy.get("backend_model") or ""),
     }
     if hasattr(caps, "max_context"):
         fields["max_context"] = int(policy.get("max_context", caps.max_context))
@@ -1359,6 +1370,7 @@ async def _run_and_collect(
     *,
     run_id: str,
     model: str | None = None,
+    trial_model: str | None = None,
     history: list[dict[str, Any]] | None = None,
     skill_snapshot: dict[str, Any] | None = None,
     delivery_plan: Any | None = None,
@@ -1399,7 +1411,7 @@ async def _run_and_collect(
         ),
     )
     # Dual-mode: Pico 快速 / Pico 深度 set their own steps/tokens/thinking.
-    caps = _caps_with_dual_mode(caps, model)
+    caps = _caps_with_dual_mode(caps, model, trial_model=trial_model)
     caps = _caps_with_request_thinking(caps, thinking_override)
     caps = _caps_with_sidebar(caps, edu_sidebar=edu_sidebar, box_turn=box_turn)
     caps = _caps_with_plan(caps, plan_on)
@@ -2047,24 +2059,30 @@ async def chat_completions(
             skill_snapshot,
             history=history,
         )
+    trial_models = settings.rail_trial_model_set if edu_sidebar and not json_only else frozenset()
+    preferred_model = _model_preference_from_prompt(raw_prompt, trial_models=trial_models)
+    trial_model = preferred_model if preferred_model in trial_models else None
     model = (
-        _model_preference_from_prompt(raw_prompt)
+        preferred_model
         or body.model
         or settings.deepseek_model
         or settings.kimi_model
         or "pico-fast"
     )
-    # Skill/tool path: preserve explicit dual-mode choice (pico-fast keeps thinking
-    # off + tight budget; pico-deep keeps thinking on + breaker). Only remap
-    # legacy agent SKUs / unknown ids onto pico-deep when a skill was hung.
-    if skill_snapshot and skill_snapshot.get("tools"):
-        low = str(model or "").strip().lower()
-        if low not in {"pico-fast", "pico-deep"}:
-            model = "pico-deep"
-    # Residual LibreChat prefs may still say kimi-k2.x after product default
-    # moved to DeepSeek. Remount onto the product brain when Kimi is not in the
-    # production allowlist so default-path chat does not 400.
-    model = _coerce_default_model(model, settings)
+    if trial_model is not None:
+        thinking_override = None
+    else:
+        # Skill/tool path: preserve explicit dual-mode choice (pico-fast keeps thinking
+        # off + tight budget; pico-deep keeps thinking on + breaker). Only remap
+        # legacy agent SKUs / unknown ids onto pico-deep when a skill was hung.
+        if skill_snapshot and skill_snapshot.get("tools"):
+            low = str(model or "").strip().lower()
+            if low not in {"pico-fast", "pico-deep"}:
+                model = "pico-deep"
+        # Residual LibreChat prefs may still say kimi-k2.x after product default
+        # moved to DeepSeek. Remount onto the product brain when Kimi is not in the
+        # production allowlist so default-path chat does not 400.
+        model = _coerce_default_model(model, settings)
     _assert_model_allowed(model, settings)
     # Direct model = short tier; pico-agent = delivery tier for token ceiling.
     # json_only must not enter pi-agent even when the SKU is pico-fast.
@@ -2300,6 +2318,7 @@ async def chat_completions(
                     settings,
                     run_id=run_id,
                     model=model,
+                    trial_model=trial_model,
                     history=history,
                     skill_snapshot=skill_snapshot,
                     delivery_plan=delivery_plan,
@@ -2704,7 +2723,7 @@ async def chat_completions(
                         skill_instruction=skill_instr,
                     )
                 # Stream path must apply the same dual-mode policy as non-stream.
-                caps = _caps_with_dual_mode(caps, model)
+                caps = _caps_with_dual_mode(caps, model, trial_model=trial_model)
                 caps = _caps_with_request_thinking(caps, thinking_override)
                 caps = _caps_with_sidebar(caps, edu_sidebar=edu_sidebar, box_turn=box_turn)
                 caps = _caps_with_plan(caps, plan_on)
