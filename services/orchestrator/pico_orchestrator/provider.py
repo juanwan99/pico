@@ -127,10 +127,13 @@ def is_gemini_model(model: str | None) -> bool:
     return _bare_model(model).lower().startswith("gemini-")
 
 
+def _is_grok_model(model: str | None) -> bool:
+    return _bare_model(model).lower().startswith("grok-")
+
+
 def is_openai_responses_model(model: str | None) -> bool:
     """Ids that ride New API OpenAI Responses (gpt-5.6-sol, grok-4.6, …). Not DeepSeek."""
-    bare = _bare_model(model).lower()
-    return bare.startswith(("gpt-", "grok-"))
+    return _bare_model(model).lower().startswith("gpt-") or _is_grok_model(model)
 
 
 def uses_new_api_openai_overlay(cfg: ProviderConfig | None = None) -> bool:
@@ -764,6 +767,7 @@ async def stream_chat(
     history: list[dict] | None = None,
     system: str | None = None,
     model: str | None = None,
+    backend_model: str | None = None,
     thinking: bool | None = None,
     effort: str | None = None,
     usage_out: dict | None = None,
@@ -772,6 +776,7 @@ async def stream_chat(
 ) -> AsyncIterator[str]:
     """Stream assistant text deltas from the real model API (token-level).
 
+    ``backend_model`` is the validated New API id for a sidebar trial.
     ``effort``: the request's named thinking level, honored on Gemini (thinking_extra_body).
 
     ``finish_out["finish_reason"]`` gets the upstream finish (e.g. ``length``).
@@ -782,7 +787,7 @@ async def stream_chat(
     brain and has a working key, fall back to DeepSeek rather than failing the
     default path with a generic service error.
     """
-    cfg = resolve_provider_for_model(model)
+    cfg = resolve_provider_for_model(backend_model or model)
     if cfg is None:
         if is_kimi_model(model) and _deepseek_config() is None:
             raise RuntimeError(
@@ -799,8 +804,11 @@ async def stream_chat(
         )
 
     messages = _messages_for_chat(prompt, history=history, system=system, images=images)
-    model_id = resolve_model_id(model, cfg)
-    extra_body = thinking_extra_body(model, thinking=thinking, effort=effort)
+    model_id = backend_model or resolve_model_id(model, cfg)
+    trial_grok = _is_grok_model(backend_model)
+    extra_body = (
+        {} if trial_grok else thinking_extra_body(backend_model or model, thinking=thinking, effort=effort)
+    )
 
     async def _iter_chat_completions(
         provider: ProviderConfig, mid: str, think: bool | None
@@ -866,7 +874,12 @@ async def stream_chat(
         think = thinking if mid == model_id else lane_thinking
         release = await upstream.acquire(provider.api_key, "direct", ocr=ocr_lane)
         try:
-            if uses_openai_responses_brain(provider):
+            responses = (
+                is_openai_responses_model(mid) and not trial_grok
+                if mid == backend_model
+                else uses_openai_responses_brain(provider)
+            )
+            if responses:
                 async for piece in _iter_openai_responses(
                     provider,
                     mid,

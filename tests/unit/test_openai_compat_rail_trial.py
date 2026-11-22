@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+
+import httpx
 import pytest
 from app import channel_rates, db
 from app.auth import issue_test_token
@@ -7,6 +10,7 @@ from app.openai_compat import EDU_SIDEBAR_MARK, _assert_model_allowed, router
 from app.settings import Settings, get_settings
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
+from openai import AsyncOpenAI
 from pico_orchestrator import provider, runtime
 from pico_orchestrator.edu_sidebar import JSON_ONLY_OUTPUT
 from pico_orchestrator.provider import runtime_policy_for_model
@@ -39,6 +43,7 @@ async def rail_client(tmp_path, monkeypatch):
     monkeypatch.setenv("PICO_ALLOWED_MODELS", "pico-fast,pico-deep")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("DEEPSEEK_MODEL", "gemini-3.8-flash")
     monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
     monkeypatch.delenv("PICO_CHANNEL_RATES_PATH", raising=False)
@@ -51,7 +56,7 @@ async def rail_client(tmp_path, monkeypatch):
     def unexpected_model_call(*args, **kwargs):
         pytest.fail("unexpected model call")
 
-    monkeypatch.setattr(provider, "stream_chat", unexpected_model_call)
+    monkeypatch.setattr(provider, "_llm_client", unexpected_model_call)
     monkeypatch.setattr(runtime, "run_agent_runtime", unexpected_model_call)
     monkeypatch.setattr(runtime, "_edu_sidebar_pi_hint", False, raising=False)
     app = FastAPI()
@@ -121,6 +126,77 @@ async def test_sidebar_trial_uses_fast_pi_policy(
     assert model == (backup or expected_backend)
 
 
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    ("configured", "preferred", "expected_backend", "entry"),
+    [
+        ("", "grok-4.6", "gemini-3.8-flash", None),
+        ("grok-4.6", "grok-4.6", "grok-4.6", None),
+        ("deepseek-flash", "grok-4.6", "gemini-3.8-flash", None),
+        ("deepseek-flash", "deepseek-flash", "deepseek-flash", None),
+        ("grok-4.6", "grok-4.6", "grok-4.6", "sidebar.kb-ask"),
+        ("grok-4.6", "grok-4.6", "gemini-3.8-flash", "exam.analysis"),
+    ],
+)
+async def test_sidebar_json_trial_sends_selected_model_to_new_api(
+    rail_client, monkeypatch, stream, configured, preferred, expected_backend, entry
+) -> None:
+    monkeypatch.setenv("PICO_RAIL_TRIAL_MODELS", configured)
+    get_settings.cache_clear()
+    token = issue_test_token(
+        school_id="school-a", membership_id="rail-test", entry=entry or "workbench.web"
+    )
+    seen = []
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.path, json.loads(request.content)))
+        chunk = {"choices": [{"delta": {"content": '{"summary":"hi"}'}, "finish_reason": "stop"}]}
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n",
+        )
+
+    async with AsyncOpenAI(
+        base_url="http://127.0.0.1:3000/v1",
+        api_key="test-key",
+        http_client=AsyncClient(transport=httpx.MockTransport(reply)),
+    ) as upstream:
+        monkeypatch.setattr(provider, "_llm_client", lambda cfg: upstream)
+        response = await rail_client.post(
+            "/v1/chat/completions",
+            headers={"X-Pico-Output": JSON_ONLY_OUTPUT, "Authorization": f"Bearer {token}"},
+            json={
+                "model": "pico-fast",
+                "stream": stream,
+                "reasoning_effort": "high",
+                "messages": [
+                    {"role": "system", "content": "按资料答" if entry else EDU_SIDEBAR_MARK},
+                    {"role": "user", "content": f"【模型偏好：{preferred}】你好"},
+                ],
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    ((path, payload),) = seen
+    assert path == "/v1/chat/completions"
+    assert payload["model"] == expected_backend
+    assert payload["stream"] is True
+    assert payload["messages"][-1]["content"] == "你好"
+    if expected_backend == "grok-4.6":
+        assert "reasoning_effort" not in payload
+        assert "extra_body" not in payload
+    elif expected_backend == "deepseek-flash":
+        assert payload["thinking"] == {"type": "disabled"}
+    else:
+        assert payload["reasoning_effort"] == "high"
+
+    async with db.session_factory()() as session:
+        model = await session.scalar(select(db.UsageEventRow.model))
+    assert model == expected_backend
+
+
+@pytest.mark.parametrize("json_only", [False, True])
 @pytest.mark.parametrize(
     ("trial_model", "code"),
     [
@@ -128,12 +204,15 @@ async def test_sidebar_trial_uses_fast_pi_policy(
         ("claude-sonnet-4", "rail_trial.unsupported_model_family"),
     ],
 )
-async def test_sidebar_rejects_unavailable_trial(rail_client, monkeypatch, trial_model, code) -> None:
+async def test_sidebar_rejects_unavailable_trial(
+    rail_client, monkeypatch, trial_model, code, json_only
+) -> None:
     monkeypatch.setenv("PICO_RAIL_TRIAL_MODELS", trial_model)
     get_settings.cache_clear()
 
     response = await rail_client.post(
         "/v1/chat/completions",
+        headers={"X-Pico-Output": JSON_ONLY_OUTPUT} if json_only else {},
         json={
             "model": "pico-fast",
             "messages": [
@@ -152,7 +231,9 @@ async def test_sidebar_rejects_unavailable_trial(rail_client, monkeypatch, trial
     ("system", "headers", "prompt"),
     [
         ("你是 Pico", {}, "【模型偏好：grok-4.6】你好"),
+        ("你是 Pico", {"X-Pico-Output": JSON_ONLY_OUTPUT}, "【模型偏好：grok-4.6】你好"),
         (EDU_SIDEBAR_MARK, {"X-Pico-Output": JSON_ONLY_OUTPUT}, "【模型偏好：grok-4.6】你好"),
+        (EDU_SIDEBAR_MARK, {"X-Pico-Output": JSON_ONLY_OUTPUT}, "你好"),
         (EDU_SIDEBAR_MARK, {}, "你好"),
     ],
 )

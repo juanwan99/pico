@@ -33,7 +33,7 @@ from pico_orchestrator.sse_keepalive import (
     SSE_STREAM_HEADERS,
     iter_with_idle_ticks,
 )
-from pico_orchestrator.usage_hook import use_entry_of
+from pico_orchestrator.usage_hook import entry_of, use_entry_of
 from pico_orchestrator.user_errors import is_wall_timeout_code, user_message_for_error
 from pydantic import BaseModel
 
@@ -1748,12 +1748,51 @@ async def chat_completions(
             status_code=403,
             detail={"code": exc.code, "message": str(exc.message)},
         ) from exc
-    # pico#1331「我的接口」: looked up once, right after the Principal is
-    # final. None = school model, exactly like before this feature existed.
+    client_system = _client_system_from_messages(body.messages)
+    edu_sidebar = _is_edu_sidebar_system(client_system)
+    raw_prompt_with_skill = raw_for_user
+    json_only = is_json_only_propose(raw_prompt_with_skill, output_header=x_pico_output)
+    entry = entry_of(principal)
+    from pico_orchestrator.skill_policy import (
+        snapshot_for_skill,
+        snapshot_from_prompt,
+    )
+
+    raw_prompt, skill_snapshot = snapshot_from_prompt(raw_prompt_with_skill)
+    # Sidebar JSON callers such as sidebar.kb-ask use their own system prompt.
+    trial_sidebar = edu_sidebar or (json_only and entry.startswith("sidebar."))
+    trial_models = settings.rail_trial_model_set if trial_sidebar else frozenset()
+    preferred_model = _model_preference_from_prompt(raw_prompt, trial_models=trial_models)
+    trial_model = preferred_model if preferred_model in trial_models else None
+    if trial_model is not None:
+        from pico_orchestrator.provider import (
+            is_deepseek_model,
+            is_gemini_model,
+            is_openai_responses_model,
+        )
+
+        try:
+            require_rate(kind="llm", model=trial_model)
+        except ChannelToolError as exc:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": exc.code, "message": str(exc.message)},
+            ) from exc
+        if not (
+            is_gemini_model(trial_model)
+            or is_deepseek_model(trial_model)
+            or is_openai_responses_model(trial_model)
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "rail_trial.unsupported_model_family", "message": "试用模型族未接线"},
+            )
+    # Rail trials use the school's New API and its usage ledger. Otherwise
+    # look up the teacher's endpoint once after the Principal is final (#1331).
     from app.auth import is_steward_public
     from app.model_endpoint import personal_provider_config_for
 
-    if is_steward_public(principal):
+    if trial_model is not None or is_steward_public(principal):
         personal_cfg = None
     else:
         try:
@@ -1786,34 +1825,23 @@ async def chat_completions(
     await _gate_allowance_for_turn(
         principal, raw_for_user, personal_active=personal_cfg is not None
     )
-    client_system = _client_system_from_messages(body.messages)
-    edu_sidebar = _is_edu_sidebar_system(client_system)
     # AI 权 = 人权 on this page: the edu sidebar must not see this teacher's
     # workbench cabinet (recent ledger titles) — that is another page's context.
     day_use_block = (
         "" if edu_sidebar else await _day_use_system_block(principal, x_pico_display_name)
     )
-    raw_prompt_with_skill = _last_user_prompt(body.messages)
-    from pico_orchestrator.skill_policy import (
-        snapshot_for_skill,
-        snapshot_from_prompt,
-    )
-
-    raw_prompt, skill_snapshot = snapshot_from_prompt(raw_prompt_with_skill)
     if body.metadata and not skill_snapshot:
         skill_snapshot = snapshot_for_skill(
             body.metadata.get("pico_skill_id")
             or body.metadata.get("skill_id")
             or body.metadata.get("skillId")
         )
-    json_only = is_json_only_propose(raw_prompt_with_skill, output_header=x_pico_output)
-    from pico_orchestrator.usage_hook import entry_of
-
     # Lesson-prep rail (edu-core#5685): Pi works in the box with its own hands only.
-    box_turn = sidebar_box(
-        edu_sidebar=edu_sidebar, json_only=json_only, entry=entry_of(principal)
+    box_turn = sidebar_box(edu_sidebar=edu_sidebar, json_only=json_only, entry=entry)
+    thinking_override = None if trial_model else _thinking_override(body.reasoning_effort)
+    direct_thinking = (
+        False if trial_model else _direct_thinking(json_only=json_only, override=thinking_override)
     )
-    thinking_override = _thinking_override(body.reasoning_effort)
     native_files: list = []
     request_tools = _normalize_allowed_tools(body.allowed_tools)
     if request_tools is None:
@@ -2059,9 +2087,6 @@ async def chat_completions(
             skill_snapshot,
             history=history,
         )
-    trial_models = settings.rail_trial_model_set if edu_sidebar and not json_only else frozenset()
-    preferred_model = _model_preference_from_prompt(raw_prompt, trial_models=trial_models)
-    trial_model = preferred_model if preferred_model in trial_models else None
     model = (
         preferred_model
         or body.model
@@ -2069,31 +2094,7 @@ async def chat_completions(
         or settings.kimi_model
         or "pico-fast"
     )
-    if trial_model is not None:
-        from pico_orchestrator.provider import (
-            is_deepseek_model,
-            is_gemini_model,
-            is_openai_responses_model,
-        )
-
-        try:
-            require_rate(kind="llm", model=trial_model)
-        except ChannelToolError as exc:
-            raise HTTPException(
-                status_code=403,
-                detail={"code": exc.code, "message": str(exc.message)},
-            ) from exc
-        if not (
-            is_gemini_model(trial_model)
-            or is_deepseek_model(trial_model)
-            or is_openai_responses_model(trial_model)
-        ):
-            raise HTTPException(
-                status_code=403,
-                detail={"code": "rail_trial.unsupported_model_family", "message": "试用模型族未接线"},
-            )
-        thinking_override = None
-    else:
+    if trial_model is None:
         # Skill/tool path: preserve explicit dual-mode choice (pico-fast keeps thinking
         # off + tight budget; pico-deep keeps thinking on + breaker). Only remap
         # legacy agent SKUs / unknown ids onto pico-deep when a skill was hung.
@@ -2106,6 +2107,9 @@ async def chat_completions(
         # production allowlist so default-path chat does not 400.
         model = _coerce_default_model(model, settings)
         _assert_model_allowed(model, settings)
+    elif json_only and body.model:
+        # The trial authorizes the prompt preference, not a raw JSON caller's model.
+        _assert_model_allowed(body.model, settings)
     # Direct model = short tier; pico-agent = delivery tier for token ceiling.
     # json_only must not enter pi-agent even when the SKU is pico-fast.
     use_direct = _use_direct_model(
@@ -2121,15 +2125,19 @@ async def chat_completions(
             membership_id=principal.membership_id,
         )
     )
-    if use_direct and turn_images and personal_cfg is None:
+    if (use_direct or trial_model is not None) and turn_images and personal_cfg is None:
         # pico#1331: when personal_cfg is still set here, turn_images is
         # already known-compatible with it (the vision check right after
         # turn_images was finalized above nulls personal_cfg back to school
         # otherwise) — direct_accepts_images() only knows about the school
         # model id and must not 400 a personal model it never resolves.
         from pico_orchestrator.provider import direct_accepts_images
+        from pico_orchestrator.vision import model_accepts_image
 
-        if not direct_accepts_images(model):
+        accepts_images = (
+            model_accepts_image(trial_model) if trial_model else direct_accepts_images(model)
+        )
+        if not accepts_images:
             # Never answer an image question without the image (#1195).
             raise HTTPException(
                 status_code=400,
@@ -2221,7 +2229,7 @@ async def chat_completions(
                     history=history,
                     prompt=prompt,
                     max_tokens=effective_max_tokens,
-                    thinking=_direct_thinking(json_only=json_only, override=thinking_override),
+                    thinking=direct_thinking,
                     affordances=page_affordances,
                 )
                 replayed = json_only_replay.get(replay_key)
@@ -2259,8 +2267,9 @@ async def chat_completions(
                         history=history,
                         system=system,
                         model=model,
-                        thinking=_direct_thinking(json_only=json_only, override=thinking_override),
-                        effort=body.reasoning_effort,
+                        backend_model=trial_model,
+                        thinking=direct_thinking,
+                        effort=None if trial_model else body.reasoning_effort,
                         usage_out=direct_usage,
                         finish_out=direct_finish,
                         images=turn_images,
@@ -2505,8 +2514,9 @@ async def chat_completions(
                             history=history,
                             system=system,
                             model=model,
-                            thinking=_direct_thinking(json_only=json_only, override=thinking_override),
-                            effort=body.reasoning_effort,
+                            backend_model=trial_model,
+                            thinking=direct_thinking,
+                            effort=None if trial_model else body.reasoning_effort,
                             usage_out=stream_usage,
                             finish_out=stream_finish,
                             images=turn_images,
