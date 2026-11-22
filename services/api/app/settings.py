@@ -119,6 +119,7 @@ class Settings(BaseSettings):
     # 12k was a DeepSeek-era cost cap; GPT via New API has a 128k–256k window.
     pico_chat_max_prompt_chars: int = 256000
     pico_allowed_models: str = ""
+    pico_rail_trial_models: str = ""
 
     pico_api_host: str = "0.0.0.0"
     pico_api_port: int = 8000
@@ -192,6 +193,12 @@ class Settings(BaseSettings):
     @property
     def allowed_model_list(self) -> list[str]:
         return [model.strip() for model in self.pico_allowed_models.split(",") if model.strip()]
+
+    @property
+    def rail_trial_model_set(self) -> frozenset[str]:
+        return frozenset(
+            model.strip() for model in self.pico_rail_trial_models.split(",") if model.strip()
+        )
 
     # --- Pi canary ---
     @property
