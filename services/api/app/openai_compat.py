@@ -371,7 +371,7 @@ def _assert_model_allowed(model: str, settings: Settings) -> None:
     allowed = {_normalized_model(item) for item in settings.allowed_model_list}
     product_surface = {"pico-fast", "pico-deep", "pico-agent", "pico"}
     deepseek_aliases = {"deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"}
-    if normalized in allowed or model in settings.rail_trial_model_set:
+    if normalized in allowed:
         return
     if product_surface.intersection(allowed) and normalized in deepseek_aliases:
         return
@@ -2070,6 +2070,28 @@ async def chat_completions(
         or "pico-fast"
     )
     if trial_model is not None:
+        from pico_orchestrator.provider import (
+            is_deepseek_model,
+            is_gemini_model,
+            is_openai_responses_model,
+        )
+
+        try:
+            require_rate(kind="llm", model=trial_model)
+        except ChannelToolError as exc:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": exc.code, "message": str(exc.message)},
+            ) from exc
+        if not (
+            is_gemini_model(trial_model)
+            or is_deepseek_model(trial_model)
+            or is_openai_responses_model(trial_model)
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "rail_trial.unsupported_model_family", "message": "试用模型族未接线"},
+            )
         thinking_override = None
     else:
         # Skill/tool path: preserve explicit dual-mode choice (pico-fast keeps thinking
@@ -2083,7 +2105,7 @@ async def chat_completions(
         # moved to DeepSeek. Remount onto the product brain when Kimi is not in the
         # production allowlist so default-path chat does not 400.
         model = _coerce_default_model(model, settings)
-    _assert_model_allowed(model, settings)
+        _assert_model_allowed(model, settings)
     # Direct model = short tier; pico-agent = delivery tier for token ceiling.
     # json_only must not enter pi-agent even when the SKU is pico-fast.
     use_direct = _use_direct_model(
