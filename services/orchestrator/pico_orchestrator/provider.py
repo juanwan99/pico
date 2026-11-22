@@ -129,7 +129,8 @@ def is_gemini_model(model: str | None) -> bool:
 
 def is_openai_responses_model(model: str | None) -> bool:
     """Ids that ride New API OpenAI Responses (gpt-5.6-sol, grok-4.6, …). Not DeepSeek."""
-    return _bare_model(model).lower().startswith(("gpt-", "grok-"))
+    bare = _bare_model(model).lower()
+    return bare.startswith(("gpt-", "grok-"))
 
 
 def uses_new_api_openai_overlay(cfg: ProviderConfig | None = None) -> bool:
