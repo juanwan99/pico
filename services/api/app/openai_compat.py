@@ -1765,6 +1765,7 @@ async def chat_completions(
     preferred_model = _model_preference_from_prompt(raw_prompt, trial_models=trial_models)
     trial_model = preferred_model if preferred_model in trial_models else None
     if trial_model is not None:
+        from pico_orchestrator.brain_ha import long_session_models
         from pico_orchestrator.provider import (
             is_deepseek_model,
             is_gemini_model,
@@ -1786,6 +1787,11 @@ async def chat_completions(
             raise HTTPException(
                 status_code=403,
                 detail={"code": "rail_trial.unsupported_model_family", "message": "试用模型族未接线"},
+            )
+        if json_only and trial_model in long_session_models():
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "rail_trial.long_session_only", "message": "试用模型仅支持多轮会话"},
             )
     # Rail trials use the school's New API and its usage ledger. Otherwise
     # look up the teacher's endpoint once after the Principal is final (#1331).
@@ -2107,9 +2113,6 @@ async def chat_completions(
         # production allowlist so default-path chat does not 400.
         model = _coerce_default_model(model, settings)
         _assert_model_allowed(model, settings)
-    elif json_only and body.model:
-        # The trial authorizes the prompt preference, not a raw JSON caller's model.
-        _assert_model_allowed(body.model, settings)
     # Direct model = short tier; pico-agent = delivery tier for token ceiling.
     # json_only must not enter pi-agent even when the SKU is pico-fast.
     use_direct = _use_direct_model(

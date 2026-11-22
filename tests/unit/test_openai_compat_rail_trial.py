@@ -61,7 +61,12 @@ async def rail_client(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime, "_edu_sidebar_pi_hint", False, raising=False)
     app = FastAPI()
     app.include_router(router)
-    token = issue_test_token(school_id="school-a", membership_id="rail-test", settings=get_settings())
+    token = issue_test_token(
+        school_id="school-a",
+        membership_id="rail-test",
+        settings=get_settings(),
+        entry="workbench.web",
+    )
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://pico",
@@ -147,10 +152,21 @@ async def test_sidebar_json_trial_sends_selected_model_to_new_api(
         school_id="school-a", membership_id="rail-test", entry=entry or "workbench.web"
     )
     seen = []
+    answer = '{"summary":"hi"}'
 
     def reply(request: httpx.Request) -> httpx.Response:
         seen.append((request.url.path, json.loads(request.content)))
-        chunk = {"choices": [{"delta": {"content": '{"summary":"hi"}'}, "finish_reason": "stop"}]}
+        if request.url.path == "/v1/responses":
+            chunk = {
+                "type": "response.output_text.delta",
+                "delta": answer,
+                "item_id": "msg_test",
+                "output_index": 0,
+                "content_index": 0,
+                "sequence_number": 0,
+            }
+        else:
+            chunk = {"choices": [{"delta": {"content": answer}, "finish_reason": "stop"}]}
         return httpx.Response(
             200,
             headers={"content-type": "text/event-stream"},
@@ -178,18 +194,24 @@ async def test_sidebar_json_trial_sends_selected_model_to_new_api(
         )
 
     assert response.status_code == 200, response.text
+    if stream:
+        assert json.dumps(answer) in response.text
+    else:
+        assert response.json()["choices"][0]["message"]["content"] == answer
     ((path, payload),) = seen
-    assert path == "/v1/chat/completions"
     assert payload["model"] == expected_backend
     assert payload["stream"] is True
-    assert payload["messages"][-1]["content"] == "你好"
     if expected_backend == "grok-4.6":
-        assert "reasoning_effort" not in payload
-        assert "extra_body" not in payload
-    elif expected_backend == "deepseek-flash":
-        assert payload["thinking"] == {"type": "disabled"}
+        assert path == "/v1/responses"
+        assert payload["input"][-1] == {"role": "user", "content": "你好"}
+        assert payload["reasoning"] == {"effort": "low"}
     else:
-        assert payload["reasoning_effort"] == "high"
+        assert path == "/v1/chat/completions"
+        assert payload["messages"][-1]["content"] == "你好"
+        if expected_backend == "deepseek-flash":
+            assert payload["thinking"] == {"type": "disabled"}
+        else:
+            assert payload["reasoning_effort"] == "high"
 
     async with db.session_factory()() as session:
         model = await session.scalar(select(db.UsageEventRow.model))
@@ -227,12 +249,31 @@ async def test_sidebar_rejects_unavailable_trial(
         assert response.json()["detail"]["message"] == "试用模型族未接线"
 
 
+async def test_sidebar_json_rejects_long_session_trial(rail_client, monkeypatch) -> None:
+    monkeypatch.setenv("PICO_RAIL_TRIAL_MODELS", "gpt-5.6-sol")
+    monkeypatch.setenv("PICO_LONG_SESSION_MODELS", "gpt-5.6-sol")
+    get_settings.cache_clear()
+
+    response = await rail_client.post(
+        "/v1/chat/completions",
+        headers={"X-Pico-Output": JSON_ONLY_OUTPUT},
+        json={
+            "model": "pico-fast",
+            "messages": [
+                {"role": "system", "content": EDU_SIDEBAR_MARK},
+                {"role": "user", "content": "【模型偏好：gpt-5.6-sol】你好"},
+            ],
+        },
+    )
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"]["code"] == "rail_trial.long_session_only"
+
+
 @pytest.mark.parametrize(
     ("system", "headers", "prompt"),
     [
         ("你是 Pico", {}, "【模型偏好：grok-4.6】你好"),
         ("你是 Pico", {"X-Pico-Output": JSON_ONLY_OUTPUT}, "【模型偏好：grok-4.6】你好"),
-        (EDU_SIDEBAR_MARK, {"X-Pico-Output": JSON_ONLY_OUTPUT}, "【模型偏好：grok-4.6】你好"),
         (EDU_SIDEBAR_MARK, {"X-Pico-Output": JSON_ONLY_OUTPUT}, "你好"),
         (EDU_SIDEBAR_MARK, {}, "你好"),
     ],

@@ -127,13 +127,9 @@ def is_gemini_model(model: str | None) -> bool:
     return _bare_model(model).lower().startswith("gemini-")
 
 
-def _is_grok_model(model: str | None) -> bool:
-    return _bare_model(model).lower().startswith("grok-")
-
-
 def is_openai_responses_model(model: str | None) -> bool:
     """Ids that ride New API OpenAI Responses (gpt-5.6-sol, grok-4.6, …). Not DeepSeek."""
-    return _bare_model(model).lower().startswith("gpt-") or _is_grok_model(model)
+    return _bare_model(model).lower().startswith(("gpt-", "grok-"))
 
 
 def uses_new_api_openai_overlay(cfg: ProviderConfig | None = None) -> bool:
@@ -805,9 +801,8 @@ async def stream_chat(
 
     messages = _messages_for_chat(prompt, history=history, system=system, images=images)
     model_id = backend_model or resolve_model_id(model, cfg)
-    trial_grok = _is_grok_model(backend_model)
-    extra_body = (
-        {} if trial_grok else thinking_extra_body(backend_model or model, thinking=thinking, effort=effort)
+    extra_body = thinking_extra_body(
+        backend_model or model, thinking=thinking, effort=effort
     )
 
     async def _iter_chat_completions(
@@ -875,7 +870,7 @@ async def stream_chat(
         release = await upstream.acquire(provider.api_key, "direct", ocr=ocr_lane)
         try:
             responses = (
-                is_openai_responses_model(mid) and not trial_grok
+                is_openai_responses_model(mid)
                 if mid == backend_model
                 else uses_openai_responses_brain(provider)
             )
