@@ -529,7 +529,7 @@ def _is_model_missing_error(exc: Exception) -> bool:
 # Thinking-off calls answer within seconds; a stall before the first byte is a
 # hung upstream, not a long think (#1195: a 385-token call sat 114 s on a 3600 s
 # read timeout). Thinking-on keeps the long read timeout (GPT can think 10 min).
-# Resending (hedge, 429 / 5xx, next model) is the race in stream_chat, under
+# Resending (429 / 5xx, next model) is handled in stream_chat, under
 # one budget (pico#1271): nothing here retries in place.
 FIRST_BYTE_TIMEOUT_S = 60.0
 
@@ -560,10 +560,6 @@ def _llm_client(provider: ProviderConfig) -> AsyncOpenAI:
     return client
 
 
-async def _drop(_result: object) -> None:
-    return None
-
-
 async def call_once[T](
     provider: ProviderConfig,
     purpose: str,
@@ -592,7 +588,6 @@ async def call_once[T](
         one,
         upstream.Call(purpose, run_id=run_id, budget=budget),
         relaunch=upstream.worth_retry,
-        discard=_drop,
     )
     return result
 
@@ -752,7 +747,6 @@ async def _iter_openai_responses(
                     yielded = True
                     yield full
     finally:
-        # A dropped hedge copy must hang up now, not when GC finds it (pico#1283).
         with suppress(Exception):
             await stream.close()
 
@@ -844,7 +838,6 @@ async def stream_chat(
                     answered = True
                     yield delta
         finally:
-            # A dropped hedge copy must hang up now, not when GC finds it (pico#1283).
             with suppress(Exception):
                 await stream.close()
         # Gemini can spend the whole budget thinking and still say stop (#1116).
@@ -977,9 +970,8 @@ async def stream_chat(
         models = models or [model_id]
     from pico_orchestrator.brain_ha import is_failover_error, mark_down
 
-    # One budget (pico#1271): the first try, one hedge at the relay's ~p95 first
-    # token, one retry or next model — three requests at most. The hedge goes to
-    # the first backup; a channel that is down is skipped.
+    # One budget (pico#1271): count the first try, retries, and model switches
+    # together. Skip a channel marked down during this call.
     plan = [models[0], models[1], models[0], *models[2:]] if len(models) > 1 else [models[0]] * 3
     dead: set[str] = set()
     switched: set[int] = set()
@@ -1033,23 +1025,17 @@ async def stream_chat(
             raise
         return pieces, first
 
-    async def _discard(opened) -> None:
-        with suppress(Exception):
-            await opened[0].aclose()
-
     def _relaunch(exc: BaseException) -> bool:
         return retry.get(id(exc), False)
 
-    (pieces, first), won = await upstream.race(
+    (pieces, first), attempt = await upstream.race(
         start,
         upstream.Call("direct"),
-        hedge=upstream.hedge_after("medium" if lane_thinking else None),
         relaunch=_relaunch,
-        discard=_discard,
         # the next model goes at once; the same busy relay gets a pause
         pause=lambda exc, n: 0.0 if id(exc) in switched else upstream.backoff(exc, n),
     )
-    mid = picked[won]
+    mid = picked[attempt]
     try:
         if first is not None:
             yield first

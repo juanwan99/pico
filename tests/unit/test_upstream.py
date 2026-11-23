@@ -9,52 +9,14 @@ requests one message may cost.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from types import SimpleNamespace
-from typing import Self
 
 import httpx
 import pytest
 from pico_orchestrator import brain_ha, upstream
 from pico_orchestrator.provider import stream_chat
 
-
-async def _never_discard(_x) -> None:
-    raise AssertionError("nothing to discard")
-
-
-# --- schedule and race --------------------------------------------------------
-
-
-def test_one_hedge_at_p95_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("PICO_HEDGE_FAST_S", "PICO_HEDGE_MEDIUM_S", "PICO_HEDGE_DEEP_S"):
-        monkeypatch.delenv(name, raising=False)
-    assert upstream.hedge_after() == [25.0]
-    assert upstream.hedge_after("medium") == [25.0]
-    assert upstream.hedge_after("high") == [60.0]
-    monkeypatch.setenv("PICO_HEDGE_FAST_S", "off")
-    assert upstream.hedge_after() == []
-    monkeypatch.setenv("PICO_HEDGE_FAST_S", "1.5,4,8")  # the old three-hedge list keeps one
-    assert upstream.hedge_after() == [1.5]
-
-
-@pytest.mark.asyncio
-async def test_slow_attempt_gets_one_hedge_and_is_cancelled() -> None:
-    cancelled: list[int] = []
-
-    async def attempt(k: int) -> str:
-        try:
-            await asyncio.sleep(5.0 if k == 0 else 0.01)
-        except asyncio.CancelledError:
-            cancelled.append(k)
-            raise
-        return f"a{k}"
-
-    call = upstream.Call("t")
-    assert await upstream.race(
-        attempt, call, hedge=[0.02], relaunch=lambda _e: True, discard=_never_discard
-    ) == ("a1", 1)
-    assert cancelled == [0] and call.sent == 2
+# --- serial retries ----------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -69,7 +31,7 @@ async def test_failure_replaced_at_once_bad_request_stops_budget_caps() -> None:
 
     t0 = asyncio.get_running_loop().time()
     out = await upstream.race(
-        flaky, upstream.Call("t"), hedge=[30.0], relaunch=lambda _e: True, discard=_never_discard
+        flaky, upstream.Call("t"), relaunch=lambda _e: True
     )
     assert out == ("ok", 1) and asyncio.get_running_loop().time() - t0 < 1
 
@@ -78,7 +40,7 @@ async def test_failure_replaced_at_once_bad_request_stops_budget_caps() -> None:
 
     with pytest.raises(ValueError):
         await upstream.race(
-            bad, upstream.Call("t"), relaunch=lambda _e: False, discard=_never_discard
+            bad, upstream.Call("t"), relaunch=lambda _e: False
         )
 
     tries: list[int] = []
@@ -89,7 +51,7 @@ async def test_failure_replaced_at_once_bad_request_stops_budget_caps() -> None:
 
     with pytest.raises(RuntimeError, match="down 2"):
         await upstream.race(
-            down, upstream.Call("t"), relaunch=lambda _e: True, discard=_never_discard
+            down, upstream.Call("t"), relaunch=lambda _e: True
         )
     assert tries == [0, 1, 2]  # CALL_BUDGET, however willing relaunch is
 
@@ -117,8 +79,6 @@ def _env(monkeypatch: pytest.MonkeyPatch, fallbacks: str = "gemini-3.8-flash") -
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
     # sol stands in for any Responses-wire model here; the AIProxy rule (#1344) has its own tests.
     monkeypatch.setenv("PICO_LONG_SESSION_MODELS", "")
-    for name in ("PICO_HEDGE_FAST_S", "PICO_HEDGE_MEDIUM_S"):
-        monkeypatch.delenv(name, raising=False)
 
 
 class _Chunks:
@@ -195,7 +155,7 @@ async def test_direct_concurrent_messages_wait_for_a_key_slot(
     calls = _relay(monkeypatch, lambda _m, _n: _Chunks("好", wait=0.05))
     outs = await asyncio.gather(*(_ask() for _ in range(6)))
     assert outs == [["好"]] * 6
-    assert len(calls) == 6  # no hedge, no retry
+    assert len(calls) == 6  # one request per message
     assert max(upstream.stats()["peak"].values()) == 2
 
 
@@ -209,7 +169,7 @@ async def test_direct_503_costs_three_requests_then_fails(monkeypatch: pytest.Mo
     calls = _relay(monkeypatch, overloaded)
     with pytest.raises(RuntimeError):
         await _ask()
-    assert len(calls) == upstream.CALL_BUDGET == 3  # was 4 hedges × 7 overload tries
+    assert len(calls) == upstream.CALL_BUDGET == 3
 
 
 @pytest.mark.asyncio
@@ -249,7 +209,7 @@ def _upstream(monkeypatch: pytest.MonkeyPatch, handler) -> list[bytes]:
     return hits
 
 
-async def _proxy_step(run_id: str, body: bytes = b'{"model":"m"}', hedge=None):
+async def _proxy_step(run_id: str, body: bytes = b'{"model":"m"}'):
     from app import ws_proxy_router as mod
 
     resp = await mod._stream(
@@ -257,7 +217,6 @@ async def _proxy_step(run_id: str, body: bytes = b'{"model":"m"}', hedge=None):
         "http://relay/v1/chat/completions",
         {},
         body,
-        hedge=hedge,
         call=upstream.Call("pi_step", run_id=run_id),
         key="sk-box",
         run_id=run_id,
@@ -271,7 +230,7 @@ async def _proxy_step(run_id: str, body: bytes = b'{"model":"m"}', hedge=None):
 async def test_proxy_in_order_and_slow_first_token(monkeypatch: pytest.MonkeyPatch) -> None:
     async def handler(_req, n):
         if n == 2:
-            await asyncio.sleep(5)  # this copy is stuck in the relay queue
+            await asyncio.sleep(0.05)
         return httpx.Response(
             200, content=b"data: tok\n\n", headers={"content-type": "text/event-stream"}
         )
@@ -280,8 +239,8 @@ async def test_proxy_in_order_and_slow_first_token(monkeypatch: pytest.MonkeyPat
     assert await _proxy_step("run-a") == (200, b"data: tok\n\n")
     assert len(hits) == 1
     stream = b'{"model":"m","stream":true}'
-    assert await _proxy_step("run-a", stream, hedge=[0.05]) == (200, b"data: tok\n\n")
-    assert len(hits) == 3  # one hedge for the stuck step, no more
+    assert await _proxy_step("run-a", stream) == (200, b"data: tok\n\n")
+    assert len(hits) == 2  # the slow step still sends one request
 
 
 @pytest.mark.asyncio
@@ -332,17 +291,7 @@ async def test_proxy_relay_403_is_noted_and_not_retried(monkeypatch: pytest.Monk
     assert not brain_ha.is_model_dead('{"ok": false, "code": "proxy.no_run"}')
 
 
-def test_proxy_skips_hedge_when_the_run_switches_model_on_stall() -> None:
-    from app.ws_proxy_router import model_hedge
-
-    step = b'{"model":"m","stream":true}'
-    assert model_hedge(step, "run-x") == [25.0]
-    upstream.run_state("run-x").no_hedge = True
-    assert model_hedge(step, "run-x") == []
-    assert model_hedge(b'{"model":"m"}') == []  # JSON reply: no first token to wait on
-
-
-# --- review #1283: pauses, hang-ups, every road through the door -------------------
+# --- review #1283: pauses and every road through the door ----------------------
 
 
 @pytest.mark.asyncio
@@ -363,7 +312,7 @@ async def test_retry_pauses_two_then_six_seconds_and_honours_retry_after(
         raise _Status(503, "busy")
 
     with pytest.raises(_Status):
-        await upstream.race(busy, upstream.Call("t"), relaunch=lambda _e: True, discard=_never_discard)
+        await upstream.race(busy, upstream.Call("t"), relaunch=lambda _e: True)
     assert slept == [2.0, 6.0]  # three requests, two pauses; none after the last
 
     slept.clear()
@@ -377,108 +326,12 @@ async def test_retry_pauses_two_then_six_seconds_and_honours_retry_after(
         return "ok"
 
     assert await upstream.race(
-        limited, upstream.Call("t"), relaunch=upstream.worth_retry, discard=_never_discard
+        limited, upstream.Call("t"), relaunch=upstream.worth_retry
     ) == ("ok", 1)
     assert slept == [3.0]
     assert upstream.retry_after(_Status(503, "x")) is None
     assert not upstream.worth_retry(_Status(400, "bad request"))
     assert upstream.worth_retry(httpx.ConnectError("refused"))
-
-
-class _FakeRelay:
-    """Real HTTP on 127.0.0.1 serving SSE chat replies, as a slow relay does.
-
-    The first request gets no token until the hedge arrives; then both get their
-    first token at the same moment and keep generating for ``rest`` s. A client
-    that hangs up ends its request at once: ``hangups`` holds how long after the
-    first token each hang-up came, ``open`` the requests still being served.
-    """
-
-    def __init__(self, rest: float = 3.0) -> None:
-        self.rest = rest
-        self.hangups: list[float] = []
-        self.open = 0
-        self.requests = 0
-        self.both = asyncio.Event()
-        self.server: asyncio.base_events.Server | None = None
-
-    async def __aenter__(self) -> Self:
-        self.server = await asyncio.start_server(self._serve, "127.0.0.1", 0)
-        return self
-
-    async def __aexit__(self, *_a) -> None:
-        assert self.server is not None
-        self.server.close()
-
-    @property
-    def url(self) -> str:
-        assert self.server is not None
-        return f"http://127.0.0.1:{self.server.sockets[0].getsockname()[1]}/v1"
-
-    @staticmethod
-    def _chunk(data: bytes) -> bytes:
-        return b"%x\r\n%s\r\n" % (len(data), data)
-
-    @staticmethod
-    def _sse(text: str, finish: str | None = None) -> bytes:
-        fin = f'"{finish}"' if finish else "null"
-        return (
-            'data: {"id":"c","object":"chat.completion.chunk","created":1,"model":"m",'
-            f'"choices":[{{"index":0,"delta":{{"content":"{text}"}},"finish_reason":{fin}}}]}}\n\n'
-        ).encode()
-
-    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        try:
-            while True:
-                head = await reader.readuntil(b"\r\n\r\n")
-                size = 0
-                for line in head.split(b"\r\n"):
-                    if line.lower().startswith(b"content-length:"):
-                        size = int(line.split(b":", 1)[1])
-                await reader.readexactly(size)
-                self.requests += 1
-                if self.requests == 2:
-                    self.both.set()
-                self.open += 1
-                try:
-                    writer.write(
-                        b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n"
-                        b"transfer-encoding: chunked\r\n\r\n"
-                    )
-                    await writer.drain()
-                    await asyncio.wait_for(self.both.wait(), 30)
-                    writer.write(self._chunk(self._sse("o")))
-                    await writer.drain()
-                    t0 = asyncio.get_running_loop().time()
-                    with contextlib.suppress(TimeoutError):
-                        if await asyncio.wait_for(reader.read(1), self.rest) == b"":
-                            self.hangups.append(asyncio.get_running_loop().time() - t0)
-                            return
-                    writer.write(self._chunk(self._sse("k", "stop") + b"data: [DONE]\n\n"))
-                    writer.write(b"0\r\n\r\n")
-                    await writer.drain()
-                finally:
-                    self.open -= 1
-        except (asyncio.IncompleteReadError, ConnectionError, TimeoutError):
-            return
-        finally:
-            writer.close()
-
-
-@pytest.mark.asyncio
-async def test_hedge_loser_hangs_up_on_the_relay_within_a_second(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Review #1283 ②: the dropped copy closes its HTTP stream, not when GC gets to it."""
-    _env(monkeypatch)
-    monkeypatch.setenv("PICO_HEDGE_FAST_S", "0.2")
-    async with _FakeRelay() as relay:
-        monkeypatch.setenv("DEEPSEEK_BASE_URL", relay.url)
-        assert "".join(await _ask()) == "ok"
-        assert relay.requests == 2  # first stalls, the hedge goes out, both answer
-        assert len(relay.hangups) == 1 and relay.hangups[0] < 1.0  # the loser, at once
-        assert relay.open == 0
-        assert upstream.stats()["inflight"] == {}
 
 
 @pytest.mark.asyncio

@@ -5,15 +5,11 @@ Every request Pico sends to New API goes through here: direct chat
 ``llm_pass_router``), embeddings / rerank (``meili_kb``) and images
 (``image_generate``). The rules live in one place:
 
-* **Budget.** One logical call sends at most ``CALL_BUDGET`` requests: the
-  first, one hedge, one retry or model switch — all counted together. Before
-  this, retries nested (Pi 8× → proxy hedges 3× → resume 3× → 3 models) and one
-  teacher message could reach dozens of upstream requests.
+* **Budget.** One logical call sends at most ``CALL_BUDGET`` requests, counting
+  the first attempt, retries, and model switches together.
 * **One run, one spare pool.** Whatever layers sit above (Pi retry, Pico
   resume, brain fail-over), the extra requests of one run come out of
   ``RUN_SPARE``. When it is spent, calls still go out — once each, no extras.
-* **One hedge**, at the relay's ~p95 first token (25 s). 10-14 live data:
-  hedges at 1.5 / 4 / 8 s made 57–72 % of gemini / grok traffic cancelled legs.
 * **One retry layer**: only before the first token, only for 429 / 5xx / no
   connection, after a 2 s then 6 s pause (or the relay's ``Retry-After``). A
   dead key or a missing channel switches model instead, at once.
@@ -35,17 +31,14 @@ import hashlib
 import os
 import time
 from collections import Counter, OrderedDict
-from collections.abc import Awaitable, Callable, Iterator, Sequence
-from contextlib import contextmanager, suppress
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
 
 CALL_BUDGET = 3
 RUN_SPARE = 6
-HEDGE_S = 25.0
-# High effort legitimately holds the first token for tens of seconds.
-DEEP_HEDGE_S = 60.0
 KEY_MAX_ENV = "PICO_UPSTREAM_KEY_MAX"
 # 14 days live (10-18): at most 5 runs at once, one per teacher (pico#1344).
 _KEY_MAX_DEFAULT = 4
@@ -64,10 +57,6 @@ _OCR_MAX_DEFAULT = 16
 EXAM_KEY_MAX_ENV = "PICO_UPSTREAM_EXAM_KEY_MAX"
 _EXAM_MAX_DEFAULT = 6
 SLOT_WAIT_S = 120.0
-
-HEDGE_FAST_ENV = "PICO_HEDGE_FAST_S"
-HEDGE_MEDIUM_ENV = "PICO_HEDGE_MEDIUM_S"
-HEDGE_DEEP_ENV = "PICO_HEDGE_DEEP_S"
 
 # Before the first token these are worth one more try (same model).
 RETRY_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504, 520, 522, 524, 529})
@@ -170,43 +159,12 @@ def backoff(exc: BaseException, n: int) -> float:
     return RETRY_BACKOFF_S[min(n, len(RETRY_BACKOFF_S) - 1)]
 
 
-# --- hedge schedule ----------------------------------------------------------
-
-
-def _one(raw: str | None, default: float) -> list[float]:
-    """At most one hedge. ``off`` / ``0`` turns it off; a list keeps its smallest value."""
-    if raw is None or not raw.strip():
-        return [default]
-    if raw.strip().lower() in {"0", "off", "none"}:
-        return []
-    vals: list[float] = []
-    for part in raw.split(","):
-        with suppress(ValueError):
-            v = float(part.strip())
-            if v > 0:
-                vals.append(v)
-    return [min(vals)] if vals else [default]
-
-
-def hedge_after(effort: str | None = None) -> list[float]:
-    """Seconds without a first token before the one hedge fires, by reasoning effort."""
-    effort = (effort or "").strip().lower()
-    if effort in {"high", "xhigh", "max"}:
-        return _one(os.environ.get(HEDGE_DEEP_ENV), DEEP_HEDGE_S)
-    if effort == "medium":
-        return _one(os.environ.get(HEDGE_MEDIUM_ENV), HEDGE_S)
-    return _one(os.environ.get(HEDGE_FAST_ENV), HEDGE_S)
-
-
 # --- per-run spare pool -------------------------------------------------------
 
 
 @dataclass
 class RunState:
     spare: int = RUN_SPARE
-    # Pi runs whose fast lane already switches model on a stalled first token:
-    # a same-model hedge at the same moment would only be cancelled.
-    no_hedge: bool = False
     # Last error status the relay itself answered (the proxy's own 401/403 never land here).
     last_status: int | None = None
     last_error: str = ""
@@ -313,92 +271,36 @@ async def race[T](
     start: Callable[[int], Awaitable[T] | None],
     call: Call,
     *,
-    hedge: Sequence[float] = (),
     relaunch: Callable[[BaseException], bool],
-    discard: Callable[[T], Awaitable[None]],
     pause: Callable[[BaseException, int], float] = backoff,
 ) -> tuple[T, int]:
-    """First attempt to succeed wins: ``(result, attempt_index)``.
+    """Try in sequence and return ``(result, attempt_index)`` on success.
 
-    ``start(k)`` opens attempt ``k`` (None = no attempt k). It must clean up
-    when cancelled. Attempt 1 starts at ``hedge[0]`` s if nothing answered yet,
-    or ``pause(exc, n)`` s after an attempt fails and ``relaunch(exc)`` (nothing
-    else pending; ``n`` counts retries). Every attempt is
-    charged to ``call``; a refused charge means no more attempts. Extra winners
-    go to ``discard``. If every attempt fails, the last error is raised.
+    ``start(k)`` opens attempt ``k`` (None = no attempt k) and cleans up on
+    cancellation. After a failure, ``relaunch`` decides whether to try again
+    and ``pause`` gives the delay. Every attempt shares the ``call`` budget.
     """
-    loop = asyncio.get_running_loop()
-    t0 = loop.time()
-    pending: dict[asyncio.Future, int] = {}
-    launched = 0
-    exhausted = False
-    hedged = False
-    last_exc: BaseException | None = None
-    winner: asyncio.Future | None = None
-    winner_idx = 0
-    retries = 0
-
-    def launch(why: str = "") -> None:
-        nonlocal launched, exhausted
-        if exhausted or not call.allow():
-            exhausted = True
-            return
-        aw = start(launched)
+    attempt = 0
+    last_exc: Exception | None = None
+    while call.allow():
+        aw = start(attempt)
         if aw is None:
-            exhausted = True
-            return
-        pending[asyncio.ensure_future(aw)] = launched
-        launched += 1
-        if why:
-            count(call.purpose, why)
-
-    launch()
-    try:
-        while pending:
-            timeout = None
-            if not exhausted and not hedged and hedge:
-                timeout = max(0.0, t0 + hedge[0] - loop.time())
-            done, _ = await asyncio.wait(
-                pending, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
-            )
-            if not done:
-                hedged = True
-                launch("hedge")
-                continue
-            failed_retry = False
-            for fut in sorted(done, key=lambda f: pending[f]):
-                idx = pending.pop(fut)
-                exc = fut.exception()
-                if exc is None:
-                    if winner is None:
-                        winner = fut
-                        winner_idx = idx
-                    else:
-                        with suppress(Exception):
-                            await discard(fut.result())
-                    continue
-                last_exc = exc
-                failed_retry = failed_retry or relaunch(exc)
-            if winner is not None:
-                return winner.result(), winner_idx
-            if failed_retry and not pending and last_exc is not None:
-                wait = pause(last_exc, retries) if call.can_extra() and not exhausted else 0.0
-                retries += 1
-                if wait > 0:
-                    await asyncio.sleep(wait)
-                launch("retry")
-        if last_exc is not None:
-            raise last_exc
-        raise RuntimeError("no model attempt was started")
-    finally:
-        for fut in pending:
-            fut.cancel()
-        for fut in list(pending):
-            with suppress(BaseException):
-                res = await fut
-                if fut is not winner:
-                    with suppress(Exception):
-                        await discard(res)
+            break
+        if attempt:
+            count(call.purpose, "retry")
+        try:
+            return await aw, attempt
+        except Exception as exc:
+            if not relaunch(exc):
+                raise
+            last_exc = exc
+            wait = pause(exc, attempt) if call.can_extra() else 0.0
+        if wait > 0:
+            await asyncio.sleep(wait)
+        attempt += 1
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("no model attempt was started")
 
 
 # --- per-key slots and counters ---------------------------------------------

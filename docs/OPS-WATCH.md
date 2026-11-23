@@ -28,7 +28,7 @@ python3 /opt/pico/scripts/pico_ops_watch.py report --hours 24
 
 ```bash
 # 改：先备份，再改，再记一行
-python3 /opt/pico/scripts/pico_ops_watch.py env-set PICO_HEDGE_FAST_S=25 --card pico#1269 --why "取消腿 60%"
+python3 /opt/pico/scripts/pico_ops_watch.py env-set PICO_UPSTREAM_MEMBER_MAX=2 --card pico#1344 --why "限制每位老师的并发"
 # 别的工具已经改了：补记原因
 python3 /opt/pico/scripts/pico_ops_watch.py env-record --card pico#1261 --why "..."
 ```

@@ -10,7 +10,7 @@ from pico_orchestrator.llm_file_pass import splice_responses_body, turn_files
 
 from app.loopback import is_loopback_host, request_on_loopback_socket
 from app.settings import Settings, get_settings
-from app.ws_proxy_router import DOOR_HEADER, _stream, gemini_thinking_body, model_hedge, session_of
+from app.ws_proxy_router import DOOR_HEADER, _stream, gemini_thinking_body, session_of
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -74,16 +74,14 @@ async def llm_pass(run_id: str, path: str, request: Request) -> Response:
     # step and marked it; Pi talking here directly (no box) is raced here.
     raced = headers.pop(DOOR_HEADER, None)  # starlette keys are lower-case
     if raced:
-        call, hedge = door.Call("pi_pass", budget=1), []
+        call = door.Call("pi_pass", budget=1)
     else:
         call = door.Call("pi_step", run_id=run_id)
-        hedge = model_hedge(raw, run_id) if request.method == "POST" else []
     return await _stream(
         request.method,
         target,
         headers,
         raw,
-        hedge=hedge,
         call=call,
         key=auth.removeprefix("Bearer ").strip() or "llm-pass",
         run_id=None if raced else run_id,
