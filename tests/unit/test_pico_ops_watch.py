@@ -63,16 +63,16 @@ def test_runs_rate_leaves_teacher_cancels_out(watch) -> None:
 
 def test_env_trail_masks_secrets_and_moves_snapshot(watch, tmp_path: Path) -> None:
     env = tmp_path / ".env"
-    env.write_text("PICO_HEDGE_FAST_S=1.5\nDEEPSEEK_API_KEY=sk-old\n", encoding="utf-8")
+    env.write_text("PICO_UPSTREAM_MEMBER_MAX=1\nDEEPSEEK_API_KEY=sk-old\n", encoding="utf-8")
     assert watch.record_env("", "", "watch") == []  # first run = baseline only
-    env.write_text("PICO_HEDGE_FAST_S=25\nDEEPSEEK_API_KEY=sk-new\nPICO_NEW=1\n", encoding="utf-8")
-    changes = watch.record_env("pico#1269", "cancel legs 60 %", "env-record")
-    assert "PICO_HEDGE_FAST_S: 1.5 -> 25" in changes
+    env.write_text("PICO_UPSTREAM_MEMBER_MAX=2\nDEEPSEEK_API_KEY=sk-new\nPICO_NEW=1\n", encoding="utf-8")
+    changes = watch.record_env("pico#1344", "member concurrency cap", "env-record")
+    assert "PICO_UPSTREAM_MEMBER_MAX: 1 -> 2" in changes
     assert "PICO_NEW: unset -> 1" in changes
     trail = (tmp_path / "trail.log").read_text(encoding="utf-8")
-    assert "pico#1269" in trail and "cancel legs 60 %" in trail
+    assert "pico#1344" in trail and "member concurrency cap" in trail
     assert "sk-old" not in trail and "sk-new" not in trail and "DEEPSEEK_API_KEY: sha:" in trail
-    assert watch.record_env("pico#1269", "again", "env-record") == []  # nothing new
+    assert watch.record_env("pico#1344", "again", "env-record") == []  # nothing new
 
 
 def test_unlogged_env_change_alerts_once(watch, tmp_path: Path) -> None:

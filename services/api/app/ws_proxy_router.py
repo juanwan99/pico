@@ -118,7 +118,6 @@ async def _stream(
     body: bytes,
     *,
     on_done=None,
-    hedge: list[float] | None = None,
     call: upstream.Call | None = None,
     key: str = "",
     run_id: str | None = None,
@@ -126,10 +125,9 @@ async def _stream(
 ) -> Response:
     """Stream upstream back. ``on_done`` runs once the body is fully sent (or failed).
 
-    Model calls (pico#1271) carry a ``call`` budget: one hedge after ``hedge``
-    s without a first token, one retry on 429 / 5xx / no connection. Any other
-    error status goes straight back to Pi, and is noted for the run so brain
-    fail-over can tell a relay 403 from our own.
+    Model calls (pico#1271) retry 429 / 5xx / connection failures within the
+    ``call`` budget. Other error statuses go straight back to Pi and are noted
+    for the run so brain fail-over can tell a relay 403 from our own.
     """
 
     def _done() -> None:
@@ -143,21 +141,14 @@ async def _stream(
             method, target, headers, body, key=key, purpose=call.purpose, bill_run=bill_run
         )
 
-    async def discard(opened) -> None:
-        client, resp, _first, _chunks, release = opened
-        with contextlib.suppress(Exception):
-            await resp.aclose()
-        await client.aclose()
-        release()
-
     def relaunch(exc: BaseException) -> bool:
         if isinstance(exc, _Status):
             return upstream.verdict(exc.status) == "retry"
         return isinstance(exc, httpx.HTTPError)
 
     try:
-        (client, resp, first, chunks, release), won = await upstream.race(
-            start, call, hedge=hedge or [], relaunch=relaunch, discard=discard
+        (client, resp, first, chunks, release), attempt = await upstream.race(
+            start, call, relaunch=relaunch
         )
     except _Status as exc:
         _done()
@@ -178,8 +169,10 @@ async def _stream(
     except BaseException:
         _done()
         raise
-    if won:
-        logger.info("ws-proxy hedge won attempt=%s target=%s", won, target.rsplit("/", 1)[-1])
+    if attempt:
+        logger.info(
+            "ws-proxy retry succeeded attempt=%s target=%s", attempt, target.rsplit("/", 1)[-1]
+        )
 
     async def _iter():
         try:
@@ -202,27 +195,6 @@ async def _stream(
         headers=out,
         media_type=resp.headers.get("content-type"),
     )
-
-
-def request_effort(payload: dict) -> str:
-    """Reasoning effort the call asked for (Responses or chat/completions shape)."""
-    reasoning = payload.get("reasoning")
-    effort = str(reasoning.get("effort") or "") if isinstance(reasoning, dict) else ""
-    return (effort or str(payload.get("reasoning_effort") or "")).lower()
-
-
-def model_hedge(body: bytes, run_id: str | None = None) -> list[float]:
-    """Hedge schedule for one model call; streaming only (a JSON reply has no first token)."""
-    try:
-        payload = json.loads(body.decode("utf-8") or "{}")
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return []
-    if not isinstance(payload, dict) or payload.get("stream") is not True:
-        return []
-    st = upstream.run_state(run_id)
-    if st is not None and st.no_hedge:
-        return []
-    return upstream.hedge_after(request_effort(payload))
 
 
 MODEL_PATHS = frozenset({"chat/completions", "responses", "models"})
@@ -346,8 +318,6 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
     except TimeoutError:
         return _deny("proxy.busy", 429)
     # Slot is held until the streamed body is done, not just the headers.
-    # Hedged copies ride the same slot: they race for one answer (pico#1257).
-    hedge = model_hedge(body, run_id) if request.method == "POST" else []
     if is_llm_pass(target):
         headers[DOOR_HEADER] = "raced"
     token = upstream.CALLER.set(upstream.Caller(session=session, member=entry.member))
@@ -358,7 +328,6 @@ async def ws_llm(run_id: str, path: str, request: Request) -> Response:
             headers,
             body,
             on_done=entry.slots.release,
-            hedge=hedge,
             call=upstream.Call("pi_step", run_id=run_id),
             key="" if is_llm_pass(target) else entry.llm_key,
             run_id=run_id,

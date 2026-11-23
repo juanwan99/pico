@@ -303,9 +303,6 @@ async def run_true_pi_agent(
         stall = pi_stall_switch_s() if i == 0 and len(models) > 1 else 0.0
         st = upstream.run_state(rid)
         if st is not None:
-            # The stall switch already moves on at the hedge's moment: no
-            # same-model hedge to cancel a second later.
-            st.no_hedge = stall > 0
             st.last_status = None
         last = await _run_true_pi_once(
             emit=gate.emit,
@@ -1185,7 +1182,7 @@ async def _run_true_pi_once(
             and state.resumes < budget
             and _provider_fail_code(state.provider_error) != "model.usage_limit"
             # A resume is one more upstream request: it comes out of the run's
-            # spare pool, with the proxy's hedges and retries (pico#1271).
+            # spare pool, with the proxy's retries (pico#1271).
             and spare is not None
             and spare.spare > 0
         ):

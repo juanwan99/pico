@@ -246,7 +246,7 @@ def proxy(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PICO_RUNNER_TOKEN", TOKEN)
     seen: dict[str, Any] = {}
 
-    async def fake_stream(method, target, headers, body, on_done=None, hedge=None, **door):
+    async def fake_stream(method, target, headers, body, on_done=None, **door):
         from fastapi.responses import JSONResponse
 
         seen.update(headers=headers, caller=upstream.CALLER.get())
