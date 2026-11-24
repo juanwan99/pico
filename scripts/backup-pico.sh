@@ -146,17 +146,14 @@ cmd_run() {
   nonempty "$dir/mongo.archive.gz"
 
   log "pico.db"
-  docker exec "$API" python3 -c '
-import sqlite3
-src = sqlite3.connect("file:/app/data/pico.db?mode=ro", uri=True)
-dst = sqlite3.connect("/tmp/pico-backup.db")
-src.backup(dst)
-ok = dst.execute("pragma quick_check").fetchone()[0]
-dst.close()
-raise SystemExit(0 if ok == "ok" else "quick_check: " + ok)
-' || fail "pico.db backup"
-  docker exec "$API" cat /tmp/pico-backup.db | gzip -1 >"$dir/pico.db.gz" || fail "pico.db copy"
-  docker exec "$API" rm -f /tmp/pico-backup.db || true
+  local pico_data check
+  pico_data="$(docker volume inspect -f '{{.Mountpoint}}' pico_pico_data)" || fail "pico_data volume"
+  # Keep the snapshot owned by the backup user. Only the Docker volume needs sudo.
+  : >"$dir/pico.db" || fail "pico.db snapshot file"
+  (cd "$dir" && sudo -n sqlite3 -readonly "$pico_data/pico.db" '.backup pico.db') || fail "pico.db backup"
+  check="$(sqlite3 -readonly "$dir/pico.db" 'PRAGMA quick_check;')" || fail "pico.db quick_check"
+  [[ "$check" == ok ]] || fail "pico.db quick_check: $check"
+  gzip -1 "$dir/pico.db" || fail "pico.db gzip"
   nonempty "$dir/pico.db.gz"
 
   log "pico-data / teacher-disks / librechat files"

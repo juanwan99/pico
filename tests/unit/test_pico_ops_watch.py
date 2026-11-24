@@ -5,7 +5,10 @@ from __future__ import annotations
 import datetime as dt
 import importlib.util
 import json
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.error import URLError
 
 import pytest
 
@@ -59,6 +62,37 @@ def test_runs_rate_leaves_teacher_cancels_out(watch) -> None:
     ok, bad, user_cancel, causes = watch.summarize_runs(rows)
     assert (ok, bad, user_cancel) == (6, 3, 1)
     assert {k: len(v) for k, v in causes.items()} == {"上游 5xx / 连不上": 2, "系统取消": 1}
+
+
+def test_probe_uses_egress_for_public_and_direct_for_local(
+    watch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+    proxy_down = True
+
+    def build_opener(handler):
+        def open_url(url, *, timeout):
+            calls.append((handler.proxies, url))
+            if proxy_down and handler.proxies:
+                raise URLError("proxy unavailable")
+            return nullcontext(SimpleNamespace(status=200))
+
+        return SimpleNamespace(open=open_url)
+
+    monkeypatch.setattr(watch.urllib.request, "build_opener", build_opener)
+    state = {}
+    assert not watch.check_probe(state)[0]
+    public_proxy = {"http": "http://127.0.0.1:7893", "https": "http://127.0.0.1:7893"}
+    assert calls == [
+        (public_proxy, f"{watch.PUBLIC}/health"),
+        (public_proxy, f"{watch.PUBLIC}/login"),
+        ({}, f"{watch.LOCAL}/health"),
+    ]
+    bad, summary, _ = watch.check_probe(state)
+    assert bad and summary == "公网入口连续 2 轮不通"
+    proxy_down = False
+    assert not watch.check_probe(state)[0]
+    assert state["probe_streak"] == 0
 
 
 def test_env_trail_masks_secrets_and_moves_snapshot(watch, tmp_path: Path) -> None:

@@ -41,6 +41,8 @@ API = os.environ.get("PICO_OPS_API_CONTAINER", "pico-pico-api-1")
 NEWAPI = os.environ.get("PICO_OPS_NEWAPI_CONTAINER", "new-api")
 PUBLIC = os.environ.get("PICO_OPS_PUBLIC_URL", "https://pico.aivia.asia")
 LOCAL = os.environ.get("PICO_OPS_LOCAL_URL", "http://127.0.0.1:18765")
+# Same ECS egress as the production tip smoke (#1413).
+PUBLIC_PROXY = "http://127.0.0.1:7893"
 
 WINDOW_MIN = int(os.environ.get("PICO_OPS_RUNS_WINDOW_MIN", "60"))
 RUNS_MIN_BAD = int(os.environ.get("PICO_OPS_RUNS_MIN_BAD", "4"))
@@ -109,9 +111,15 @@ def cause_of(error: str) -> str:
 
 def check_probe(state: dict) -> tuple[bool, str, str]:
     misses = []
-    for url in (f"{PUBLIC}/health", f"{PUBLIC}/login", f"{LOCAL}/health"):
+    public = urllib.request.build_opener(
+        urllib.request.ProxyHandler({"http": PUBLIC_PROXY, "https": PUBLIC_PROXY})
+    )
+    local = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    for opener, url in (
+        (public, f"{PUBLIC}/health"), (public, f"{PUBLIC}/login"), (local, f"{LOCAL}/health")
+    ):
         try:
-            with urllib.request.urlopen(url, timeout=12) as r:
+            with opener.open(url, timeout=12) as r:
                 if r.status >= 400:
                     misses.append(f"{url} {r.status}")
         except Exception as e:  # noqa: BLE001
