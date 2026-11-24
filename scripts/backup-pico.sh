@@ -146,13 +146,29 @@ cmd_run() {
   nonempty "$dir/mongo.archive.gz"
 
   log "pico.db"
-  local pico_data check
-  pico_data="$(docker volume inspect -f '{{.Mountpoint}}' pico_pico_data)" || fail "pico_data volume"
-  # Keep the snapshot owned by the backup user. Only the Docker volume needs sudo.
-  : >"$dir/pico.db" || fail "pico.db snapshot file"
-  (cd "$dir" && sudo -n sqlite3 -readonly "$pico_data/pico.db" '.backup pico.db') || fail "pico.db backup"
-  check="$(sqlite3 -readonly "$dir/pico.db" 'PRAGMA quick_check;')" || fail "pico.db quick_check"
-  [[ "$check" == ok ]] || fail "pico.db quick_check: $check"
+  # Use the compose image directly so an API container replacement can't interrupt the copy.
+  # The WAL volume must allow SQLite to create its shared-memory file.
+  docker run --rm -i --pull=never --network none --entrypoint python3 \
+    --mount type=volume,source=pico_pico_data,target=/data \
+    --mount "type=bind,source=$dir,target=/backup" pico-api:v13 - <<'PY' || fail "pico.db backup"
+import os
+import sqlite3
+from contextlib import closing
+
+os.umask(0o077)
+snapshot = "/backup/pico.db"
+with (
+    closing(sqlite3.connect("file:/data/pico.db?mode=ro", uri=True)) as source,
+    closing(sqlite3.connect(snapshot)) as target,
+):
+    source.backup(target)
+    check = target.execute("PRAGMA quick_check").fetchone()[0]
+    if check != "ok":
+        raise SystemExit(f"pico.db quick_check: {check}")
+
+owner = os.stat("/backup")
+os.chown(snapshot, owner.st_uid, owner.st_gid)
+PY
   gzip -1 "$dir/pico.db" || fail "pico.db gzip"
   nonempty "$dir/pico.db.gz"
 
