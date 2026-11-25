@@ -21,6 +21,7 @@ import shutil
 import tempfile
 import time
 from collections.abc import Awaitable, Callable, Iterable
+from ctypes import c_float
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -637,6 +638,7 @@ class PlaywrightPage:
         self.cast_token = 0
         self._viewport = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
         self._device_scale = 1.0
+        self._viewport_changed_at = 0.0
         self._viewport_lock = asyncio.Lock()
         self._viewport_task: asyncio.Task[None] | None = None
         self._metrics: dict[Any, Any] = {}
@@ -700,9 +702,12 @@ class PlaywrightPage:
         elif self._viewport_task is task:
             self._viewport_task = None
 
-    async def _apply_metrics(self, page: Any, viewport: tuple[int, int], scale: float) -> None:
+    async def _apply_metrics(self, page: Any, viewport: tuple[int, int], scale: float) -> float:
         cdp = await self._page_metrics(page)
         await self._place_on_screen(cdp, max(1.0, scale))
+        # CDP frame timestamps are Unix seconds. Start at dispatch so a frame
+        # rendered before the command response still belongs to the new viewport.
+        changed_at = time.time()
         await cdp.send(
             "Emulation.setDeviceMetricsOverride",
             {
@@ -712,6 +717,7 @@ class PlaywrightPage:
                 "deviceScaleFactor": scale,
             },
         )
+        return changed_at
 
     async def _place_on_screen(self, cdp: Any, scale: float) -> None:
         # Use Chromium's native headless display DPR so screencast has no resize filter.
@@ -772,7 +778,7 @@ class PlaywrightPage:
         async with self._viewport_lock:
             if size != self._viewport or scale != self._device_scale:
                 task = self._viewport_task
-                await self._apply_metrics(self._page, size, scale)
+                self._viewport_changed_at = await self._apply_metrics(self._page, size, scale)
                 self._viewport = size
                 self._device_scale = scale
                 self.page_token += 1
@@ -1416,10 +1422,11 @@ class PlaywrightPage:
             cdp = await self._context.new_cdp_session(page)
         active = True
         last_jpeg: str | None = None
+        last_page_token = self.page_token
         last_frame_at = 0.0
 
         async def on_frame(event: dict[str, Any]) -> None:
-            nonlocal last_jpeg, last_frame_at
+            nonlocal last_jpeg, last_page_token, last_frame_at
             if not active:
                 return
             try:
@@ -1428,33 +1435,34 @@ class PlaywrightPage:
                 if active:
                     raise
                 logger.debug("screencast stopped while acknowledging a frame", exc_info=True)
-            if not active or self._page is not page:
-                return
-            meta = event["metadata"]
-            timestamp = meta.get("timestamp", 0.0)
-            if timestamp < last_frame_at:
-                return
+            async with self._viewport_lock:
+                if not active or self._page is not page:
+                    return
+                meta = event["metadata"]
+                timestamp = meta.get("timestamp", 0.0)
+                if timestamp < max(last_frame_at, self._viewport_changed_at):
+                    return
             width, height = self._viewport
-            scale = max(1.0, self._device_scale)
-            native_width = math.ceil(width * scale)
-            native_height = math.ceil(height * scale)
-            # Chromium rounds the compositor raster using float32 DPR.
-            # Allow the one-pixel difference from Python's double precision.
+            scale = c_float(max(1.0, self._device_scale)).value
+            # Match Chromium's float32 ScaleToCeiledSize. A one-pixel margin
+            # could accept the old surface while the resize is taking effect.
+            native_width = math.ceil(c_float(width * scale).value)
+            native_height = math.ceil(c_float(height * scale).value)
             if (
-                abs(round(meta["deviceWidth"] * scale) - native_width) > 1
-                or abs(round(meta["deviceHeight"] * scale) - native_height) > 1
+                round(meta["deviceWidth"] * scale) != native_width
+                or round(meta["deviceHeight"] * scale) != native_height
             ):
                 return
             # Chromium can pair a queued bitmap with the current view's metadata on resize.
             # Check the JPEG header before using those coordinates for teacher input.
             jpeg = event["data"]
             with Image.open(io.BytesIO(base64.b64decode(jpeg))) as img:
-                if abs(img.width - native_width) > 1 or abs(img.height - native_height) > 1:
+                if img.size != (native_width, native_height):
                     return
             last_frame_at = timestamp
-            if jpeg == last_jpeg:
+            if self.page_token == last_page_token and jpeg == last_jpeg:
                 return
-            last_jpeg = jpeg
+            last_page_token, last_jpeg = self.page_token, jpeg
             push(ScreencastFrame(jpeg, width, height, time.monotonic(), self.page_token))
 
         async def stop() -> None:

@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -276,6 +277,46 @@ async def test_progressive_stream_refines_only_the_latest_frame(live_runtime, mo
         await runtime.apply_input(sess, frame_ack=last_motion["frame_id"])
         assert (await _next(agen)) == {"ping": True}
     finally:
+        await agen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_motion_encode_skips_superseded_frame_before_spending_ack_slot(
+    live_runtime, monkeypatch,
+) -> None:
+    runtime, pages = live_runtime
+    monkeypatch.setattr(runtime_mod, "STREAM_PING_S", 5)
+    monkeypatch.setattr(runtime_mod, "STREAM_FIRST_REFINE_S", 1)
+    monkeypatch.setattr(runtime_mod, "STREAM_REFINE_S", 1)
+    loop = asyncio.get_running_loop()
+    encoding = asyncio.Event()
+    release = threading.Event()
+
+    def motion(frame):
+        if frame.jpeg == "stale":
+            loop.call_soon_threadsafe(encoding.set)
+            assert release.wait(2)
+        return f"motion:{frame.jpeg}"
+
+    monkeypatch.setattr(ScreencastFrame, "motion_jpeg", motion)
+    sess = await _open(runtime)
+    agen = runtime.stream(sess, ack=True)
+    first = await _next(agen)
+    page = pages[0]
+    page.push(ScreencastFrame("stale", 1920, 1080, time.monotonic()))
+    pending = asyncio.create_task(_next(agen))
+    try:
+        await asyncio.wait_for(encoding.wait(), 1)
+        page.push(ScreencastFrame("latest", 1920, 1080, time.monotonic()))
+        release.set()
+        latest = await pending
+        assert latest["jpeg"] == "motion:latest"
+        assert set(sess.frame_acks) == {first["frame_id"], latest["frame_id"]}
+        await runtime.apply_input(sess, frame_ack=latest["frame_id"])
+        assert (await _next(agen))["jpeg"] == "latest"
+    finally:
+        release.set()
+        await asyncio.gather(pending, return_exceptions=True)
         await agen.aclose()
 
 

@@ -169,7 +169,7 @@ function watchPane({ image, fullscreen }) {
   });
 }
 
-export async function measurePane(page, maximize, { out, reference, run }) {
+export async function measurePane(page, maximize, { out, getReference, run }) {
   const img = page.locator(IMAGE);
   const wait = { polling: 25, timeout: 15000 };
   await page.waitForFunction(
@@ -222,8 +222,7 @@ export async function measurePane(page, maximize, { out, reference, run }) {
     wait,
   );
   const max = await page.evaluate(
-    ({ image, crop, reference }) => {
-      const img = document.querySelector(image);
+    (image) => {
       const { frames, requests, maximizeAt } = window.sandboxLatency;
       const frame = frames.find(
         (f) => f.at >= maximizeAt && f.natural[0] === 2880 && f.wide,
@@ -231,36 +230,41 @@ export async function measurePane(page, maximize, { out, reference, run }) {
       const request = requests.find(
         (r) => r.at >= maximizeAt && r.viewport_width === 1920,
       );
-      const [x, y, width, height] = crop;
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      return (async () => {
-        const png = new Image();
-        png.src = `data:image/png;base64,${reference}`;
-        await png.decode();
-        const jpeg = img.getAttribute('src').split(',')[1];
-        ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
-        const pixels = ctx.getImageData(0, 0, width, height).data;
-        ctx.drawImage(png, x, y, width, height, 0, 0, width, height);
-        const truth = ctx.getImageData(0, 0, width, height).data;
-        let error = 0;
-        for (let i = 0; i < pixels.length; i += 4) {
-          for (let channel = 0; channel < 3; channel++)
-            error += (pixels[i + channel] - truth[i + channel]) ** 2;
-        }
-        return {
-          frame,
-          request,
-          ms: frame.at - maximizeAt,
-          jpeg,
-          rms: Math.sqrt(error / (width * height * 3)),
-        };
-      })();
+      return {
+        frame,
+        request,
+        ms: frame.at - maximizeAt,
+        jpeg: document.querySelector(image).getAttribute('src').split(',')[1],
+      };
     },
-    { image: IMAGE, crop: CROP, reference },
+    IMAGE,
   );
+  const reference = await getReference();
+  max.rms = await page.evaluate(async ({ jpeg, reference, crop }) => {
+    const shown = new Image();
+    shown.src = `data:image/jpeg;base64,${jpeg}`;
+    const png = new Image();
+    png.src = `data:image/png;base64,${reference}`;
+    await Promise.all([shown.decode(), png.decode()]);
+    // The worker PNG is captured with the active DPR and resized to CSS pixels.
+    const scale = png.naturalWidth / shown.naturalWidth;
+    const [x, y, width, height] = crop.map((n) => Math.round(n * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(shown, -x, -y, png.naturalWidth, png.naturalHeight);
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+    ctx.drawImage(png, -x, -y);
+    const truth = ctx.getImageData(0, 0, width, height).data;
+    let error = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      for (let channel = 0; channel < 3; channel++)
+        error += (pixels[i + channel] - truth[i + channel]) ** 2;
+    }
+    return Math.sqrt(error / (width * height * 3));
+  }, { jpeg: max.jpeg, reference, crop: CROP });
   const jpeg = Buffer.from(max.jpeg, 'base64');
   await fs.writeFile(path.join(out, `clear-${run}.jpg`), jpeg);
   max.jpegKiB = jpeg.length / 1024;
@@ -311,7 +315,7 @@ export async function captureReference(gold) {
     height: 2400,
     devicePixelRatio: DPR,
   });
-  try {
+  return await withCleanup(async () => {
     const { windowId } = await metrics.send('Browser.getWindowForTarget');
     await metrics.send('Browser.setWindowBounds', {
       windowId,
@@ -338,14 +342,49 @@ export async function captureReference(gold) {
     }
     await raster(720, 700);
     return await raster(WIDTH, HEIGHT);
-  } finally {
+  }, async () => {
     await pageCdp.detach();
     await metrics.detach();
     await browserCdp.send('Emulation.removeScreen', {
       screenId: screenInfo.id,
     });
     await browserCdp.detach();
+  });
+}
+
+async function withCleanup(run, cleanup) {
+  let completed = false;
+  try {
+    const result = await run();
+    completed = true;
+    return result;
+  } finally {
+    try {
+      await cleanup();
+    } catch (error) {
+      if (completed) throw error;
+      console.error('Sandbox latency cleanup failed:', error);
+    }
   }
+}
+
+async function requireEmptyDesk(sessions, headers) {
+  const current = await fetch(`${sessions}/current`, { headers });
+  if (current.ok) throw new Error('The test teacher already has an open sandbox desk.');
+  if (current.status !== 404 || (await current.json()).detail?.code !== 'sandbox.session_not_found') {
+    throw new Error(`sandbox preflight HTTP ${current.status}`);
+  }
+}
+
+async function workerReference(url, headers, file) {
+  const response = await fetch(`${url}/screenshot`, { headers });
+  if (!response.ok) throw new Error(`sandbox reference PNG HTTP ${response.status}`);
+  const png = Buffer.from(await response.arrayBuffer());
+  if (png.readUInt32BE(16) !== WIDTH || png.readUInt32BE(20) !== HEIGHT) {
+    throw new Error('Sandbox reference PNG has the wrong CSS viewport');
+  }
+  await fs.writeFile(file, png);
+  return png.toString('base64');
 }
 
 async function main() {
@@ -378,7 +417,7 @@ async function main() {
   const { chromium } = loadPlaywright();
   const link = args.limit ? await limitedSandboxLink(args['base-url']) : null;
   let browser;
-  try {
+  await withCleanup(async () => {
     browser = await chromium.launch({
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
       args: [
@@ -391,22 +430,33 @@ async function main() {
     });
     const base = link?.base || new URL(args['base-url']).origin;
     const tip = await fetchTip(base);
-    const gold = await browser.newPage({
-      viewport: { width: 1280, height: 800 },
-    });
-    await gold.goto(fixtureUrl);
-    const reference = await captureReference(gold);
-    await fs.writeFile(
-      path.join(out, 'reference.png'),
-      Buffer.from(reference, 'base64'),
-    );
-    await gold.close();
+    const local = ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname);
 
     const page = await browser.newPage({
       viewport: WINDOW,
       deviceScaleFactor: DPR,
     });
-    await login(page, base, email, password);
+    const [loggedIn] = await Promise.all([
+      page.waitForResponse((res) =>
+        res.url() === `${base}/api/auth/login` && res.request().method() === 'POST',
+      ),
+      login(page, base, email, password),
+    ]);
+    if (!loggedIn.ok()) throw new Error(`sandbox login HTTP ${loggedIn.status()}`);
+    const { token } = await loggedIn.json();
+    const headers = { authorization: `Bearer ${token}` };
+    const sessions = `${base}/api/pico/v1/sandbox/sessions`;
+    await requireEmptyDesk(sessions, headers);
+
+    let reference;
+    if (local) {
+      const gold = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      reference = await withCleanup(async () => {
+        await gold.goto(fixtureUrl);
+        return await captureReference(gold);
+      }, () => gold.close());
+      await fs.writeFile(path.join(out, 'reference.png'), Buffer.from(reference, 'base64'));
+    }
     await page.addInitScript(watchPane, {
       image: IMAGE,
       fullscreen: FULLSCREEN,
@@ -414,6 +464,7 @@ async function main() {
     const runs = [];
     for (let run = 1; run <= 3; run++) {
       await goNewChat(page, base);
+      await requireEmptyDesk(sessions, headers);
       await page.addStyleTag({
         content: `
         ${STAGE} { flex: none !important; width: 720px !important; height: 700px !important }
@@ -422,22 +473,26 @@ async function main() {
         }
       `,
       });
-      const opened = page.waitForResponse(
-        (res) =>
-          res.url().endsWith('/v1/sandbox/sessions') &&
-          res.request().method() === 'POST' &&
-          res.request().postDataJSON()?.url === fixtureUrl,
-      );
-      await sendPrompt(page, fixtureUrl);
-      const response = await opened;
-      if (!response.ok())
-        throw new Error(`sandbox open HTTP ${response.status()}`);
+      // Own the desk before the chat mounts the pane. The pane can then attach
+      // to the same desk even if it requests the fixture during a remount.
+      const response = await fetch(sessions, {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ url: fixtureUrl }),
+      });
+      if (!response.ok)
+        throw new Error(`sandbox open HTTP ${response.status}`);
       const { session_id: id } = await response.json();
-      try {
+      const url = `${sessions}/${id}`;
+      await withCleanup(async () => {
+        await sendPrompt(page, `打开 ${fixtureUrl}`);
+        const getReference = local ? () => reference : () => workerReference(
+          url, headers, path.join(out, `reference-${run}.png`),
+        );
         const result = await measurePane(
           page,
           () => page.locator(FULLSCREEN).click(),
-          { out, reference, run },
+          { out, getReference, run },
         );
         runs.push(result);
         console.log(
@@ -449,17 +504,11 @@ async function main() {
             smallTextRms: result.max.rms,
           }),
         );
-      } finally {
-        const { authorization } = await response.request().allHeaders();
-        const closed = await page.request.delete(
-          `${base}/api/pico/v1/sandbox/sessions/${id}`,
-          {
-            headers: { authorization },
-          },
-        );
-        if (!closed.ok())
-          throw new Error(`sandbox cleanup HTTP ${closed.status()}`);
-      }
+      }, async () => {
+        const closed = await fetch(url, { method: 'DELETE', headers });
+        if (!closed.ok)
+          throw new Error(`sandbox cleanup HTTP ${closed.status}`);
+      });
     }
     const medianFps = runs.map((r) => r.scroll.fps).sort((a, b) => a - b)[1];
     const pass =
@@ -468,16 +517,17 @@ async function main() {
     writeJson(path.join(out, 'report.json'), {
       tip,
       limited: args.limit,
+      referencePixels: local ? 'native' : 'css',
       fixtureUrl,
       runs,
       medianFps,
       pass,
     });
     if (!pass) process.exitCode = 1;
-  } finally {
+  }, async () => {
     link?.close();
     await browser?.close();
-  }
+  });
 }
 
 export { FIXTURE, watchPane };

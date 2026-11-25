@@ -103,12 +103,20 @@ async def test_screencast_discards_stale_bitmap_with_new_viewport_metadata(
     context = MagicMock(pages=[page], new_cdp_session=AsyncMock(return_value=cdp))
     surface = PlaywrightPage(context, page, tmp_path)
     monkeypatch.setattr(surface, "_place_on_screen", AsyncMock())
+    before_resize = time.time()
     await surface.set_viewport(480, 620, 1.5)
     push = MagicMock()
     stop = await surface.screencast(push)
     try:
         on_frame = cdp.on.call_args.args[1]
-        frames = [(450, 1, "black"), (930, 3, "black"), (930, 4, "black"), (930, 2, "red")]
+        before_frames = time.time()
+        frames = [
+            (930, before_resize, "red"),
+            (450, before_frames + 1, "black"),
+            (930, before_frames + 3, "black"),
+            (930, before_frames + 4, "black"),
+            (930, before_frames + 2, "red"),
+        ]
         for session_id, (height, timestamp, color) in enumerate(frames, start=1):
             buf = io.BytesIO()
             with Image.new("RGB", (720, height), color) as jpeg:
@@ -116,14 +124,16 @@ async def test_screencast_discards_stale_bitmap_with_new_viewport_metadata(
             await on_frame({
                 "data": base64.b64encode(buf.getvalue()).decode(),
                 "sessionId": session_id,
-                "metadata": {"deviceWidth": 480, "deviceHeight": 620, "timestamp": timestamp},
+                "metadata": {
+                    "deviceWidth": 480, "deviceHeight": 620, "timestamp": timestamp,
+                },
             })
         push.assert_called_once()
         frame = push.call_args.args[0]
         assert (frame.width, frame.height) == (480, 620)
         with Image.open(io.BytesIO(base64.b64decode(frame.jpeg))) as jpeg:
             assert jpeg.size == (720, 930)
-        for session_id in (1, 2, 3, 4):
+        for session_id in range(1, len(frames) + 1):
             cdp.send.assert_any_await("Page.screencastFrameAck", {"sessionId": session_id})
     finally:
         await stop()
@@ -415,6 +425,96 @@ async def test_real_chromium_screencast_accepts_float32_dpr_rounding(tmp_path, c
             with Image.open(io.BytesIO(base64.b64decode(frame.jpeg))) as jpeg:
                 assert jpeg.size == (1100, 770)
         finally:
+            await stop()
+    finally:
+        await surface.close()
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_delivers_identical_jpeg_for_new_viewport(tmp_path, chromium) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    context = await chromium.new_context()
+    page = await context.new_page()
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
+    try:
+        await surface.set_viewport(720, 700, 1.5)
+        frames = asyncio.Queue()
+        stop = await surface.screencast(frames.put_nowait)
+        try:
+            first = await asyncio.wait_for(frames.get(), 2)
+            assert (first.width, first.height) == (720, 700)
+            await surface.set_viewport(1080, 1050)
+            resized = await asyncio.wait_for(frames.get(), 2)
+            assert (resized.width, resized.height) == (1080, 1050)
+            assert resized.jpeg == first.jpeg
+            assert resized.page_token == first.page_token + 1
+        finally:
+            await stop()
+    finally:
+        await surface.close()
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_drops_late_frame_from_one_pixel_smaller_viewport(
+    tmp_path, monkeypatch, chromium,
+) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    context = await chromium.new_context()
+    page = await context.new_page()
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
+    try:
+        await page.set_content(
+            "<style>html{background:red}@media(min-width:720px){html{background:blue}}</style>"
+        )
+        await surface.set_viewport(719, 700)
+        cdp = await context.new_cdp_session(page)
+        listen = cdp.on
+        stale = asyncio.get_running_loop().create_future()
+        release_stale = asyncio.Event()
+        stale_processed = asyncio.Event()
+
+        def delay_first_frame(event_name, on_frame):
+            async def on_cdp_frame(event):
+                if not stale.done():
+                    with Image.open(io.BytesIO(base64.b64decode(event["data"]))) as jpeg:
+                        red, _, blue = jpeg.getpixel((100, 100))
+                        if jpeg.size == (719, 700) and red > 240 and blue < 15:
+                            stale.set_result(event)
+                            await release_stale.wait()
+                            await on_frame(event)
+                            stale_processed.set()
+                            return
+                if not release_stale.is_set():
+                    await cdp.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
+                else:
+                    await stale_processed.wait()
+                    await on_frame(event)
+
+            listen(event_name, on_cdp_frame)
+
+        monkeypatch.setattr(cdp, "on", delay_first_frame)
+        monkeypatch.setattr(context, "new_cdp_session", AsyncMock(return_value=cdp))
+        frames = asyncio.Queue()
+        stop = await surface.screencast(frames.put_nowait)
+        try:
+            await page.evaluate("document.body.textContent = 'Paint the original layout'")
+            old = await asyncio.wait_for(stale, 2)
+            assert old["metadata"]["timestamp"] < time.time()
+            await surface.set_viewport(720, 700)
+            release_stale.set()
+            await asyncio.wait_for(stale_processed.wait(), 2)
+            await page.evaluate("document.body.textContent = 'Repaint the resized layout'")
+            resized = await asyncio.wait_for(frames.get(), 2)
+            assert (resized.width, resized.height) == (720, 700)
+            with Image.open(io.BytesIO(base64.b64decode(resized.jpeg))) as jpeg:
+                assert jpeg.size == (720, 700)
+                red, _, blue = jpeg.getpixel((100, 100))
+                assert blue > 240 and red < 15
+        finally:
+            release_stale.set()
+            stale_processed.set()
             await stop()
     finally:
         await surface.close()

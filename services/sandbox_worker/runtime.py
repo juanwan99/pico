@@ -1038,7 +1038,8 @@ class SandboxRuntime:
                             if refine is frame:
                                 jpeg = await asyncio.to_thread(frame.motion_jpeg)
                                 if (
-                                    self._alive_focus(sess) != window_id
+                                    not frames.empty()
+                                    or self._alive_focus(sess) != window_id
                                     or getattr(win.surface, "page_token", 0) != page_token
                                 ):
                                     continue
