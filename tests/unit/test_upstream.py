@@ -278,9 +278,12 @@ async def test_proxy_503_three_per_step_and_the_run_pool_runs_dry(
     [
         (500, None, 120, 3, [20, 60, 120]),
         (None, None, 120, 3, [20, 60, 120]),
+        (429, "0", 20, 3, [20]),
         (429, "240", 120, 3, [240]),
         (429, "900", 600, 10, [300]),
         (500, None, 260, 3, [20, 60, 120]),
+        ("busy", None, 20, 3, [20]),
+        ("cut", None, 20, 3, [20]),
     ],
 )
 async def test_pi_resumes_after_relay_outage_with_an_empty_spare_pool(
@@ -309,6 +312,11 @@ async def test_pi_resumes_after_relay_outage_with_an_empty_spare_pool(
             return await real_wait(tasks, timeout=0)
         return await real_wait(tasks, timeout=timeout)
 
+    class InterruptedStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"data: first chunk\n\n"
+            raise httpx.RemoteProtocolError("stream interrupted")
+
     async def relay(request, n):
         if n <= 9:
             # Three earlier steps recovered on their final in-call retry.
@@ -318,6 +326,8 @@ async def test_pi_resumes_after_relay_outage_with_an_empty_spare_pool(
             return httpx.Response(200, text="报告已补齐。")
         if status is None:
             raise httpx.ReadTimeout("no response", request=request)
+        if status == "cut":
+            return httpx.Response(200, stream=InterruptedStream())
         headers = {"Retry-After": retry_after} if retry_after is not None else {}
         message = "Database error" if status == 500 else "rate limit"
         return httpx.Response(status, json={"error": {"message": message}}, headers=headers)
@@ -337,7 +347,17 @@ async def test_pi_resumes_after_relay_outage_with_an_empty_spare_pool(
                     await self._event_q.put(
                         RpcEvent({"type": "tool_execution_start", "toolName": "bash"})
                     )
-                code, body = await _proxy_step(run_id)
+                if status == "cut" and elapsed < recovers_at:
+                    with pytest.raises(httpx.RemoteProtocolError, match="stream interrupted"):
+                        await _proxy_step(run_id)
+                    code, body = 502, b"stream interrupted"
+                else:
+                    code, body = await _proxy_step(run_id)
+                if status in {"busy", "cut"} and code != 200:
+                    reason = "proxy.busy" if status == "busy" else "RemoteProtocolError"
+                    assert upstream.run_state(run_id).relay_failure == upstream.RelayFailure(
+                        None, reason, None
+                    )
                 msg = {"role": "assistant", "content": []}
                 if code == 200:
                     assert files["outputs/report.md"] == b"# Report\n"
@@ -367,6 +387,16 @@ async def test_pi_resumes_after_relay_outage_with_an_empty_spare_pool(
         return False
 
     hits = _upstream(monkeypatch, relay)
+    if status == "busy":
+        acquire = upstream.acquire
+
+        async def busy_acquire(key, purpose):
+            if len(hits) >= 9 and elapsed < recovers_at:
+                relay_times.append(elapsed)
+                raise upstream.UpstreamBusy("all slots busy")
+            return await acquire(key, purpose)
+
+        monkeypatch.setattr(upstream, "acquire", busy_acquire)
     monkeypatch.setattr(asyncio, "wait", wait)
     monkeypatch.setattr(runner, "list_outputs", list_outputs)
     monkeypatch.setattr(runner, "fetch_output", fetch_output)
@@ -389,7 +419,7 @@ async def test_pi_resumes_after_relay_outage_with_an_empty_spare_pool(
     waits = [p["wait_seconds"] for p in resumes]
     assert waits == expected_waits
     assert relay_times == [0, *(sum(waits[:i]) for i in range(1, len(waits) + 1))]
-    assert len(hits) == 9 + 1 + len(expected_waits)
+    assert len(hits) == 9 + 1 + len(expected_waits) - (status == "busy")
     assert upstream.run_state(run_id).spare == 0
     assert sum(c["type"] == "prompt" for c in transport.sent) == 1 + len(expected_waits)
     assert delivered["report.md"] == b"# Report\n"

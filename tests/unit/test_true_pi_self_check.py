@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import subprocess
@@ -15,6 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from pico_orchestrator import upstream
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import FakeTransport
 from pico_orchestrator.true_pi.runtime import run_true_pi_agent
@@ -191,7 +193,9 @@ async def _not_cancelled() -> bool:
     return False
 
 
-async def _run(monkeypatch, transport: FakeTransport) -> tuple[Any, list[tuple[str, dict[str, Any]]]]:
+async def _run(
+    monkeypatch, transport: FakeTransport, *, run_id: str | None = None
+) -> tuple[Any, list[tuple[str, dict[str, Any]]]]:
     from pico_orchestrator.true_pi import runner
 
     async def fake_list(_key: Any) -> dict[str, Any]:
@@ -216,6 +220,7 @@ async def _run(monkeypatch, transport: FakeTransport) -> tuple[Any, list[tuple[s
         is_cancelled=_not_cancelled,
         caps=RunCaps(min_artifacts=0, max_seconds=20),
         transport=transport,
+        run_id=run_id,
     )
     return result, events
 
@@ -246,6 +251,58 @@ async def test_one_extra_round_on_facts_then_succeeds(monkeypatch) -> None:
     resume = [p for k, p in events if k == "run.resume"]
     assert len(resume) == 1 and resume[0]["reason"] == "self_check"
     assert resume[0]["text"].startswith("交付前自查：")
+
+
+@pytest.mark.asyncio
+async def test_self_check_round_resumes_when_relay_recovers(monkeypatch) -> None:
+    run_id = "self-check-outage"
+    elapsed = 0.0
+    requests = []
+    real_wait = asyncio.wait
+
+    async def advance_outage_clock(tasks, *, timeout=None):
+        nonlocal elapsed
+        if timeout in upstream.RESUME_BACKOFF_S:
+            elapsed += timeout
+            timeout = 0
+        return await real_wait(tasks, timeout=timeout)
+
+    failed = _turn("")
+    failed[2]["message"].update(stopReason="error", errorMessage="500 Database error")
+    fixed = _turn(_CLAIM)
+    fixed.insert(2, {"type": "tool_execution_start", "toolName": "write"})
+
+    class RecoveringPi(FakeTransport):
+        async def send(self, command):
+            if command["type"] == "prompt":
+                if requests and elapsed < 120:
+                    upstream.note_upstream_error(run_id, 500, "Database error")
+                    self.scripted_after_prompt = [failed]
+                elif requests:
+                    self.scripted_after_prompt = [fixed]
+                requests.append(elapsed)
+            await super().send(command)
+
+    monkeypatch.setattr(asyncio, "wait", advance_outage_clock)
+    monkeypatch.setenv("PICO_RUN_RESUME_MAX", "3")
+    transport = RecoveringPi(
+        scripted=_turn(_CLAIM), bash_outputs=[_MISSING, "", _FIXED], assistant_text=""
+    )
+
+    result, events = await _run(monkeypatch, transport, run_id=run_id)
+
+    assert result.status == "succeeded", result.error
+    assert requests == [0, 0, 20, 80, 200]
+    resumes = [p for k, p in events if k == "run.resume"]
+    assert resumes[0]["reason"] == "self_check"
+    assert [p["wait_seconds"] for p in resumes[1:]] == [20, 60, 120]
+    assert upstream.run_state(run_id).spare == upstream.RUN_SPARE
+    assert len([c for c in transport.sent if c["type"] == "bash"]) == 3
+    assert any(
+        k == "tool.result" and json.loads(p["result"]).get("artifact_id") == "a1"
+        for k, p in events
+    )
+    assert not [k for k, _ in events if k == "run.error"]
 
 
 @pytest.mark.asyncio

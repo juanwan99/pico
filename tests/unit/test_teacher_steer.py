@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from pico_orchestrator import upstream
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi import steer as teacher_steer
 from pico_orchestrator.true_pi.client import FakeTransport, RpcEvent
@@ -189,6 +190,41 @@ async def test_steer_that_missed_the_end_is_said_as_the_next_prompt() -> None:
     assert [c["message"] for c in transport.sent if c.get("type") == "prompt"][-1] == said
     assert ("run.steer", {"text": said, "late": True, "runtime": "pi-true"}) in events
     assert "已加签名。" in result.final_text
+
+
+@pytest.mark.asyncio
+async def test_late_steer_resumes_after_relay_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    said = "再加一行签名"
+    failed = {"role": "assistant", "stopReason": "error", "errorMessage": "500 Database error"}
+    start = [{"type": "agent_start"}, {"type": "turn_start"}]
+
+    class LateSteerPi(SteerablePi):
+        async def send(self, command: Any) -> None:
+            if command.get("type") == "prompt" and command.get("message") == said:
+                upstream.note_upstream_error("steer-t", 500, "Database error")
+            await super().send(command)
+
+    monkeypatch.setattr(upstream, "RESUME_BACKOFF_S", (0.01,))
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = LateSteerPi(
+        scripted=[*start, *TOOL],
+        after_steer=[*_done("做好了。"), *END, {"type": "agent_settled"}],
+        scripted_after_prompt=[
+            [*start, {"type": "message_end", "message": failed}, *END],
+            [*start, *_done("已加签名。"), *END],
+        ],
+    )
+    run = asyncio.create_task(_run(transport, events))
+    assert await _steer_when_live(said) is True
+    result = await run
+
+    assert result.status == "succeeded", result.error
+    prompts = [c["message"] for c in transport.sent if c.get("type") == "prompt"]
+    assert len(prompts) == 3 and prompts[1] == said
+    assert "继续" in prompts[2]
+    assert "已加签名。" in result.final_text
+    [resume] = [p for k, p in events if k == "run.resume"]
+    assert resume["wait_seconds"] == 0.01
 
 
 @pytest.mark.asyncio

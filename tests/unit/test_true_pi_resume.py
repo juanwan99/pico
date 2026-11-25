@@ -142,6 +142,27 @@ async def test_error_after_output_resumes_same_session_and_succeeds() -> None:
 
 
 @pytest.mark.asyncio
+async def test_relay_400_resumes_immediately_and_charges_spare() -> None:
+    reason = "400 try again later"
+    upstream.note_upstream_error("resume-t", 400, reason)
+    relay = upstream.run_state("resume-t")
+    spare_before = relay.spare
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(
+        scripted=_error_after_work(reason), scripted_after_prompt=[_finish()], assistant_text=""
+    )
+
+    result = await _run(transport, events)
+
+    assert result.status == "succeeded", result.error
+    assert len(_prompts(transport)) == 2
+    resume, = [p for k, p in events if k == "run.resume"]
+    assert resume["reason"] == reason and "wait_seconds" not in resume
+    assert "正在重试" in resume["text"]
+    assert relay.spare == spare_before - 1
+
+
+@pytest.mark.asyncio
 async def test_error_before_any_output_does_not_resume() -> None:
     """Pre-output failures stay with brain-HA failover (another model, fresh start)."""
     upstream.note_upstream_error("resume-t", 500, "Database error")

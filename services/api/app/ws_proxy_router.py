@@ -167,6 +167,8 @@ async def _stream(
         out = {k: v for k, v in exc.headers.items() if k.lower() not in _HOP}
         return Response(exc.body, status_code=exc.status, headers=out)
     except upstream.UpstreamBusy:
+        if run is not None:
+            upstream.note_upstream_error(run_id, None, "proxy.busy")
         _done()
         return _deny("proxy.busy", 429)
     except Exception as exc:  # noqa: BLE001 — any upstream failure is a 502 to the box
@@ -190,6 +192,10 @@ async def _stream(
                 yield first
             async for chunk in chunks:
                 yield chunk
+        except httpx.HTTPError as exc:
+            if run is not None:
+                upstream.note_upstream_error(run_id, None, type(exc).__name__)
+            raise
         finally:
             try:
                 await resp.aclose()

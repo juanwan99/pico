@@ -1160,9 +1160,6 @@ async def _run_true_pi_once(
                 state.provider_error = state.tool_hung
             return None
 
-        early = await _drive(full_prompt, list(getattr(caps, "images", None) or []))
-        if early is not None:
-            return early
         # Same-session resume (#1104): one upstream error after the model already
         # did work must not throw the whole long task away. Pi keeps the turn in
         # its session; ask it to carry on from where it stopped. Before any
@@ -1178,81 +1175,99 @@ async def _run_true_pi_once(
         budget = 0 if (toolless or personal_turn) else resume_max()
         relay_run = upstream.run_state(rid)
         resume_waited = 0.0
-        while (
-            state.settled
-            and state.provider_error
-            and state.has_output
-            and not state.no_resume
-            and state.resumes < budget
-            and _provider_fail_code(state.provider_error) != "model.usage_limit"
-        ):
-            if is_model_dead(f"{state.provider_error} {upstream.upstream_error(rid)}"):
-                break
-            failure = relay_run.relay_failure if relay_run is not None else None
-            wait_s = None
-            if failure is not None and not state.tool_hung:
-                remaining = upstream.RESUME_WAIT_MAX_S - resume_waited
-                if upstream.verdict(failure.status) != "retry" or remaining <= 0:
-                    break
-                wait_s = failure.retry_after_s
-                if wait_s is None:
-                    backoff = upstream.RESUME_BACKOFF_S
-                    wait_s = backoff[min(state.resumes, len(backoff) - 1)]
-                wait_s = min(wait_s, remaining)
-            if not wait_s:
-                # Keep the spare charge for immediate resumes (#1271).
-                if relay_run is None or relay_run.spare <= 0:
-                    break
-                relay_run.spare -= 1
-            state.resumes += 1
-            reason = str(state.provider_error)[:200]
-            logger.info(
-                "true_pi resume run_id=%s n=%s/%s wait_s=%s reason=%s",
-                rid, state.resumes, budget, wait_s, reason,
-            )
-            state.event_kinds.append("run.resume")
-            hung = state.tool_hung
-            # A status line in the step box, not words in the reply (pico#1320).
-            await emit(
-                "run.resume",
-                {
-                    "attempt": state.resumes,
-                    "max": budget,
-                    "reason": reason,
-                    "text": resume_teacher_note(state.resumes, tool_hang=bool(hung), wait_s=wait_s),
-                    **({"wait_seconds": wait_s} if wait_s is not None else {}),
-                    **tag,
-                },
-            )
-            if wait_s:
-                # The watcher finishes on cancellation or the run deadline.
-                await asyncio.wait({watcher}, timeout=wait_s)
-                if (
-                    await is_cancelled()
-                    or timed_out.is_set()
-                    or wall_expired(loop.time(), deadline)
-                ):
-                    break
-                resume_waited += wait_s
-                last_progress_wall = fuse_from = loop.time()
-            state.provider_error = None
-            state.settled = False
-            state.tool_hung = ""
-            state.awaiting_start = True
-            if hasattr(transport, "plan_agent_ends"):
-                # Plan-mode end counting is per prompt; the last prompt's ends would
-                # land the resumed turn ~1s in as "empty plan".
-                transport.plan_agent_ends = 0
-                transport.plan_first_held_at = None
-            steps_before = state.step
-            early = await _drive(tool_hang_prompt(hung) if hung else resume_prompt(reason), [])
+
+        async def _drive_with_resume(
+            prompt_text: str, images: list[dict[str, Any]]
+        ) -> RunResult | None:
+            nonlocal resume_waited, last_progress_wall, fuse_from
+            early = await _drive(prompt_text, images)
             if early is not None:
                 return early
-            if state.step == steps_before and not state.provider_error:
-                # Nothing new ran (box gone, prompt ignored): never a blank success.
-                state.provider_error = f"resume produced no new turn after: {reason}"
-                state.settled = True
-                state.no_resume = True
+
+            while (
+                state.settled
+                and state.provider_error
+                and state.has_output
+                and not state.no_resume
+                and state.resumes < budget
+                and _provider_fail_code(state.provider_error) != "model.usage_limit"
+            ):
+                if is_model_dead(f"{state.provider_error} {upstream.upstream_error(rid)}"):
+                    break
+                failure = relay_run.relay_failure if relay_run is not None else None
+                wait_s = None
+                if (
+                    failure is not None
+                    and not state.tool_hung
+                    and upstream.verdict(failure.status) == "retry"
+                ):
+                    remaining = upstream.RESUME_WAIT_MAX_S - resume_waited
+                    if remaining <= 0:
+                        break
+                    backoff = upstream.RESUME_BACKOFF_S
+                    delay = backoff[min(state.resumes, len(backoff) - 1)]
+                    wait_s = min(max(failure.retry_after_s or 0.0, delay), remaining)
+                if wait_s is None:
+                    # Keep the spare charge for immediate resumes (#1271).
+                    if relay_run is None or relay_run.spare <= 0:
+                        break
+                    relay_run.spare -= 1
+                state.resumes += 1
+                reason = str(state.provider_error)[:200]
+                logger.info(
+                    "true_pi resume run_id=%s n=%s/%s wait_s=%s reason=%s",
+                    rid, state.resumes, budget, wait_s, reason,
+                )
+                state.event_kinds.append("run.resume")
+                hung = state.tool_hung
+                # A status line in the step box, not words in the reply (pico#1320).
+                await emit(
+                    "run.resume",
+                    {
+                        "attempt": state.resumes,
+                        "max": budget,
+                        "reason": reason,
+                        "text": resume_teacher_note(
+                            state.resumes, tool_hang=bool(hung), wait_s=wait_s
+                        ),
+                        **({"wait_seconds": wait_s} if wait_s is not None else {}),
+                        **tag,
+                    },
+                )
+                if wait_s is not None:
+                    # The watcher finishes on cancellation or the run deadline.
+                    await asyncio.wait({watcher}, timeout=wait_s)
+                    if (
+                        await is_cancelled()
+                        or timed_out.is_set()
+                        or wall_expired(loop.time(), deadline)
+                    ):
+                        break
+                    resume_waited += wait_s
+                    last_progress_wall = fuse_from = loop.time()
+                state.provider_error = None
+                state.settled = False
+                state.tool_hung = ""
+                state.awaiting_start = True
+                if hasattr(transport, "plan_agent_ends"):
+                    # Plan-mode end counting is per prompt; the last prompt's ends would
+                    # land the resumed turn ~1s in as "empty plan".
+                    transport.plan_agent_ends = 0
+                    transport.plan_first_held_at = None
+                steps_before = state.step
+                early = await _drive(tool_hang_prompt(hung) if hung else resume_prompt(reason), [])
+                if early is not None:
+                    return early
+                if state.step == steps_before and not state.provider_error:
+                    # Nothing new ran (box gone, prompt ignored): never a blank success.
+                    state.provider_error = f"resume produced no new turn after: {reason}"
+                    state.settled = True
+                    state.no_resume = True
+            return None
+
+        early = await _drive_with_resume(full_prompt, list(getattr(caps, "images", None) or []))
+        if early is not None:
+            return early
         # pico#1318: a message steered in as Pi was ending never got a turn of its
         # own. Pi still holds it queued; clear that and say it as the next prompt.
         while (
@@ -1266,13 +1281,14 @@ async def _run_true_pi_once(
             with suppress(TruePiClientError):
                 await client.clear_queue()
             state.settled = False
+            state.awaiting_start = True
             if hasattr(transport, "plan_agent_ends"):
                 transport.plan_agent_ends = 0
                 transport.plan_first_held_at = None
             for text in said:
                 state.event_kinds.append("run.steer")
                 await emit("run.steer", {"text": text[:500], "late": True, **tag})
-            early = await _drive("\n\n".join(said), [])
+            early = await _drive_with_resume("\n\n".join(said), [])
             if early is not None:
                 return early
         # pico#1334 ②: before landing, while the box is alive (the runner will
@@ -1337,7 +1353,7 @@ async def _run_true_pi_once(
                     transport.plan_first_held_at = None
                 steps_before = state.step
                 written = await _write_self_check(client, check_facts, rid)
-                early = await _drive(self_check_prompt(check_facts, written=written), [])
+                early = await _drive_with_resume(self_check_prompt(check_facts, written=written), [])
                 if early is not None:
                     return early
                 if state.step != steps_before and await _turn_healthy():
