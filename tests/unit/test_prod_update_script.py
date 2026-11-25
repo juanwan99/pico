@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
 import subprocess
 from pathlib import Path
 
@@ -616,6 +617,25 @@ def test_prod_update_generates_hook_token_when_missing() -> None:
     assert "PICO_HOOK_SERVICE_TOKEN generated" in text
     assert "PICO_HOOK_SERVICE_TOKEN=SET" in text
     assert "Do not print the value" in text
+
+
+def test_prod_update_preserves_existing_office_socket(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path)
+    sock_dir = tmp_path / "office-sock"
+    sock_dir.mkdir()
+    monkeypatch.setenv("PICO_OFFICE_SOCK_HOST", _bash_path(sock_dir))
+    monkeypatch.chdir(sock_dir)  # Bind a relative path to fit the Unix socket path limit.
+
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        listener.bind("office.sock")
+        listener.listen()
+        result = _run_prod_update(production, sha, bin_dir)
+        assert result.returncode == 0, result.stderr
+        assert (sock_dir / "office.sock").is_socket()
+        assert "pico-office socket ok" in result.stdout
 
 
 def test_prod_update_refuses_when_pico_office_socket_is_dead(tmp_path: Path) -> None:

@@ -65,7 +65,6 @@ prepare_office_sock_bind() {
     echo "[pico] FATAL: cannot chmod 1777 $dir (owner $(stat -c %u:%g "$dir") mode $(stat -c %a "$dir"))" >&2
     exit 12
   }
-  rm -f "$dir/office.sock" 2>/dev/null || true
 }
 
 remove_leftover_office_named_volume() {
