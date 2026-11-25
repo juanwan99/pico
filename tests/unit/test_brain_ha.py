@@ -1,4 +1,11 @@
+import pytest
+from pico_orchestrator import brain_ha
 from pico_orchestrator.brain_ha import brain_candidates, should_failover
+
+
+@pytest.fixture(autouse=True)
+def _fresh_stalls(monkeypatch):
+    monkeypatch.setattr(brain_ha, "_stall_times", {})
 
 
 class _Res:
@@ -127,8 +134,6 @@ async def test_no_restart_after_teacher_saw_progress(monkeypatch) -> None:
 
 
 def test_down_model_goes_last_then_returns(monkeypatch) -> None:
-    from pico_orchestrator import brain_ha
-
     monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "grok-4.6,gpt-5.6-sol")
     now = [100.0]
     monkeypatch.setattr(brain_ha.time, "monotonic", lambda: now[0])
@@ -142,6 +147,61 @@ def test_down_model_goes_last_then_returns(monkeypatch) -> None:
     assert brain_candidates("gemini-3.8-flash")[0] == "gemini-3.8-flash"
 
 
+async def test_third_stall_within_window_marks_only_that_model_down(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from pico_orchestrator.run_types import RunResult
+
+    now = [100.0]
+    monkeypatch.setattr(brain_ha, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    primary = "gemini-3.8-flash"
+    backup = "grok-4.6"
+    stalled = RunResult(
+        status="failed", final_text="", error="first token stall", code="model.unconfigured"
+    )
+    ok = RunResult(status="succeeded", final_text="done")
+    attempts = [([], stalled), ([], ok)]
+
+    await _drive(monkeypatch, attempts)
+    now[0] += 30
+    await _drive(monkeypatch, attempts)
+    brain_ha.record_stall(backup)
+    assert brain_candidates(primary, long_session=True) == [primary, backup]
+
+    now[0] += 30
+    last, _, tried = await _drive(monkeypatch, attempts)
+    assert last.status == "succeeded"
+    assert tried == [primary, backup]
+    assert brain_ha.is_down(primary)
+    assert brain_candidates(primary, long_session=True) == [backup, primary]
+
+    now[0] += brain_ha.STALL_DOWN_S - 1
+    assert brain_ha.is_down(primary)
+    now[0] += 1
+    assert brain_candidates(primary, long_session=True) == [primary, backup]
+
+
+def test_stalls_expire_individually_in_rolling_window(monkeypatch) -> None:
+    now = [100.0]
+    monkeypatch.setattr(brain_ha.time, "monotonic", lambda: now[0])
+    primary = "gemini-3.8-flash"
+
+    brain_ha.record_stall(primary)
+    now[0] += brain_ha.STALL_DOWN_S
+    brain_ha.record_stall(primary)
+    now[0] += brain_ha.STALL_DOWN_S / 2
+    brain_ha.record_stall(primary)
+    assert not brain_ha.is_down(primary)
+
+    now[0] += brain_ha.STALL_DOWN_S / 2
+    brain_ha.record_stall(primary)
+    assert not brain_ha.is_down(primary)
+
+    now[0] += 1
+    brain_ha.record_stall(primary)
+    assert brain_ha.is_down(primary)
+
+
 def test_primary_model_failure_fails_over_by_code() -> None:
     odd = _Res("failed", "something new from the relay", "true_pi.assistant_error")
     assert should_failover(odd, first=True)
@@ -151,7 +211,6 @@ def test_primary_model_failure_fails_over_by_code() -> None:
 
 
 async def test_suspended_key_fails_over_and_marks_down(monkeypatch) -> None:
-    from pico_orchestrator import brain_ha
     from pico_orchestrator.run_types import RunResult
 
     dead = RunResult(
@@ -173,12 +232,13 @@ async def test_suspended_key_fails_over_and_marks_down(monkeypatch) -> None:
 async def test_stalled_head_moves_on_and_only_head_has_a_deadline(monkeypatch) -> None:
     from types import SimpleNamespace
 
-    from pico_orchestrator import brain_ha
     from pico_orchestrator.run_types import RunCaps, RunResult
     from pico_orchestrator.true_pi import runtime
 
     monkeypatch.setenv("PICO_BRAIN_FALLBACKS", "grok-4.6")
+    monkeypatch.setenv("PICO_PI_STALL_SWITCH_S", "25")
     deadlines: list[float] = []
+    tried: list[str] = []
     stalled = RunResult(
         status="failed",
         final_text="",
@@ -189,6 +249,7 @@ async def test_stalled_head_moves_on_and_only_head_has_a_deadline(monkeypatch) -
     script = [stalled, ok]
 
     async def fake_once(*, emit, caps, stall_switch_s=0.0, **_kw):
+        tried.append(caps.backend_model)
         deadlines.append(stall_switch_s)
         return script.pop(0)
 
@@ -207,6 +268,7 @@ async def test_stalled_head_moves_on_and_only_head_has_a_deadline(monkeypatch) -
         caps=RunCaps(backend_model="gemini-3.8-flash"),
     )
     assert last.status == "succeeded"
+    assert tried == ["gemini-3.8-flash", "grok-4.6"]
     assert deadlines == [25.0, 0.0]
-    assert brain_ha.is_down("gemini-3.8-flash")
-    assert brain_candidates("gemini-3.8-flash")[0] == "grok-4.6"
+    assert not brain_ha.is_down("gemini-3.8-flash")
+    assert brain_candidates("gemini-3.8-flash", long_session=True)[0] == "gemini-3.8-flash"

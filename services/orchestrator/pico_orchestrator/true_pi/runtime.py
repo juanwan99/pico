@@ -265,12 +265,12 @@ async def run_true_pi_agent(
     from dataclasses import replace
 
     from pico_orchestrator.brain_ha import (
-        STALL_DOWN_S,
         brain_candidates,
         is_model_dead,
         is_stall,
         mark_down,
         pi_stall_switch_s,
+        record_stall,
         should_failover,
     )
     from pico_orchestrator.provider import resolve_provider, runtime_policy_for_model
@@ -322,7 +322,7 @@ async def run_true_pi_agent(
         if is_model_dead(why):
             mark_down(mid)
         elif is_stall(why):
-            mark_down(mid, STALL_DOWN_S)
+            record_stall(mid)
     if gate is not None:
         await gate.flush()
     return last or await _run_true_pi_once(emit=emit, **kwargs)

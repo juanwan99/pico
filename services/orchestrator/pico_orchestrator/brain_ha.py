@@ -67,6 +67,8 @@ PI_STALL_ENV = "PICO_PI_STALL_SWITCH_S"
 _PI_STALL_DEFAULT_S = 25.0
 FIRST_TOKEN_STALL = "first token stall"
 STALL_DOWN_S = 120.0
+_STALL_DOWN_COUNT = 3
+_stall_times: dict[str, list[float]] = {}
 
 
 # Models behind AIProxy, a coding subscription: it only takes what a coding
@@ -136,6 +138,18 @@ def mark_down(model: str, seconds: float | None = None) -> None:
             span = _DOWN_DEFAULT_S
     if model and span > 0:
         _down_until[model] = time.monotonic() + span
+
+
+def record_stall(model: str) -> None:
+    """Mark a model down after repeated first-token stalls in a rolling window."""
+    now = time.monotonic()
+    recent = [at for at in _stall_times.get(model, ()) if now - at < STALL_DOWN_S]
+    recent.append(now)
+    if len(recent) == _STALL_DOWN_COUNT:
+        _stall_times.pop(model, None)
+        mark_down(model, STALL_DOWN_S)
+    else:
+        _stall_times[model] = recent
 
 
 def is_down(model: str) -> bool:
