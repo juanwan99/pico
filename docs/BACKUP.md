@@ -17,10 +17,10 @@
 
 - 大于 128 MB 的文件切成 `名字.part-000…` 分段上传：代理会在单个上传约 10 分钟后断开，分段后断了只重传那一段。`SHA256SUMS` 记的是整文件，演练时先拼回再校验。
 - 三个 tar 打的都是在用的目录：tar 读到一半有文件变了会退出 1，这时包是完整的，记一行日志照常往下走；退出 2 及以上才算失败（pico#1313）。包好不好由 sha256 和每周演练把关。
-- 上传后用 `rclone check --size-only` 对一遍远端，对上了再传 `COMPLETE`；远端 `COMPLETE` 放好后才删本地临时目录。上传、远端核对、传 `COMPLETE` 任一步失败（含超时被 systemd SIGTERM，EXIT trap 照跑），本轮目录挪到 `${PICO_BACKUP_KEEP_DIR:-/data/ops/pico-backup-keep}/<stamp>/`，只留最近 7 份，由平台运维补传（#1419）。
+- 上传后用 `rclone check --size-only` 对一遍远端，对上了再传 `COMPLETE`；远端 `COMPLETE` 放好后才删本地临时目录。上传、远端核对、传 `COMPLETE` 任一步失败或在此期间收到 SIGTERM，本轮目录挪到 `${PICO_BACKUP_KEEP_DIR:-/data/ops/pico-backup-keep}/<stamp>/`，只留最近 7 份，由平台运维补传（#1419）。
 - 日备定时器以 `ops` 运行，通过 Docker 从本地 `pico-api:v13` 镜像启动一次性容器，API 重建期间也可以拷库（#1419）。容器挂载 `pico_pico_data` 卷以便 SQLite 创建 WAL 的 `-shm`，源库以 `mode=ro` 打开。校验通过后，容器将快照交给本轮备份目录的属主，再由宿主压缩。
-- 超时 6 小时（`TimeoutStartSec=6h`）：11-01 那次 2.14 GB 和 edu-core 备份抢代理，用了 2 小时 50 分（pico#1376）。打包阶段（导出、拷库、tar）失败不挂 trap，半成品留在工作目录；被 SIGKILL 时 trap 也跑不到。所以每次开跑先（持锁）删掉工作目录里上次留下的时间戳目录（不碰留存目录）。
-- 失败：写 `~/logs/pico-backup-status.json`（state=FAIL），并用 `~/scripts/edu-backup-alert.py` 发信。日志 `~/logs/pico-backup.log`。
+- 超时 6 小时（`TimeoutStartSec=6h`）：11-01 那次 2.14 GB 和 edu-core 备份抢代理，用了 2 小时 50 分（pico#1376）。打包阶段（导出、拷库、tar）失败时尚未设置留存用的 EXIT trap，半成品留在工作目录；被 SIGKILL 时也来不及执行 EXIT trap。所以每次开跑先（持锁）删掉工作目录里上次留下的时间戳目录（不碰留存目录）。
+- 日备失败（包括 systemd 超时发出 SIGTERM）会写 `~/logs/pico-backup-status.json`（state=FAIL），并调用 `~/scripts/edu-backup-alert.py` 发信。日备、恢复演练和新鲜度巡检的运行日志只写 `~/logs/pico-backup.log`。
 - 没跑起来（定时器停了、机器宕了）不会写 FAIL：`pico-backup-watch.timer` 每小时看一次，上次成功超过 26 小时就发信（12 小时内只发一封）。
 - 通道：ECS 直连 Google 不通，走本机 sing-box 代理 `127.0.0.1:7893`（和 edu-core 备份同一个 rclone `gdrive` 远端）。
 
