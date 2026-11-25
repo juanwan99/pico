@@ -13,6 +13,7 @@ import math
 import os
 import sys
 import time
+from contextlib import aclosing
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -35,28 +36,60 @@ from test_sandbox_live_pane import CastSurface, StillSurface, live_runtime  # no
 
 
 @pytest.mark.asyncio
-async def test_failed_tab_fit_does_not_disable_screencast(tmp_path, monkeypatch, caplog) -> None:
+async def test_failed_tab_fit_falls_back_to_png(
+    live_runtime,  # noqa: F811
+    tmp_path, monkeypatch,
+) -> None:
     from sandbox_worker.browser import PlaywrightPage
 
+    runtime, pages = live_runtime
+    meta = await runtime.open_session(
+        school_id="school-a", membership_id="member-a", run_id=None, url="https://example.com/"
+    )
+    sess = runtime.get(meta["session_id"])
     cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
     page = MagicMock()
     context = MagicMock(pages=[page], new_cdp_session=AsyncMock(return_value=cdp))
     surface = PlaywrightPage(context, page, tmp_path)
-    tab = MagicMock(viewport_size={"width": 900, "height": 700})
+    tab = MagicMock()
     tab.is_closed.return_value = False
     fit = AsyncMock(side_effect=RuntimeError("tab fit failed"))
     monkeypatch.setattr(surface, "_apply_metrics", fit)
+    monkeypatch.setattr(pages[0], "screencast", surface.screencast)
     surface._viewport = (900, 700)
 
     surface._use(tab)
-    assert surface._viewport_task is not None
+    # The failed fit may already be complete by the time a viewer connects.
+    await asyncio.wait({surface._viewport_task})
     for _ in range(2):
-        stop = await surface.screencast(MagicMock())
-        assert surface._viewport_task is None
-        assert cdp.send.await_args.args[0] == "Page.startScreencast"
-        await stop()
+        async with aclosing(runtime.stream(sess)) as stream:
+            assert await asyncio.wait_for(anext(stream), 1) == {
+                "poll": True, "window_id": sess.focused_id,
+            }
+            assert (await runtime.pane_meta(sess))["mime"] == "image/png"
+    assert pages[0].shots == 3
+    cdp.send.assert_not_awaited()
     fit.assert_awaited_once()
-    assert "sandbox tab viewport update failed" in caplog.text
+
+    resizing = asyncio.Event()
+    finish_resize = asyncio.Event()
+
+    async def resize_metrics(*_args):
+        resizing.set()
+        await finish_resize.wait()
+
+    fit.side_effect = resize_metrics
+    resize = asyncio.create_task(surface.set_viewport(1000, 700))
+    await resizing.wait()
+    cast = asyncio.create_task(surface.screencast(MagicMock()))
+    await asyncio.sleep(0)
+    finish_resize.set()
+    await resize
+    stop = await cast
+    try:
+        assert cdp.send.await_args.args[0] == "Page.startScreencast"
+    finally:
+        await stop()
 
 
 @pytest.mark.asyncio
@@ -302,6 +335,34 @@ async def test_real_chromium_png_does_not_change_live_frame_coordinates(tmp_path
                     if clicked and green > 235 and red < 20 and blue < 20:
                         break
             assert await page.get_attribute("button", "data-hit") == "1"
+        finally:
+            await stop()
+    finally:
+        await surface.close()
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_screencast_accepts_float32_dpr_rounding(tmp_path, chromium) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    context = await chromium.new_context(
+        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+    )
+    page = await context.new_page()
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
+    dpr = 1.100000023841858
+    try:
+        await surface.set_viewport(1000, 700, dpr)
+        assert await page.evaluate("[innerWidth, innerHeight, devicePixelRatio]") == [
+            1000, 700, dpr,
+        ]
+        frames = asyncio.Queue()
+        stop = await surface.screencast(frames.put_nowait)
+        try:
+            frame = await asyncio.wait_for(frames.get(), 2)
+            assert (frame.width, frame.height) == (1000, 700)
+            with Image.open(io.BytesIO(base64.b64decode(frame.jpeg))) as jpeg:
+                assert jpeg.size == (1100, 770)
         finally:
             await stop()
     finally:

@@ -103,7 +103,7 @@ key 只显示 sha256 的前 8 位。进程重启后清零（`since` 是起点）
 
 ## 沙箱实时画面（pico#1446）
 
-Playwright 1.63.0 通过 Chromium CDP 取 JPEG。DPR 大于 1 的会话使用 Chromium 原生虚拟显示器，标签页随当前沙箱的 DPR 切换显示器，关桌时移除。用一次 `Emulation.setDeviceMetricsOverride` 提交 CSS 尺寸和 DPR。尺寸、标签页或 DPR 改变时重新挂捕获，静止页面也会出新帧。worker 核对帧的 CDP metadata 与 JPEG 像素尺寸，再按 CSS 尺寸发帧。重复画面在 worker 丢弃。Chromium 用 `--disable-lcd-text` 绘制灰阶文字，减轻 JPEG 色度采样带来的字体边缘模糊。[CDP Emulation](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/) · [Chromium 投屏和截图源码](https://chromium.googlesource.com/chromium/src/+/refs/tags/153.0.8010.12/content/browser/devtools/protocol/page_handler.cc)
+Playwright 1.63.0 通过 Chromium CDP 取 JPEG。DPR 大于 1 的会话使用 Chromium 原生虚拟显示器，标签页随当前沙箱的 DPR 切换显示器，关桌时移除。用一次 `Emulation.setDeviceMetricsOverride` 提交 CSS 尺寸和 DPR。尺寸、标签页或 DPR 改变时重新挂捕获，静止页面也会出新帧。标签页尺寸适配失败时记录原因，画面回到现有 PNG 轮询。worker 核对帧的 CDP metadata 与 JPEG 像素尺寸，两者均允许 1 像素的舍入差，再按 CSS 尺寸发帧。重复画面在 worker 丢弃。Chromium 用 `--disable-lcd-text` 绘制灰阶文字，减轻 JPEG 色度采样带来的字体边缘模糊。[CDP Emulation](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/) · [Chromium 投屏和截图源码](https://chromium.googlesource.com/chromium/src/+/refs/tags/153.0.8010.12/content/browser/devtools/protocol/page_handler.cc)
 
 PNG 在持有 DPR 的 CDP 会话通过 `Page.captureScreenshot` 读取当前窗口，不裁剪或改变窗口布局。worker 将 PNG 像素缩回 CSS 尺寸，保留当前滚动位置。真 Chromium 回归覆盖滚动 500 px 后按图点击、投屏期间连截三次 PNG、非整数 DPR 切换及不同会话并用和关桌回收。
 
@@ -141,7 +141,9 @@ Chromium 的帧到达 worker 即向 CDP 确认，worker 只留最新一帧待发
 | 原生 1.5×，表格 | 633 ms（606–663） | 1337 ms（1314–1369） | 1.49 帧/s | 456.7 KiB |
 | 原生 1.5×，表格及图表 | 560 ms（542–564） | 1207 ms（1178–1219） | 1.60 帧/s | 395.7 KiB |
 
-仅关闭强制 DSF 时，720×700 和 1920×1080 对照的 1× 帧都无法通过基线 DPR 帧校验。原生 1.5× 的六次点击均低于 1 秒，两类页面最大化小字误差约 4。六次最大化仍超过 1 秒，滚动仍低于 2 帧/s。按 5.5 Mbps 估算，362.3 KiB 的压缩表格帧仅传输就约 540 ms。俄勒冈实链路和统筹老师试用待部署后验证。
+仅关闭强制 DSF 时，720×700 和 1920×1080 对照的 1× 帧都无法通过基线 DPR 帧校验。原生 1.5× 的六次点击均低于 1 秒，两类页面最大化小字误差约 4。按 5.5 Mbps 估算，362.3 KiB 的压缩表格帧仅传输就约 540 ms。俄勒冈实链路和统筹老师试用待部署后验证。
+
+最大化 <1 s、滚动 ≥2 帧/s 未达，pico#1446 返修 5 继续。
 
 ### 容量测量
 

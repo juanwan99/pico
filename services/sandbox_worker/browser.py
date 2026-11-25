@@ -661,6 +661,7 @@ class PlaywrightPage:
                 or page in self._metrics
             ):
                 self._viewport_task = asyncio.create_task(self._fit_page(page))
+                self._viewport_task.add_done_callback(self._tab_fit_done)
             else:
                 self._viewport_task = None
 
@@ -670,13 +671,19 @@ class PlaywrightPage:
                 if not page.is_closed():
                     await self._apply_metrics(page, self._viewport, self._device_scale)
         except Exception:
-            if page.is_closed():
-                logger.debug("tab closed during viewport update", exc_info=True)
-            else:
-                logger.warning("sandbox tab viewport update failed", exc_info=True)
-        finally:
-            if self._viewport_task is asyncio.current_task():
-                self._viewport_task = None
+            if not page.is_closed():
+                raise
+            logger.debug("tab closed during viewport update", exc_info=True)
+
+    def _tab_fit_done(self, task: asyncio.Task[None]) -> None:
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            # Retain the failed fit so an existing or reconnecting stream polls PNG.
+            logger.warning("sandbox tab viewport update failed", exc_info=error)
+        elif self._viewport_task is task:
+            self._viewport_task = None
 
     async def _apply_metrics(self, page: Any, viewport: tuple[int, int], scale: float) -> None:
         cdp = await self._page_metrics(page)
@@ -751,9 +758,12 @@ class PlaywrightPage:
             if size != self._viewport or scale != self._device_scale:
                 # Reattach at the new size so a still page gets a fresh frame.
                 self.page_token += 1
+                task = self._viewport_task
                 await self._apply_metrics(self._page, size, scale)
                 self._viewport = size
                 self._device_scale = scale
+                if self._viewport_task is task:
+                    self._viewport_task = None
         return size
 
     def _on_new_page(self, page: Any) -> None:
@@ -1381,7 +1391,9 @@ class PlaywrightPage:
         """
         from playwright.async_api import Error
 
-        task = self._viewport_task
+        # A resize already in progress can replace the result of the tab fit.
+        async with self._viewport_lock:
+            task = self._viewport_task
         if task is not None:
             await asyncio.shield(task)
         async with self._viewport_lock:
@@ -1389,6 +1401,8 @@ class PlaywrightPage:
             scale = self._device_scale
             cdp = await self._context.new_cdp_session(self._page)
         native_scale = max(1.0, scale)
+        native_width = math.ceil(width * native_scale)
+        native_height = math.ceil(height * native_scale)
         max_width = math.ceil(width * scale)
         max_height = math.ceil(height * scale)
         active = True
@@ -1407,11 +1421,11 @@ class PlaywrightPage:
             if not active:
                 return
             meta = event["metadata"]
-            # Metadata is the rounded compositor raster expressed in display
-            # units. Compare in pixels to handle fractional DPR and odd CSS sizes.
+            # Chromium rounds the compositor raster using float32 DPR.
+            # Allow the one-pixel difference from Python's double precision.
             if (
-                round(meta["deviceWidth"] * native_scale) != math.ceil(width * native_scale)
-                or round(meta["deviceHeight"] * native_scale) != math.ceil(height * native_scale)
+                abs(round(meta["deviceWidth"] * native_scale) - native_width) > 1
+                or abs(round(meta["deviceHeight"] * native_scale) - native_height) > 1
             ):
                 return
             # Chromium can pair a queued bitmap with the current view's metadata on resize.
