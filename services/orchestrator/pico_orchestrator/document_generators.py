@@ -15,14 +15,21 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
-from pico_orchestrator.artifact_types import office_write_hint
 from pico_orchestrator.usage_hook import current_usage_bind
+
+OFFICE_PYTHON_LIBRARIES = {"docx": "python-docx", "xlsx": "openpyxl", "pptx": "python-pptx"}
 
 # Empty-shell floor only. Do not invent 套话, and do not demand a page quota.
 MIN_DOCX_BODY_CHARS = 20
 MIN_PPTX_SLIDES = 1
-DOCX_BODY_TOO_SHORT = "Word 正文是空的。请写入实际内容，系统不会垫字。"
-PPTX_SLIDES_TOO_FEW = "PPT 没有可渲染的页。请写入至少一页，系统不会垫页。"
+DOCX_BODY_TOO_SHORT = (
+    "Word 正文是空的。请写入实际内容再调用 sandbox_office_lib，"
+    "系统不会垫字。"
+)
+PPTX_SLIDES_TOO_FEW = (
+    "PPT 没有可渲染的页。请写入至少一页再调用 sandbox_office_lib，"
+    "系统不会垫页。"
+)
 # Interactive HTML must run with no network (school offline / CSP). Do not
 # allowlist jsdelivr. Do not vendor Three.js. Body over DOC_BODY_MAX fails
 # closed — never silent-slice a draft (#829).
@@ -176,20 +183,26 @@ def office_shell_reason(raw: bytes, ext: str) -> str | None:
     # has a bound run here whose available execution path can be named.
     bind = current_usage_bind()
     if bind is not None:
-        reason += office_write_hint(suffix.removeprefix("."), run_id=bind.run_id)
+        from pico_orchestrator.true_pi.runner import proxy_entry
+
+        kind = suffix.removeprefix(".")
+        if proxy_entry(bind.run_id) is not None:
+            reason += f"请用 bash 运行 {OFFICE_PYTHON_LIBRARIES[kind]} 写到 outputs/<文件名>.{kind}。"
+        else:
+            reason += f"请使用 sandbox_office_lib（kind={kind}）写出文件。"
     return reason
 
 
-def require_docx_body(body: str | None, *, run_id: str | None = None) -> None:
+def require_docx_body(body: str | None) -> None:
     """Fail closed when the caller did not pass enough 题面正文. No padding."""
     if _visible_len(body or "") < MIN_DOCX_BODY_CHARS:
-        raise ValueError(DOCX_BODY_TOO_SHORT + office_write_hint("docx", run_id=run_id))
+        raise ValueError(DOCX_BODY_TOO_SHORT)
 
 
-def require_pptx_body(body: str | None, *, run_id: str | None = None) -> None:
+def require_pptx_body(body: str | None) -> None:
     """Fail closed when the caller did not pass any slide block. No padding."""
     if len(_split_blocks(body or "")) < MIN_PPTX_SLIDES:
-        raise ValueError(PPTX_SLIDES_TOO_FEW + office_write_hint("pptx", run_id=run_id))
+        raise ValueError(PPTX_SLIDES_TOO_FEW)
 
 
 def _docx_body_paragraphs(body: str | None) -> list[str]:

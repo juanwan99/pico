@@ -109,14 +109,25 @@ class P:
         self.scopes = ["ai:run"]
 
 
+@pytest.fixture
+def box_entry():
+    key = runner.WorkspaceKey.for_run(
+        school_id="school-a", membership_id="member-a", conversation_id="c", run_id="box-run"
+    )
+    entry = runner.ProxyEntry("box-run", "", "", "", "", "", workspace_key=key)
+    runner.register_proxy(entry)
+    try:
+        yield entry
+    finally:
+        runner.unregister_proxy(entry.run_id)
+
+
 @pytest.mark.parametrize(
     ("sid", "library"), [("docx", "python-docx"), ("xlsx", "openpyxl"), ("pptx", "python-pptx")]
 )
 @pytest.mark.parametrize("run_id", ["box-run", "gateway-run"])
-async def test_read_office_skill_returns_body(sid, library, run_id, monkeypatch) -> None:
+async def test_read_office_skill_returns_body(sid, library, run_id, box_entry) -> None:
     gw = build_default_gateway()
-    entry = runner.ProxyEntry("box-run", "llm-token", "", "", "", "tool-token")
-    monkeypatch.setitem(runner._REGISTRY, entry.run_id, entry)
     principal = P()
     token = bind_usage_context(
         school_id=principal.school_id, membership_id=principal.membership_id, run_id=run_id
@@ -129,7 +140,7 @@ async def test_read_office_skill_returns_body(sid, library, run_id, monkeypatch)
     assert out["id"] == sid
     assert out["body"].endswith(load_office_skill_body(sid))
     assert library in out["body"]
-    if run_id == "box-run":
+    if run_id == box_entry.run_id:
         assert out["execute_with"] == "bash"
         assert "sandbox_office_lib" not in str(out)
         assert f"outputs/<name>.{sid}" in out["body"]
@@ -151,21 +162,20 @@ async def test_read_office_skill_returns_body(sid, library, run_id, monkeypatch)
         ("pptx", "generate_diagram", {"source": "flowchart TD\nA-->B"}, "png"),
     ],
 )
-async def test_box_office_skill_embeds_a_generated_picture(sid, tool, args, kind, tmp_path, monkeypatch):
-    key = runner.WorkspaceKey.for_run(
-        school_id="school-a", membership_id="member-a", conversation_id="c", run_id="box-run"
-    )
-    entry = runner.ProxyEntry("box-run", "", "", "", "", "", workspace_key=key)
-    monkeypatch.setitem(runner._REGISTRY, entry.run_id, entry)
+async def test_box_office_skill_embeds_a_generated_picture(
+    sid, tool, args, kind, tmp_path, monkeypatch, box_entry
+):
     settings = RunnerSettings(token="runner-test", workspace_root=tmp_path)
     control = Runner(settings)
-    control_key = WorkspaceKey(**key.as_dict())
+    control_key = WorkspaceKey(**box_entry.workspace_key.as_dict())
     ws = control.prepare_workspace(control_key, with_memory=False)
-    control.sessions[entry.run_id] = SimpleNamespace(key=control_key)
+    control.sessions[box_entry.run_id] = SimpleNamespace(key=control_key)
     transport = httpx.ASGITransport(app=build_control_app(control))
-    monkeypatch.setattr(runner, "httpx", SimpleNamespace(
-        AsyncClient=partial(httpx.AsyncClient, transport=transport), HTTPError=httpx.HTTPError
-    ))
+    monkeypatch.setattr(
+        runner, "httpx", SimpleNamespace(
+            AsyncClient=partial(httpx.AsyncClient, transport=transport), HTTPError=httpx.HTTPError
+        )
+    )
     monkeypatch.setenv(runner.RUNNER_URL_ENV, "http://runner.test")
     monkeypatch.setenv(runner.RUNNER_TOKEN_ENV, settings.token)
 
@@ -181,7 +191,7 @@ async def test_box_office_skill_embeds_a_generated_picture(sid, tool, args, kind
         AsyncMock(return_value=(raw, "", {})),
     )
     store = SimpleNamespace(
-        _run_id=entry.run_id,
+        _run_id=box_entry.run_id,
         write=AsyncMock(return_value={"artifact_id": "picture-id"}),
     )
     gw = build_default_gateway(store)
@@ -212,6 +222,64 @@ async def test_box_office_skill_embeds_a_generated_picture(sid, tool, args, kind
         pictures = [name for name in package.namelist() if "/media/" in name]
         assert len(pictures) == 1
         assert package.read(pictures[0]) == raw
+
+
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("generate_image", {"prompt": "一张插图"}),
+        ("generate_diagram", {"source": "flowchart TD\nA-->B"}),
+    ],
+)
+@pytest.mark.parametrize("put_status", [409, 400, "timeout"])
+async def test_box_image_staging_failure_keeps_artifact(
+    tool, args, put_status, monkeypatch, box_entry, caplog
+) -> None:
+    picture = BytesIO()
+    Image.new("RGB", (2, 2), "white").save(picture, format="PNG")
+    raw = picture.getvalue()
+    generate = AsyncMock(return_value=(raw, "png", None))
+    render = AsyncMock(return_value=(raw, "", {}))
+    emit_usage = AsyncMock()
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.generate_image_with_usage", generate)
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.render_diagram_bytes", render)
+    monkeypatch.setattr("pico_orchestrator.tools_builtin.emit_image_usage", emit_usage)
+
+    def failed_put(request):
+        assert request.method == "PUT"
+        assert request.url.params["run_id"] == box_entry.run_id
+        store.write.assert_awaited_once()
+        if put_status == "timeout":
+            raise httpx.ReadTimeout("runner timed out", request=request)
+        return httpx.Response(put_status)
+
+    transport = httpx.MockTransport(failed_put)
+    monkeypatch.setattr(
+        runner, "httpx", SimpleNamespace(
+            AsyncClient=partial(httpx.AsyncClient, transport=transport), HTTPError=httpx.HTTPError
+        )
+    )
+    monkeypatch.setenv(runner.RUNNER_URL_ENV, "http://runner.test")
+
+    store = SimpleNamespace(
+        _run_id=box_entry.run_id,
+        write=AsyncMock(return_value={"artifact_id": "picture-id"}),
+    )
+    result = await build_default_gateway(store).invoke(P(), tool, args)
+
+    assert result["artifact_id"] == "picture-id"
+    assert "workspace_path" not in result
+    assert "不能嵌进 Word/PPT" in result["user_message"]
+    assert "pico-artifact:picture-id" in result["user_message"]
+    assert "不要重新生成" in result["user_message"]
+    assert "generated image staging failed run_id=box-run" in caplog.text
+    store.write.assert_awaited_once()
+    if tool == "generate_image":
+        generate.assert_awaited_once()
+        emit_usage.assert_awaited_once()
+        assert emit_usage.await_args.kwargs["ok"] is True
+    else:
+        render.assert_awaited_once()
 
 
 async def test_read_office_skill_rejects_unknown_id() -> None:

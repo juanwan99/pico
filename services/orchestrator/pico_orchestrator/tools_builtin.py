@@ -15,7 +15,6 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from pico_orchestrator.artifact_types import (
-    OFFICE_PYTHON_LIBRARIES,
     is_valid_ooxml_package,
     reject_fake_protected_write_message,
     title_protected_extension,
@@ -23,6 +22,7 @@ from pico_orchestrator.artifact_types import (
 from pico_orchestrator.browser_screenshot import write_browser_screenshot
 from pico_orchestrator.diagram_generate import render_diagram_bytes
 from pico_orchestrator.document_generators import (
+    OFFICE_PYTHON_LIBRARIES,
     build_docx_document,
     build_html_document,
     build_pptx_document,
@@ -856,9 +856,7 @@ def _workspace_handlers(
         if protected:
             raise ToolError(
                 "tool.invalid_arguments",
-                reject_fake_protected_write_message(
-                    protected, run_id=current_run_id(principal, store)
-                ),
+                reject_fake_protected_write_message(protected),
             )
         content = _required_text(args, "content", maximum=_MAX_ARTIFACT_CONTENT)
         assert_content_caps(content)
@@ -1271,7 +1269,7 @@ def _workspace_handlers(
                 raw = render_spec(spec, images=await _load_spec_images(principal, spec))
             else:
                 body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
-                require_docx_body(body, run_id=current_run_id(principal, store))
+                require_docx_body(body)
                 raw = build_docx_document(title=title, marker=marker, body=body)
         except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
@@ -1312,7 +1310,7 @@ def _workspace_handlers(
                 raw = render_spec(spec, images=await _load_spec_images(principal, spec))
             else:
                 body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
-                require_pptx_body(body, run_id=current_run_id(principal, store))
+                require_pptx_body(body)
                 raw = build_pptx_document(title=title, marker=marker, body=body)
         except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc

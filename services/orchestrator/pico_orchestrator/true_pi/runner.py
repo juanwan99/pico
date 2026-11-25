@@ -31,7 +31,6 @@ from typing import Any
 import httpx
 
 from pico_orchestrator import upstream
-from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.true_pi.client import (
     PI_AGENT_HOME_ENV,
     PI_MODELS_JSON,
@@ -563,17 +562,22 @@ async def attach_generated_image_path(
     entry = proxy_entry(run_id)
     if entry is None:
         return
-    path = f"work/generated/{result['artifact_id']}.{kind}"
+    artifact_id = result["artifact_id"]
+    path = f"work/generated/{artifact_id}.{kind}"
     try:
-        if entry.workspace_key is None:
-            raise TruePiClientError("missing workspace key")
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await _put_workspace_file(client, entry.workspace_key, path, data, run_id=entry.run_id)
+            resp = await _put_workspace_file(
+                client, entry.workspace_key, path, data, run_id=entry.run_id
+            )
             resp.raise_for_status()
-    except (httpx.HTTPError, TruePiClientError) as exc:
+    except httpx.HTTPError as exc:
         logger.warning("generated image staging failed run_id=%s: %s", entry.run_id, exc)
-        raise ToolError("workspace.upload_failed", "图片已生成，但无法放入本轮工作区。") from exc
-    result["workspace_path"] = f"{WS_ROOT}/{path}"
+        result["user_message"] = (
+            "这张图本轮放不进工作区，不能嵌进 Word/PPT。"
+            f"HTML 仍可用 src=\"pico-artifact:{artifact_id}\"。不要重新生成。"
+        )
+    else:
+        result["workspace_path"] = f"{WS_ROOT}/{path}"
 
 
 # --- outputs → Pico ledger -----------------------------------------------------
