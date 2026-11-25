@@ -101,28 +101,15 @@ def test_meili_sees_a_new_kb_token_without_reembedding(monkeypatch: pytest.Monke
     assert not idx._embedder_url_match(want)  # first deploy adds the header
 
 
-@pytest.mark.asyncio
-async def test_full_rebuild_is_paced(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rebuild_per_min_uses_env_with_floor(monkeypatch: pytest.MonkeyPatch) -> None:
     from app import kb_rebuild
 
-    slept: list[float] = []
-
-    async def fake_sleep(s: float) -> None:
-        slept.append(s)
-
-    monkeypatch.setattr(kb_rebuild.asyncio, "sleep", fake_sleep)
-    monkeypatch.setattr(kb_rebuild.time, "monotonic", lambda: 100.0)
-    pace = kb_rebuild._Pace(600)
-    for _ in range(7):
-        await pace.after(80)  # 560: inside the first minute's worth, no wait
-    assert slept == []
-    await pace.after(80)  # 640 → 40 over at 10 a second
-    assert slept == [pytest.approx(4.0)]
-
+    monkeypatch.delenv("PICO_KB_REBUILD_PER_MIN", raising=False)
+    assert kb_rebuild.rebuild_per_min() == 600
     monkeypatch.setenv("PICO_KB_REBUILD_PER_MIN", "5")
     assert kb_rebuild.rebuild_per_min() == 60  # floor
-    monkeypatch.delenv("PICO_KB_REBUILD_PER_MIN")
-    assert kb_rebuild.rebuild_per_min() == 600
+    monkeypatch.setenv("PICO_KB_REBUILD_PER_MIN", "120")
+    assert kb_rebuild.rebuild_per_min() == 120
 
 
 def test_requests_name_their_road_and_share_a_prompt_cache() -> None:

@@ -50,7 +50,7 @@ from app.edu_sso import router as edu_sso_router
 from app.exam_answer_extract import router as exam_answer_extract_router
 from app.gateway_status import account_soft_action, gateway_status
 from app.html_pages import router as html_pages_router
-from app.kb_rebuild import rebuild_materials
+from app.kb_rebuild import log_rebuild_result, rebuild_materials
 from app.llm_pass_router import router as llm_pass_router
 from app.model_endpoint import router as model_endpoint_router
 from app.my_files import router as my_files_router
@@ -120,6 +120,10 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        reindex = getattr(_app.state, "kb_reindex_task", None)
+        if reindex is not None and not reindex.done():
+            reindex.cancel()
+            await asyncio.gather(reindex, return_exceptions=True)
         await automation_service.stop_scheduler()
         # Owners cancelled from here on leave resumable runs for the next process.
         run_resume.mark_shutting_down()
@@ -283,7 +287,7 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     body.update(true_pi_health_fields())
     from pico_orchestrator.meili_kb import health_fields as meili_health_fields
 
-    body.update(meili_health_fields())
+    body.update(await asyncio.to_thread(meili_health_fields))
     # pico#1271: upstream requests by purpose / outcome, in-flight and peak per key.
     from pico_orchestrator import upstream
 
@@ -386,7 +390,7 @@ async def kb_reindex(
     return await rebuild_materials(principal, force=True)
 
 
-@app.post("/v1/kb/reindex-all")
+@app.post("/v1/kb/reindex-all", status_code=202)
 async def kb_reindex_all(request: Request, force: bool = False) -> dict:
     """Ops rebuild. pico-api is loopback-bound; peer may be eth0 under host-network hairpin.
 
@@ -395,7 +399,19 @@ async def kb_reindex_all(request: Request, force: bool = False) -> dict:
 
     if not request_on_loopback_socket(request):
         raise HTTPException(status_code=403, detail={"code": "forbidden", "message": "loopback only"})
-    return await rebuild_materials(None, force=force)
+    state = request.app.state
+    running = getattr(state, "kb_reindex_task", None)
+    if running is not None and not running.done():
+        if not force:
+            return {"ok": True, "queued": True, "mode": "incremental", "already_running": True}
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "kb.reindex_running", "message": "kb reindex already running"},
+        )
+    task = asyncio.create_task(rebuild_materials(None, force=force))
+    task.add_done_callback(log_rebuild_result)
+    state.kb_reindex_task = task
+    return {"ok": True, "queued": True, "mode": "full" if force else "incremental"}
 
 
 @app.get("/v1/meta/freeze")

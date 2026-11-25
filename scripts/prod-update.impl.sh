@@ -384,49 +384,31 @@ if [ "$meili_ready" -ne 1 ]; then
   exit 9
 fi
 echo "[pico] meili health ok"
-# Incremental by default (only new artifacts get chunked). PICO_KB_REINDEX_FORCE=1
-# re-chunks the whole ledger — required after chunker / index-schema changes.
+# pico-api owns the background rebuild. Check acceptance and the existing index.
 REINDEX_URL="http://127.0.0.1:18765/v1/kb/reindex-all"
 if [ "${PICO_KB_REINDEX_FORCE:-0}" = "1" ]; then
-  # Full re-chunk re-embeds every chunk, paced at PICO_KB_REBUILD_PER_MIN (600/min,
-  # ~2 h for 72k; pico#1271). It runs on after the deploy instead of failing it at 600 s;
-  # the incremental pass below still runs and gates the deploy (only new artifacts).
-  REINDEX_LOG="${HOME}/logs/pico-kb-reindex-force.log"
-  mkdir -p "$(dirname "$REINDEX_LOG")"
-  # 7>&-: the ~2 h job must not keep holding the edu-core acceptance lock (#4735).
-  nohup curl -sS --max-time 0 -X POST "${REINDEX_URL}?force=1" >"$REINDEX_LOG" 2>&1 7>&- &
-  echo "[pico] kb reindex: force (full re-chunk) running in background → $REINDEX_LOG"
+  REINDEX_URL+="?force=1"
 fi
 REINDEX_FILE="$(mktemp)"
-REINDEX_CODE="$(curl -sS -o "$REINDEX_FILE" -w "%{http_code}" --max-time 600 -X POST "$REINDEX_URL" || echo 000)"
-REINDEX_OUT="$(cat "$REINDEX_FILE" 2>/dev/null || true)"
+REINDEX_CODE="$(curl -sS -o "$REINDEX_FILE" -w "%{http_code}" --max-time 8 -X POST "$REINDEX_URL")" || REINDEX_CODE=000
+REINDEX_OUT="$(cat "$REINDEX_FILE")"
 rm -f "$REINDEX_FILE"
 echo "[pico] kb reindex http=${REINDEX_CODE} body=${REINDEX_OUT:-empty}"
-if [ "$REINDEX_CODE" != "200" ]; then
-  echo "[pico] FATAL: kb reindex-all failed (http=${REINDEX_CODE}) — refusing fake-green deploy" >&2
+if [ "$REINDEX_CODE" != "202" ]; then
+  echo "[pico] FATAL: kb reindex-all failed (http=${REINDEX_CODE})" >&2
   exit 10
 fi
 if ! python3 -c '
 import json, sys
-raw = sys.argv[1]
 try:
-    body = json.loads(raw)
-except Exception as exc:
+    body = json.loads(sys.argv[1])
+except json.JSONDecodeError as exc:
     print(f"[pico] FATAL: kb reindex body not JSON: {exc}", file=sys.stderr)
     raise SystemExit(10)
-if body.get("ok") is not True:
-    print("[pico] FATAL: kb reindex ok is not true", file=sys.stderr)
+if not isinstance(body, dict) or body.get("ok") is not True or body.get("queued") is not True:
+    print("[pico] FATAL: kb reindex was not queued", file=sys.stderr)
     raise SystemExit(10)
-print(
-    "[pico] kb reindex ok mode=%s indexed=%s unchanged=%s skipped=%s total=%s"
-    % (
-        body.get("mode"),
-        body.get("indexed"),
-        body.get("unchanged"),
-        body.get("skipped"),
-        body.get("total"),
-    )
-)
+print("[pico] kb reindex queued mode=%s" % body.get("mode"))
 ' "$REINDEX_OUT"; then
   exit 10
 fi
@@ -438,32 +420,26 @@ fi
 STATS_FILE="$(mktemp)"
 STATS_CODE="$(curl -sS -o "$STATS_FILE" -w "%{http_code}" --max-time 8 \
   ${MEILI_KEY:+-H "Authorization: Bearer ${MEILI_KEY}"} \
-  http://127.0.0.1:7700/indexes/pico_materials/stats || echo 000)"
-STATS_OUT="$(cat "$STATS_FILE" 2>/dev/null || true)"
+  http://127.0.0.1:7700/indexes/pico_materials/stats)" || STATS_CODE=000
+STATS_OUT="$(cat "$STATS_FILE")"
 rm -f "$STATS_FILE"
 if ! python3 -c '
 import json, sys
-reindex_raw, stats_raw, stats_code = sys.argv[1], sys.argv[2], sys.argv[3]
-try:
-    reindex = json.loads(reindex_raw)
-except Exception as exc:
-    print(f"[pico] FATAL: kb reindex body not JSON: {exc}", file=sys.stderr)
-    raise SystemExit(10)
+stats_raw, stats_code = sys.argv[1:]
 if stats_code != "200":
-    print(f"[pico] FATAL: meili stats http={stats_code} — refusing empty-index deploy", file=sys.stderr)
+    print(f"[pico] FATAL: meili stats http={stats_code}", file=sys.stderr)
     raise SystemExit(10)
 try:
     stats = json.loads(stats_raw)
-except Exception as exc:
+except json.JSONDecodeError as exc:
     print(f"[pico] FATAL: meili stats not JSON: {exc}", file=sys.stderr)
     raise SystemExit(10)
-indexed = int(reindex.get("indexed") or 0)
 docs = int(stats.get("numberOfDocuments") or 0)
-print("[pico] meili docs=%s (indexed=%s)" % (docs, indexed))
+print(f"[pico] meili docs={docs}")
 if docs < 1:
-    print("[pico] FATAL: Meili has 0 documents after reindex", file=sys.stderr)
+    print("[pico] FATAL: Meili has 0 documents", file=sys.stderr)
     raise SystemExit(10)
-' "$REINDEX_OUT" "$STATS_OUT" "$STATS_CODE"; then
+' "$STATS_OUT" "$STATS_CODE"; then
   exit 10
 fi
 if command -v ss >/dev/null 2>&1; then
