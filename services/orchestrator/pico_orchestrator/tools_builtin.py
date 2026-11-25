@@ -2759,8 +2759,8 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_browser_open",
             description=(
-                "Use this to carry out website tasks directly for the teacher, such as "
-                "logging in, filling in forms, or looking up information. "
+                "Use this to do website tasks for the teacher yourself, such as "
+                "logging in, filling in forms, or looking up information, not just describe the steps. "
                 "Open a PUBLIC http(s) page in sidecar Chromium (Playwright; not LibreChat). "
                 "The page appears in the result-area 网页 pane (not an iframe browser). "
                 "Denies intranet, loopback, metadata, pico-api 18765, and pico.aivia.asia. "
