@@ -5,8 +5,8 @@ Two listeners, one process:
 * control (127.0.0.1:18790, pico-api only, ``X-Pico-Runner-Token``):
   WebSocket ``/v1/session`` pipes Pi RPC stdio of one container (when the
   runner is full the request waits in line and gets ``queued`` frames); file
-  uploads and attachment downloads require an idle workspace. Listing and
-  downloading outputs also work while the box is running.
+  uploads of teacher attachments and attachment downloads require an idle workspace.
+  Listing and downloading outputs and staging generated images work during a run.
 * proxy (pico-ws gateway IP:18791, workspace containers only): forwards a
   fixed list of paths — model ``/l/<run>/v1/{chat/completions,responses,models}``
   and gateway tools ``/t/<run>/v1/tool`` — to pico-api's token-checked
@@ -454,20 +454,32 @@ def build_control_app(runner: Runner) -> FastAPI:
         return key
 
     @app.put("/v1/ws/{school}/{member}/{conv}/file")
-    async def put_file(school: str, member: str, conv: str, path: str, request: Request):
-        key = _gate(request, school, member, conv)
+    async def put_file(
+        school: str, member: str, conv: str, path: str, request: Request,
+        run_id: str | None = None,
+    ):
+        key = _gate(request, school, member, conv, allow_busy=run_id is not None)
         if isinstance(key, JSONResponse):
             return key
         try:
-            rel = safe_relpath(path, prefixes=UPLOAD_PREFIXES)
+            prefixes = UPLOAD_PREFIXES if run_id is None else ("work/generated/",)
+            rel = safe_relpath(path, prefixes=prefixes)
         except PolicyError as exc:
             return _deny(exc.code, 400)
         body = await read_capped(request, MAX_UPLOAD)
         if body is None:
             return _deny("runner.too_large", 413)
         try:
-            ws = await asyncio.to_thread(runner.prepare_workspace, key, with_memory=False)
-            await asyncio.to_thread(fsafe.write_file, ws, rel, body)
+            if run_id is None:
+                ws = await asyncio.to_thread(runner.prepare_workspace, key, with_memory=False)
+                await asyncio.to_thread(fsafe.write_file, ws, rel, body)
+            else:
+                async with runner.lock:
+                    session = runner.sessions.get(run_id)
+                    if session is None or session.key != key:
+                        return _deny("runner.no_session", 409)
+                    ws = key.workspace_dir(settings.workspace_root)
+                    await asyncio.to_thread(fsafe.write_file, ws, rel, body)
         except OSError:
             return _deny("runner.bad_path", 400)
         return {"ok": True, "path": str(rel), "bytes": len(body)}

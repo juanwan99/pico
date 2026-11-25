@@ -67,8 +67,8 @@ _POLICIES: dict[str, SkillPolicy] = {
         risk="low",
         instruction=(
             "老师要真实文件或改已有文件。工具已挂载，你自己决定调哪个。"
-            "写或改 Word/PPT/Excel 用 read_office_skill 再 sandbox_office_lib（已有文件传 artifact_id）。"
-            "工具返回 ok 不算完：读 observation（落地了什么），不对就再调。"
+            "写或改 Word/PPT/Excel 时，读 read_office_skill 并按回执操作。"
+            "保存后核对实际交件内容，有 observation 就核对回执，有问题先修正。"
             "禁止空壳、禁止编造文件。不要向用户复读机读字段或 Artifact ID。"
             "HTML 必须断网可开：页内 CSS/JS/SVG，禁止 CDN / Three.js / Chart.js / ECharts 外链，禁止假定 window.THREE。"
             "答案可能在学校材料里就 kb_search；未命中禁止编校规；工具在列表不代表必须调用。"

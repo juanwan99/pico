@@ -46,11 +46,11 @@ class P:
 
 @pytest.mark.asyncio
 async def test_workspace_write_rejects_protected_exts():
-    gw = build_default_gateway(Mem(), register_unregistered_office=True)
-    for title in ("x.html", "a.htm", "b.docx", "c.pptx"):
+    gw = build_default_gateway(Mem())
+    for title in ("x.html", "a.htm", "b.docx", "c.pptx", "d.xlsx"):
         with pytest.raises(ToolError) as ei:
             await gw.invoke(P(), "workspace_write_file", {"title": title, "content": "fake"})
-        assert "sandbox_office_lib" in ei.value.message or "禁止" in ei.value.message
+        assert "sandbox_office_lib 写 Word/Excel/PPT" in ei.value.message
 
 
 def test_ooxml_validation():
@@ -77,6 +77,7 @@ async def test_generate_docx_rejects_short_body_without_padding():
         )
     assert ei.value.code == "tool.invalid_arguments"
     assert "垫字" in ei.value.message or "空" in ei.value.message
+    assert "sandbox_office_lib" in ei.value.message
 
 
 @pytest.mark.asyncio
@@ -96,6 +97,7 @@ async def test_generate_pptx_accepts_one_slide_and_rejects_empty():
         )
     assert ei.value.code == "tool.invalid_arguments"
     assert "垫页" in ei.value.message or "没有可渲染" in ei.value.message
+    assert "sandbox_office_lib" in ei.value.message
 
 
 def test_html_generator_not_protected_write():

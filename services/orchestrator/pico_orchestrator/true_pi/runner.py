@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from pico_orchestrator import upstream
 from pico_orchestrator.true_pi.client import (
     PI_AGENT_HOME_ENV,
@@ -57,7 +59,7 @@ WS_BRIDGE = "/opt/pico/true_pi_bridge"
 
 WORKSPACE_SYSTEM = """## Workspace
 
-You have an isolated Linux workspace at `/workspace` with read / write / edit / bash. Python (python-docx, openpyxl, python-pptx, pandas, matplotlib), LibreOffice (`soffice`), `pip install` and the internet work; when a skill says `sandbox_office_lib`, you may run the same code here.
+You have an isolated Linux workspace at `/workspace` with read / write / edit / bash. Python (python-docx, openpyxl, python-pptx, pandas, matplotlib), LibreOffice (`soffice`), `pip install` and the internet work.
 - Files the teacher attached in this conversation are in `/workspace/attachments/`.
 - Files for the teacher go in `/workspace/outputs/`; only those are delivered. Scratch files go elsewhere (e.g. `/workspace/work/`).
 - Keep each tool call under about 150 lines: nothing reaches the teacher until a call's arguments are complete. For a long document, write the content as several data files, then run a short build script.
@@ -220,8 +222,8 @@ def unregister_proxy(run_id: str) -> None:
     _REGISTRY.pop(run_id, None)
 
 
-def proxy_entry(run_id: str) -> ProxyEntry | None:
-    return _REGISTRY.get(run_id)
+def proxy_entry(run_id: str | None) -> ProxyEntry | None:
+    return _REGISTRY.get(run_id) if run_id is not None else None
 
 
 # --- transport ---------------------------------------------------------------
@@ -339,14 +341,11 @@ class RunnerTransport(SubprocessTransport):
     async def upload_attachments(self) -> None:
         if not self.runner.attachments:
             return
-        import httpx
 
-        base = f"{runner_url()}/v1/ws/{self.runner.key.path()}/file"
         async with httpx.AsyncClient(timeout=120.0) as client:
             for name, data in self.runner.attachments:
-                safe = _safe_name(name)
-                resp = await client.put(
-                    base, params={"path": f"attachments/{safe}"}, content=data, headers=self._headers()
+                resp = await _put_workspace_file(
+                    client, self.runner.key, f"attachments/{_safe_name(name)}", data
                 )
                 if resp.status_code >= 400:
                     raise TruePiClientError(f"attachment upload failed ({resp.status_code})")
@@ -539,6 +538,46 @@ def _safe_name(name: str) -> str:
     base = os.path.basename(str(name or "").replace("\\", "/")).strip() or "file"
     cleaned = "".join(ch for ch in base if ch not in '\x00/:*?"<>|').strip(". ")
     return (cleaned or "file")[:180]
+
+
+async def _put_workspace_file(
+    client: httpx.AsyncClient, key: WorkspaceKey, path: str, data: bytes,
+    *, run_id: str | None = None,
+) -> httpx.Response:
+    params = {"path": path}
+    if run_id is not None:
+        params["run_id"] = run_id
+    return await client.put(
+        f"{runner_url()}/v1/ws/{key.path()}/file",
+        params=params,
+        content=data,
+        headers={"x-pico-runner-token": runner_token()},
+    )
+
+
+async def attach_generated_image_path(
+    run_id: str | None, result: dict[str, Any], kind: str, data: bytes,
+) -> None:
+    """Make the ledger image available to Python in the current box."""
+    entry = proxy_entry(run_id)
+    if entry is None:
+        return
+    artifact_id = result["artifact_id"]
+    path = f"work/generated/{artifact_id}.{kind}"
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await _put_workspace_file(
+                client, entry.workspace_key, path, data, run_id=entry.run_id
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("generated image staging failed run_id=%s: %s", entry.run_id, exc)
+        result["user_message"] = (
+            "这张图本轮放不进工作区，不能嵌进 Word/PPT。"
+            f"HTML 仍可用 src=\"pico-artifact:{artifact_id}\"。不要重新生成。"
+        )
+    else:
+        result["workspace_path"] = f"{WS_ROOT}/{path}"
 
 
 # --- outputs → Pico ledger -----------------------------------------------------

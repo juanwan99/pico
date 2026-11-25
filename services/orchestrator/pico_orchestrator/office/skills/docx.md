@@ -1,9 +1,7 @@
 # Word craft (python-docx)
 
 Use when the teacher asked for a real `.docx`. This is craft, not a scene workflow.
-Execute only in `sandbox_office_lib` with `kind=docx`.
-To change a file the teacher already has, pass `artifact_id` and start with `doc = load_doc()` (or `Document(INPUT_PATH)`).
-The script runs in an isolated container with full Python; `INPUT_PATH` may be a CSV / TXT / another Word file. Empty `Document(); save_doc(doc)` fails.
+Write actual content before saving. A blank `Document()` is an empty shell.
 
 ## Run
 
@@ -46,23 +44,24 @@ table.rows[1].cells[0].text = "交付"
 table.rows[1].cells[1].text = "真 Word"
 table.rows[1].cells[2].text = "可打开"
 
-if IMAGE_PATHS:
-    doc.add_picture(IMAGE_PATHS[0], width=Inches(5.2))
+# To embed a picture, pass its actual path to doc.add_picture(path, width=Inches(5.2)).
 
-save_doc(doc)
+doc.save(output_path)
 ```
 
-## Edit existing (artifact_id set — do this, do not rebuild)
+## Edit existing
 
 ```python
-doc = load_doc()  # or Document(INPUT_PATH)
+from docx import Document
+
+doc = Document(input_path)
 # Change the named paragraph / cell only. Other paragraphs, tables, header, styles stay.
 for p in doc.paragraphs:
     if "春游" in p.text:
         for run in p.runs:
             if "春游" in run.text:
                 run.text = run.text.replace("春游", "秋游")
-save_doc(doc)
+doc.save(output_path)
 ```
 
 Do not `doc = Document()` then copy text out. That drops styles, headers, and images.
@@ -76,11 +75,10 @@ Do not `doc = Document()` then copy text out. That drops styles, headers, and im
 - Lists: `doc.add_paragraph("项", style="List Bullet")` or `List Number`.
 - East-Asian font: set `w:eastAsia` on the run or Normal style. Latin `font.name` alone will not pick 宋体.
 - Fonts: name the font the teacher's computer has — 宋体 / 黑体 / 楷体 / 仿宋 / 微软雅黑 for Chinese, Calibri / Times New Roman / Arial for Latin. Here they render with installed look-alikes (same style, Regular + Bold), so previews match. Do not name other fonts.
-- Pictures: `IMAGE_PATHS[i]` from `image_artifact_ids`, or a PNG you render into the workdir. Do not invent a host path.
-- Same title replaces the file the teacher opens. Change existing files with `artifact_id` + `load_doc()`. Edit runs in place (`p.runs`, table cells). Do not rebuild a blank `Document()` and paste text.
-- After save, the tool observation is what landed. `ok` is not finished.
+- Pictures: embed a real image, such as a PNG you render for the document.
+- Edit runs in place (`p.runs`, table cells) to preserve existing formatting and content.
 
 ## Check
 
-Open the bytes in your head against the observation: heading present, body has the teacher's facts, table cells are not empty, file is `.docx`. If wrong, call `sandbox_office_lib` again with the same title.
+Check the saved `.docx` for the heading, the teacher's facts in the body, and populated table cells. If wrong, save the corrected file under the same name.
 In the workspace, also render the pages and look at them before you answer (Workspace rules: first, last, pages with tables / pictures; at most 8).

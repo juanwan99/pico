@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -16,6 +17,7 @@ sys.path.insert(0, str(ROOT / "services"))
 
 from pi_runner.app import Runner, build_control_app
 from pi_runner.policy import RunnerSettings
+from pi_runner.policy import WorkspaceKey as ControlWorkspaceKey
 from pico_orchestrator.true_pi import runner as tp_runner
 from pico_orchestrator.true_pi.runner import (
     ProxyEntry,
@@ -65,6 +67,34 @@ def test_upload_only_into_attachments(control) -> None:
     for path in ("outputs/x", ".pi/settings.json", "../x", "attachments/../../x"):
         r = client.put(f"{BASE}/file", params={"path": path}, content=b"x", headers=H)
         assert r.status_code == 400, path
+
+
+def test_generated_picture_upload_stays_in_its_active_workspace(control) -> None:
+    client, ws = control
+    active = client.runner
+    key = ControlWorkspaceKey.parse(S, M, C)
+    active.prepare_workspace(key, with_memory=False)
+    active.sessions["box-run"] = SimpleNamespace(key=key)
+    path = "work/generated/picture.png"
+    params = {"path": path, "run_id": "box-run"}
+    assert client.put(f"{BASE}/file", params=params, content=b"png").status_code == 401
+    wrong_run = {**params, "run_id": "other-run"}
+    assert client.put(f"{BASE}/file", params=wrong_run, content=b"png", headers=H).status_code == 409
+    other_ws = f"/v1/ws/{S}/{M}/{'d' * 32}/file"
+    assert client.put(other_ws, params=params, content=b"png", headers=H).status_code == 409
+    for denied in ("outputs/picture.png", "attachments/picture.png"):
+        response = client.put(
+            f"{BASE}/file", params={**params, "path": denied}, content=b"png", headers=H
+        )
+        assert response.status_code == 400
+    attachment = {"path": "attachments/teacher.png"}
+    response = client.put(f"{BASE}/file", params=attachment, content=b"png", headers=H)
+    assert response.status_code == 409
+    assert not (ws / path).exists()
+    response = client.put(f"{BASE}/file", params=params, content=b"png", headers=H)
+    assert response.status_code == 200
+    assert (ws / path).read_bytes() == b"png"
+    assert client.get(f"{BASE}/outputs", headers=H).json()["files"] == []
 
 
 def test_download_refuses_symlink_escape(control, tmp_path: Path) -> None:

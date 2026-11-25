@@ -22,6 +22,7 @@ from pico_orchestrator.artifact_types import (
 from pico_orchestrator.browser_screenshot import write_browser_screenshot
 from pico_orchestrator.diagram_generate import render_diagram_bytes
 from pico_orchestrator.document_generators import (
+    OFFICE_PYTHON_LIBRARIES,
     build_docx_document,
     build_html_document,
     build_pptx_document,
@@ -426,6 +427,8 @@ def _suffix_kind(name: str) -> str | None:
 
 def _make_read_office_skill(store: ArtifactStore):
     async def read_office_skill(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        from pico_orchestrator.true_pi.runner import proxy_entry
+
         raw_id = args.get("id") or args.get("skill") or args.get("kind")
         token = str(raw_id).strip() if raw_id is not None else ""
         sid = normalize_office_skill_id(token) or _suffix_kind(token)
@@ -443,12 +446,33 @@ def _make_read_office_skill(store: ArtifactStore):
                 "To read a file's content use workspace_read_file(artifact_id=...).",
             )
         body = load_office_skill_body(sid)
+        library = OFFICE_PYTHON_LIBRARIES[sid]
+        if proxy_entry(current_run_id(principal, store)) is not None:
+            execute_with = "bash"
+            execution = (
+                f"Run Python with {library} using `bash` in `/workspace`. "
+                f"Set `output_path` to `outputs/<name>.{sid}`. "
+                "For an existing file or source data, set `input_path` to its path in "
+                "`attachments/` or `outputs/`. For pictures from `generate_image` or "
+                "`generate_diagram`, use the returned `workspace_path` in "
+                "`/workspace/work/generated/` as the local picture path."
+            )
+        else:
+            execute_with = "sandbox_office_lib"
+            execution = (
+                f"Run Python with {library} via `{execute_with}` with `kind={sid}`. "
+                "Pass the output filename as `title` and set `output_path = OUTPUT_PATH`. "
+                "For an existing file or source data, pass `artifact_id` and set "
+                "`input_path = INPUT_PATH`. "
+                "For generated pictures, pass `image_artifact_ids` and use `IMAGE_PATHS`. "
+                "After saving, check the returned `observation`."
+            )
         return {
             "ok": True,
             "id": sid,
-            "body": body,
+            "body": f"{execution}\n\n{body}",
             "via": "read_office_skill",
-            "execute_with": "sandbox_office_lib",
+            "execute_with": execute_with,
         }
 
     return read_office_skill
@@ -1701,15 +1725,18 @@ def _workspace_handlers(
         return _attach_write_observation(result, kind="xlsx", title=out_title, raw=edited)
 
     async def generate_image(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        from pico_orchestrator.true_pi.runner import attach_generated_image_path
+
         prompt = _required_text(args, "prompt", maximum=2000)
         title_raw = args.get("title")
         title_hint = str(title_raw).strip() if isinstance(title_raw, str) else ""
         from pico_orchestrator.image_generate import billed_image_model, selected_image_provider
 
         image_model = billed_image_model()
+        run_id = current_run_id(principal, store)
         try:
             raw, ext, usage = await _run_bounded(
-                generate_image_with_usage(prompt, run_id=current_run_id(principal, store)),
+                generate_image_with_usage(prompt, run_id=run_id),
                 # F5: one Retry-After rest (≤ image timeout window) + one POST.
                 seconds=_IMAGE_TIMEOUT_S * 2,
                 code="image.timeout",
@@ -1725,8 +1752,8 @@ def _workspace_handlers(
             )
             result["format"] = ext
             result["user_message"] = (
-                "图已生成。要放进文档时把 artifact id 交给文档工具"
-                "（PPT/Word：image_artifact_id；HTML：src=\"pico-artifact:<id>\"）。"
+                "图已生成。放进 Word/PPT 请按 read_office_skill 的插图说明操作。"
+                "放进 HTML 请用 src=\"pico-artifact:<id>\"。"
                 "已经嵌进文件的不要再单独交一份。"
             )
             extra = {
@@ -1743,7 +1770,6 @@ def _workspace_handlers(
                 model=image_model,
                 extra=extra,
             )
-            return _attach_write_observation(result, kind=kind, title=title, raw=raw)
         except Exception:
             await emit_image_usage(
                 principal,
@@ -1752,8 +1778,12 @@ def _workspace_handlers(
                 extra={"provider": selected_image_provider()},
             )
             raise
+        await attach_generated_image_path(run_id, result, kind, raw)
+        return _attach_write_observation(result, kind=kind, title=title, raw=raw)
 
     async def generate_diagram(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        from pico_orchestrator.true_pi.runner import attach_generated_image_path
+
         source = _required_text(args, "source", maximum=32_000)
         kind_raw = args.get("kind")
         kind = str(kind_raw).strip() if isinstance(kind_raw, str) else "mermaid"
@@ -1780,9 +1810,10 @@ def _workspace_handlers(
         if meta.get("svg_omitted"):
             result["svg_omitted"] = True
         result["user_message"] = (
-            "结构图已生成。要放进 Word/PPT 时把 artifact id 写入 image_artifact_id，"
-            "不要单独当成品交给老师。"
+            "结构图已生成。放进 Word/PPT 请按 read_office_skill 的插图说明操作。"
+            "已经嵌进文件的不要再单独交一份。"
         )
+        await attach_generated_image_path(current_run_id(principal, store), result, "png", raw)
         return _attach_write_observation(result, kind="png", title=title, raw=raw)
 
     async def verify_html(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
@@ -2913,12 +2944,8 @@ def build_default_gateway(
             description=(
                 "On-demand office craft (docx / xlsx / pptx). Catalog is one line "
                 "in SYSTEM; this tool returns the full python-docx / openpyxl / "
-                "python-pptx craft. Not LibreChat Skills. Not a second "
-                "store. After reading, write with sandbox_office_lib (kind matches "
-                "id). To change an existing file pass artifact_id and load_doc / "
-                "load_book / load_deck, then edit in place (keep other "
-                "pages/cells/styles). Do not start a blank Document/Workbook/"
-                "Presentation when artifact_id is set. "
+                "python-pptx craft and how to run it this turn. "
+                "To change an existing file, edit in place (keep other pages/cells/styles). "
                 "Args: id=docx|xlsx|pptx"
             ),
             handler=_make_read_office_skill(store),
@@ -2979,8 +3006,8 @@ def build_default_gateway(
             description=(
                 "Create one downloadable png/jpg via the New API image gateway. "
                 "On missing key, timeout, or 4xx: honest Chinese failure; never invent pixels. "
-                "To place it in Word/PPT, pass the returned artifact id as "
-                "image_artifact_ids on sandbox_office_lib. To place it in HTML, set img src to "
+                "To place it in Word/PPT, follow the picture steps from read_office_skill. "
+                "To place it in HTML, set img src to "
                 "pico-artifact:<id>. Do not paste base64. Do not also hand it to the "
                 "teacher as a separate download when it is already inside the file. "
                 "Args: prompt, title?"
@@ -2998,8 +3025,8 @@ def build_default_gateway(
                 "it is not a photo generator. Sibling of generate_image — they do not "
                 "veto each other. kind defaults to mermaid; d2 is not wired and fails "
                 "honestly. On parse/sandbox failure: honest Chinese failure; never invent "
-                "a diagram. To place it in Word/PPT, pass the returned artifact id as "
-                "image_artifact_ids on sandbox_office_lib. Args: source, kind?, title?"
+                "a diagram. To place it in Word/PPT, follow the picture steps from "
+                "read_office_skill. Args: source, kind?, title?"
             ),
             handler=generate_diagram,
             school_scoped=False,

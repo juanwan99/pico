@@ -15,6 +15,10 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
+from pico_orchestrator.usage_hook import current_usage_bind
+
+OFFICE_PYTHON_LIBRARIES = {"docx": "python-docx", "xlsx": "openpyxl", "pptx": "python-pptx"}
+
 # Empty-shell floor only. Do not invent 套话, and do not demand a page quota.
 MIN_DOCX_BODY_CHARS = 20
 MIN_PPTX_SLIDES = 1
@@ -163,22 +167,23 @@ def office_shell_reason(raw: bytes, ext: str) -> str | None:
         suffix = f".{suffix}" if suffix else ""
     if suffix == ".docx":
         text = docx_visible_text(raw)
-        if _visible_len(text) < MIN_DOCX_BODY_CHARS:
-            return (
-                "Word 打开后几乎是空壳。"
-                "请用 sandbox_office_lib 写入实际正文后再交。"
-            )
-        return None
-    if suffix == ".pptx":
+        if _visible_len(text) >= MIN_DOCX_BODY_CHARS:
+            return None
+        reason = "Word 打开后几乎是空壳。请写入实际正文后再交。"
+    elif suffix == ".pptx":
         titles = pptx_slide_titles(raw)
         titled = sum(1 for t in titles if (t or "").strip())
-        if len(titles) < MIN_PPTX_SLIDES or titled < MIN_PPTX_SLIDES:
-            return (
-                "PPT 打开后没有可看的页。"
-                "请用 sandbox_office_lib 写出至少一页后再交。"
-            )
+        if len(titles) >= MIN_PPTX_SLIDES and titled >= MIN_PPTX_SLIDES:
+            return None
+        reason = "PPT 打开后没有可看的页。请写出至少一页后再交。"
+    else:
         return None
-    return None
+
+    # The gateway office tool has a usage bind. The delivery gate runs without one.
+    if current_usage_bind() is not None:
+        kind = suffix.removeprefix(".")
+        reason += f"请使用 sandbox_office_lib（kind={kind}）写出文件。"
+    return reason
 
 
 def require_docx_body(body: str | None) -> None:
