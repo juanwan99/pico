@@ -141,11 +141,12 @@ keep_failed_backup() {
 }
 
 cmd_run() {
+  trap 'fail "超时或被停（SIGTERM）"' TERM
   exec 9>"$WORK/run.lock"
   flock -n 9 || fail "another run holds the lock"
   curl -sS -o /dev/null --max-time 8 -x "$PROXY" https://www.googleapis.com/ || fail "proxy ${PROXY} cannot reach googleapis"
   local stamp dir
-  # A run killed by the systemd timeout never reaches its EXIT trap: drop what it left (we hold the lock).
+  # Packaging-stage failures (no trap yet) and SIGKILL leave a stamp dir in $WORK: drop it (we hold the lock; KEEP_DIR untouched).
   find "$WORK" -mindepth 1 -maxdepth 1 -type d -name '20*' -exec rm -rf {} +
   stamp="$(date +%Y%m%dT%H%M%S%z)"
   dir="$WORK/$stamp"
@@ -202,13 +203,14 @@ PY
     fi
   done
   log "upload $(du -sh "$dir" | cut -f1) → $REMOTE/$stamp"
-  trap 'keep_failed_backup "$dir" "$stamp"' EXIT
+  # Capture local paths now because EXIT can run after the function returns.
+  trap "$(printf 'keep_failed_backup %q %q' "$dir" "$stamp")" EXIT
   rclone_cmd copy "$dir" "$REMOTE/$stamp" || fail "upload (see $WORK/rclone.err)"
   # Off-host means the remote has every file at the right size.
   rclone_cmd check "$dir" "$REMOTE/$stamp" --size-only --one-way || fail "remote size check"
   printf '%s\n' "$stamp" >"$dir/COMPLETE"
   rclone_cmd copyto "$dir/COMPLETE" "$REMOTE/$stamp/COMPLETE" || fail "upload COMPLETE"
-  trap 'rm -rf "$dir"' EXIT
+  trap "$(printf 'rm -rf -- %q' "$dir")" EXIT
   rclone_cmd delete "$REMOTE" --min-age "${KEEP_DAYS}d" --drive-use-trash=false || log "prune skipped"
   rclone_cmd rmdirs "$REMOTE" --leave-root || true
   write_status OK "$stamp $(du -sb "$dir" | cut -f1) bytes"
@@ -258,7 +260,7 @@ cmd_drill() {
   [[ -n "$latest" ]] || drill_fail "no complete backup on $REMOTE"
   dir="$WORK/drill-$latest"
   rm -rf "$WORK"/drill-* && mkdir -p "$dir"
-  trap 'rm -rf "$dir"; docker rm -f pico-drill-mongo pico-drill-meili >/dev/null 2>&1 || true' EXIT
+  trap "$(printf 'rm -rf -- %q' "$dir"); docker rm -f pico-drill-mongo pico-drill-meili >/dev/null 2>&1 || true" EXIT
   rclone_cmd copy "$REMOTE/$latest" "$dir" || drill_fail "download $latest"
   for part in "$dir"/*.part-000; do
     [[ -e "$part" ]] || continue
@@ -362,8 +364,8 @@ PY
 }
 
 case "${1:-}" in
-  run) cmd_run 2>&1 | tee -a "$LOG_DIR/pico-backup.log"; exit "${PIPESTATUS[0]}" ;;
-  drill) cmd_drill "${2:-}" 2>&1 | tee -a "$LOG_DIR/pico-backup.log"; exit "${PIPESTATUS[0]}" ;;
-  watch) cmd_watch 2>&1 | tee -a "$LOG_DIR/pico-backup.log" ;;
+  run) exec >>"$LOG_DIR/pico-backup.log" 2>&1; cmd_run ;;
+  drill) exec >>"$LOG_DIR/pico-backup.log" 2>&1; cmd_drill "${2:-}" ;;
+  watch) exec >>"$LOG_DIR/pico-backup.log" 2>&1; cmd_watch ;;
   *) echo "usage: $0 run|drill [--corrupt]|watch" >&2; exit 2 ;;
 esac

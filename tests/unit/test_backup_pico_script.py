@@ -145,10 +145,12 @@ fi
 )
 def test_failed_upload_keeps_local_backup(tmp_path: Path, step: str, reason: str) -> None:
     result = _run_backup(tmp_path, step)
-    assert result.returncode == 1, result.stdout
-    assert f"FAIL {reason}" in result.stdout
+    log = (tmp_path / "logs" / "pico-backup.log").read_text(encoding="utf-8")
+    assert result.returncode == 1, log
+    assert result.stdout == result.stderr == ""
+    assert f"FAIL {reason}" in log
     (kept,) = (tmp_path / "keep").iterdir()
-    assert f"backup kept at {kept}" in result.stdout
+    assert f"backup kept at {kept}" in log
     assert (kept / "mongo.archive.gz").read_text(encoding="utf-8") == "fixture\n"
     assert (kept / "SHA256SUMS").stat().st_size > 0
     assert not list((tmp_path / "work").glob("20*"))
@@ -156,8 +158,10 @@ def test_failed_upload_keeps_local_backup(tmp_path: Path, step: str, reason: str
 
 def test_successful_upload_cleans_work_without_keeping_a_copy(tmp_path: Path) -> None:
     result = _run_backup(tmp_path)
-    assert result.returncode == 0, result.stdout
-    assert " OK " in result.stdout
+    log = (tmp_path / "logs" / "pico-backup.log").read_text(encoding="utf-8")
+    assert result.returncode == 0, log
+    assert result.stdout == result.stderr == ""
+    assert " OK " in log
     assert not (tmp_path / "keep").exists()
     assert not list((tmp_path / "work").glob("20*"))
 
@@ -172,7 +176,7 @@ def test_failed_upload_prunes_only_oldest_kept_backup(tmp_path: Path) -> None:
     stale_work.mkdir(parents=True)
 
     result = _run_backup(tmp_path, "copy")
-    assert result.returncode == 1, result.stdout
+    assert result.returncode == 1
     assert not list((tmp_path / "work").glob("20*"))
     assert not (keep / old_stamps[0]).exists()
     assert (keep / "2020-not-a-backup").is_dir()
