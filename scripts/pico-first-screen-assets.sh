@@ -2,9 +2,9 @@
 # Shared public login and bundle requests for deploy warmup and live acceptance.
 
 get_public_page() {
-  local base="$1" route="$2" file="$3" result
-  shift 3
-  if ! result="$(curl -fsS --compressed --max-time 3 --output "$file" \
+  local base="$1" route="$2" file="$3" timeout="$4" result
+  shift 4
+  if ! result="$(curl -fsS --compressed --max-time "$timeout" --output "$file" \
     --write-out '%{http_code} %{time_total}' "$@" "$base$route")"; then
     printf 'FAIL %s %s\n' "$route" "$result" >&2
     return 1
@@ -66,7 +66,8 @@ fetch_first_screen_bundles() {
     if ! result="$(curl -fsS -H 'Accept-Encoding: gzip, deflate, br, zstd' --max-time 30 \
       --output /dev/null --write-out "$format" "$@" "$base$asset")"; then
       printf 'FAIL edge cache %s\n' "$asset" >&2
-      return 1
+      failed=1
+      continue
     fi
     IFS=$'\t' read -r code media cached <<<"$result"
     if [[ "$code" != 200 || "$media" == text/html* ||

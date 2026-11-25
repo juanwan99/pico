@@ -9,8 +9,8 @@ base="${base%/}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-get_public_page "$base" /login "$work/login.html"
-get_public_page "$base" /api/pico/tip "$work/tip.json"
+get_public_page "$base" /login "$work/login.html" 3
+get_public_page "$base" /api/pico/tip "$work/tip.json" 3
 
 python3 - "$work/tip.json" <<'PY'
 import json

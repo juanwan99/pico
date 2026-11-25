@@ -556,8 +556,8 @@ echo "[pico] edge cache warmup:"
   public_login="$(mktemp)"
   trap 'rm -f "$public_login"' EXIT
   public_base=https://pico.aivia.asia
-  proxy_args=(--proxy http://127.0.0.1:7893 --noproxy '')
-  get_public_page "$public_base" /login "$public_login" "${proxy_args[@]}"
+  proxy_args=(--proxy http://127.0.0.1:7893)
+  get_public_page "$public_base" /login "$public_login" 10 "${proxy_args[@]}"
   fetch_first_screen_bundles "$public_base" "$public_login" warm "${proxy_args[@]}"
 )
 

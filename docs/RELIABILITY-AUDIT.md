@@ -52,8 +52,8 @@
 - 由平台运维在**俄勒冈边缘 nginx**现有 `http` 块引用 [缓存区配置](../deploy/nginx/pico-edge-cache-http.conf)，在同一 vhost 当前 `/assets/` 回源 location 引用 [缓存指令](../deploy/nginx/pico-edge-cache-assets.inc)。替换同作用域的临时缓存指令，沿用当前回源地址和代理请求头。缓存遵循 LibreChat 返回的 `s-maxage`、`Vary` 和 `no-store`，静态包换哈希即换缓存键。[nginx 代理缓存指令](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache)
 - 默认 24 小时的新鲜期结束后，边缘先送已有副本，再在后台用 ETag 或 Last-Modified 向源站校验。源站连接出错、超时或返回 502、504 时，边缘仍可送已有副本。[nginx 缓存更新与旧副本](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_use_stale)
 - 在该 location 生效的现有安全响应头所在作用域加入 `add_header X-Pico-Edge-Cache $upstream_cache_status;`。对象使用完整 Host 与请求 URI，登录、API 和聊天仍走各自的原回源 location。运维先运行 `nginx -t`。改动 `keys_zone` 对应的缓存路径时要 restart。其他改动 reload 后查 nginx `error.log`，确认本次加载没有 `emerg`。`systemctl reload` 可能返回 0，而 nginx 拒绝加载并继续使用旧配置。
-- 每次发版可能换首屏包的哈希。发版冒烟通过后，`prod-update` 经 ECS 出口代理 `127.0.0.1:7893` 读取 `https://pico.aivia.asia/login` 并请求其中每个首屏包一次。预热和公网验收共用脚本，请求相同的浏览器缓存变体。取包失败时发版命令退出非零。[首屏包脚本](../scripts/pico-first-screen-assets.sh)
-- 发版后从公网客户端运行 `bash tests/acceptance/reliability-live.sh`，需要 curl 7.84+ 和 Python 3。脚本核对 `/login`、`/api/pico/tip` 在 3 秒内返回，从实际 HTML 提取首屏 JS/CSS（含旧浏览器引用的包），使用 `Accept-Encoding: gzip, deflate, br, zstd` 检查浏览器使用的缓存变体。`HIT`、`STALE`、`UPDATING`、`REVALIDATED` 均算命中，`MISS` 会报失败。
+- 每次发版可能换首屏包的哈希。发版冒烟通过后，`prod-update` 经 ECS 出口代理 `127.0.0.1:7893` 读取 `https://pico.aivia.asia/login`（超时 10 秒），并请求其中每个首屏包一次。预热和公网验收共用脚本，请求相同的浏览器缓存变体。单个包取失败后继续取其余包，最后打印成功数和总数，发版命令退出非零。[首屏包脚本](../scripts/pico-first-screen-assets.sh)
+- 发版后从公网客户端运行 `bash tests/acceptance/reliability-live.sh`，需要 curl 7.84+ 和 Python 3。脚本核对 `/login`、`/api/pico/tip` 在 3 秒内返回，从实际 HTML 提取首屏 JS/CSS（含旧浏览器引用的包），使用 `Accept-Encoding: gzip, deflate, br, zstd` 检查浏览器使用的缓存变体。`HIT`、`STALE`、`UPDATING`、`REVALIDATED` 均算命中。单个包未命中或取失败时，脚本继续检查其余包，打印命中数和总数后退出非零。
 - 第二轮从工作区测得现网同一版本的 `/login` 2.165 秒、`/api/pico/tip` 0.607 秒及 23/23 HIT。登录聊天待演练账号（待业主）。
 - 现有 `bash scripts/e2e-smoke.sh --prod` 仍是 ECS 发版自身的合同检查。发版命令成功返回后立即从用户网络跑工作台公网验收，核对首次即 23/23 命中。
 
