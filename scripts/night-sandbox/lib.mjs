@@ -5,6 +5,7 @@
  */
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -192,4 +193,70 @@ export async function saveViewportPng(page, filePath) {
 export function writeJson(filePath, data) {
   ensureDir(path.dirname(filePath));
   fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+/** A shared downlink with propagation delay in both directions, including open SSE. */
+export async function limitedSandboxLink(base) {
+  const target = new URL(base);
+  if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1') {
+    throw new Error('--limit requires a local http://127.0.0.1 stack');
+  }
+  const delay = 97;
+  const bytesPerMs = 687.5;
+  let sendAt = 0;
+  const server = http.createServer((req, res) => {
+    const upstream = http.request({
+      hostname: target.hostname,
+      port: target.port,
+      method: req.method,
+      path: req.url,
+      headers: { ...req.headers, host: target.host },
+    });
+    const packets = [];
+    let timer;
+    function schedule() {
+      if (!packets.length || res.destroyed) return;
+      timer = setTimeout(() => {
+        const now = performance.now();
+        while (packets.length && packets[0].when <= now && !res.destroyed) {
+          packets.shift().send();
+        }
+        timer = undefined;
+        schedule();
+      }, Math.max(1, packets[0].when - performance.now()));
+    }
+    function at(when, send) {
+      packets.push({ when, send });
+      if (!timer) schedule();
+    }
+    upstream.on('response', (incoming) => {
+      let endAt = performance.now() + delay;
+      at(endAt, () => res.writeHead(incoming.statusCode, incoming.headers));
+      incoming.on('data', (chunk) => {
+        sendAt = Math.max(sendAt, performance.now()) + chunk.length / bytesPerMs;
+        endAt = sendAt + delay;
+        at(endAt, () => res.write(chunk));
+      });
+      incoming.on('end', () => at(endAt, () => res.end()));
+      incoming.on('error', (error) => res.destroy(error));
+    });
+    upstream.on('error', (error) => res.destroy(error));
+    res.once('close', () => {
+      upstream.destroy();
+      clearTimeout(timer);
+      packets.length = 0;
+    });
+    at(performance.now() + delay, () => req.pipe(upstream));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  return {
+    base: `http://127.0.0.1:${server.address().port}`,
+    close() {
+      server.close();
+      server.closeAllConnections();
+    },
+  };
 }

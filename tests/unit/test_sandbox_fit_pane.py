@@ -108,21 +108,22 @@ async def test_screencast_discards_stale_bitmap_with_new_viewport_metadata(
     stop = await surface.screencast(push)
     try:
         on_frame = cdp.on.call_args.args[1]
-        for session_id, height in enumerate((450, 930, 930), start=1):
+        frames = [(450, 1, "black"), (930, 3, "black"), (930, 4, "black"), (930, 2, "red")]
+        for session_id, (height, timestamp, color) in enumerate(frames, start=1):
             buf = io.BytesIO()
-            with Image.new("RGB", (720, height)) as jpeg:
+            with Image.new("RGB", (720, height), color) as jpeg:
                 jpeg.save(buf, format="JPEG")
             await on_frame({
                 "data": base64.b64encode(buf.getvalue()).decode(),
                 "sessionId": session_id,
-                "metadata": {"deviceWidth": 480, "deviceHeight": 620},
+                "metadata": {"deviceWidth": 480, "deviceHeight": 620, "timestamp": timestamp},
             })
         push.assert_called_once()
         frame = push.call_args.args[0]
         assert (frame.width, frame.height) == (480, 620)
         with Image.open(io.BytesIO(base64.b64decode(frame.jpeg))) as jpeg:
             assert jpeg.size == (720, 930)
-        for session_id in (1, 2, 3):
+        for session_id in (1, 2, 3, 4):
             cdp.send.assert_any_await("Page.screencastFrameAck", {"sessionId": session_id})
     finally:
         await stop()
@@ -224,15 +225,17 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
         assert await page.evaluate("devicePixelRatio") == 1.5
         assert await page.is_visible("#w")  # the site's own narrow layout
         resized = await asyncio.wait_for(frame, 1)
-        while resized["width"] != 480:
-            await runtime.apply_input(sess, frame_ack=resized["frame_id"])
-            resized = await asyncio.wait_for(anext(stream), 1)
-        assert resized["height"] == 620
-        with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
-            assert jpeg.size == (720, 930)
-            red, green, blue = jpeg.getpixel((700, 40))
-            assert green > 240 and red < 15 and blue < 15
-        await runtime.apply_input(sess, frame_ack=resized["frame_id"])
+        async with asyncio.timeout(2):
+            while True:
+                await runtime.apply_input(sess, frame_ack=resized["frame_id"])
+                if resized["width"] == 480:
+                    assert resized["height"] == 620
+                    with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
+                        if jpeg.size == (720, 930):
+                            red, green, blue = jpeg.getpixel((700, 40))
+                            assert green > 240 and red < 15 and blue < 15
+                            break
+                resized = await anext(stream)
         assert Image.open(io.BytesIO(await surface.screenshot_png())).size == (480, 620)
         assert await page.evaluate("devicePixelRatio") == 1.5
 
@@ -243,9 +246,8 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
                 scrolled = await anext(stream)
                 await runtime.apply_input(sess, frame_ack=scrolled["frame_id"])
                 with Image.open(io.BytesIO(base64.b64decode(scrolled["jpeg"]))) as jpeg:
-                    red, green, blue = jpeg.getpixel((90, 90))
+                    red, green, blue = jpeg.getpixel((jpeg.width // 8, jpeg.height * 60 // 620))
                     if red > 235 and green < 20 and blue < 20:
-                        assert jpeg.size == (720, 930)
                         assert (scrolled["width"], scrolled["height"]) == (480, 620)
                         break
         assert Image.open(io.BytesIO(await surface.screenshot_png())).getpixel((60, 60)) == (
@@ -264,7 +266,10 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
             while True:
                 await runtime.apply_input(sess, frame_ack=resized["frame_id"])
                 if resized["width"] == 900:
-                    break
+                    assert resized["height"] == 700
+                    with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
+                        if jpeg.size == (1350, 1050):
+                            break
                 resized = await anext(stream)
         assert resized["height"] == 700
         with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:

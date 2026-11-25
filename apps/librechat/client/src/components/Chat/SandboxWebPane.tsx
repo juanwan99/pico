@@ -854,6 +854,9 @@ export default function SandboxWebPane({
                 width: image.width
                   ? `min(${Math.round(zoom * 100)}%, ${image.width * zoom}px)`
                   : `${Math.round(zoom * 100)}%`,
+                aspectRatio: image.width && image.height
+                  ? `${image.width} / ${image.height}`
+                  : undefined,
               }}
               className="mx-auto block h-auto max-w-none cursor-default bg-white"
               data-testid="sandbox-web-viewport"
