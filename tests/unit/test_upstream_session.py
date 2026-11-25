@@ -340,11 +340,15 @@ def test_pressure_report_reads_new_api_log() -> None:
     # AIProxy is for long Pi sessions only: the direct road's one-shot calls miss.
     assert m["one_shot"] == 3
     assert rep.verdict(m) == ["一问请求 3 次（应为 0）"]
-    rows.append(_log(109, 20, 10, 0, "01a1...6aaa"))
+    rows.append(_log(109, 20, 10, 10, "01a1...6aaa"))
     rows.append(_log(110, 1, 10, 0, "01a1...7bbb"))  # a Pi run that ended in one step
+    rows.extend(_log(t, 20, 10, 10, "01a1...6aaa") for t in range(111, 114))
     m = rep.measure(rows)
     assert m["single_request_sessions"] == 1
-    assert rep.verdict(m)[-1] == "同时请求峰值 5 > 4"
+    assert m["peak"] == 8
+    assert rep.verdict(m) == ["一问请求 3 次（应为 0）"]
+    rows.append(_log(114, 20, 10, 10, "01a1...6aaa"))
+    assert rep.verdict(rep.measure(rows))[-1] == "同时请求峰值 9 > 8"
 
 
 def test_pressure_report_judges_only_picos_token(tmp_path: Path) -> None:
