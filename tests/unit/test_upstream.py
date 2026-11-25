@@ -462,6 +462,9 @@ async def test_pi_resumes_after_relay_outage_with_an_empty_spare_pool(
         delivered[title] = content
         return {"artifact_id": title, "title": title, "kind": kind}
 
+    async def list_run_titles(_principal, *, run_id):
+        return {title: title for title in delivered}
+
     async def emit(kind, payload):
         events.append((kind, payload))
 
@@ -494,7 +497,7 @@ async def test_pi_resumes_after_relay_outage_with_an_empty_spare_pool(
         caps=RunCaps(min_artifacts=1, max_seconds=600),
         transport=transport,
         run_id=run_id,
-        artifact_store=SimpleNamespace(write=write),
+        artifact_store=SimpleNamespace(write=write, list_run_titles=list_run_titles),
     )
 
     resumes = [p for k, p in events if k == "run.resume"]
