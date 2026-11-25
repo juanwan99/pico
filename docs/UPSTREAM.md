@@ -99,3 +99,34 @@ key 只显示 sha256 的前 8 位。进程重启后清零（`since` 是起点）
 `tests/unit/test_upstream.py` 对直连和 Pi 两条路各测四种情形：按顺序、并发、503、换模型。每种都断言一条消息最多发几个上游请求。CI 必跑。
 
 另外还测重试的等待时间（2 s、6 s、`Retry-After`）、阅卷和托管循环及 llm-pass 的重试预算，以及切换至 Responses 模型时走正确的 API。
+
+## 沙箱实时画面（pico#1446）
+
+Playwright 1.63.0 通过 Chromium CDP 取 JPEG。尺寸仍按 CSS 像素传递，`Emulation.setDeviceMetricsOverride` 同时设置 DPR 和捕获视口，`Page.startScreencast` 的像素上限按 DPR 放大。浏览器按 CSS 尺寸摆放画面和换算点击坐标。尺寸更改会重新启动捕获，静止网页也会送新帧。[Chromium 固定版本的设备模拟实现](https://github.com/chromium/chromium/blob/153.0.8010.12/content/browser/devtools/protocol/emulation_handler.cc)
+
+沿用 SSE 和输入代理。每路 SSE 最多一帧等待客户端确认，worker 只留最新一帧待发。客户端解码后经输入口确认，worker 再向 CDP 确认该帧。未发送就被替换的帧在 worker 内释放。这与 noVNC 基本模式在处理更新后再请求下一次更新的做法一致。实时输入响应只读网址、标题和输入框标记，登录保存沿用 15 秒节流。Office、老师盘和推帧不可用时继续轮询 PNG。[noVNC 的 RFB 消息](https://github.com/novnc/noVNC/blob/master/docs/rfb_notes)
+
+### JPEG 测量
+
+本地 Linux 容器、Chromium 153.0.8010.12，DPR 1.5，12 CSS px 的中英文表格及带彩色图表的表格。下表是 SSE 中的 base64 体积和小字区域相对同尺寸原生 PNG 的 RGB 均方根误差，误差越低越接近原图。
+
+| CSS 尺寸与画面 | JPEG 70 | JPEG 80 | JPEG 85 | JPEG 90 |
+|---|---:|---:|---:|---:|
+| 1280×800 表格 | 191.7 KiB / 4.56 | 223.4 KiB / 3.47 | 251.4 KiB / 2.83 | 286.7 KiB / 2.23 |
+| 1920×1080 带图表 | 474.2 KiB / 4.18 | 562.0 KiB / 3.21 | 636.5 KiB / 2.63 | 741.8 KiB / 2.08 |
+
+质量取 80，小字误差比 70 降约 23–24%，比 85 每帧少传 28–75 KiB。按 #1445 的 5.5 Mbps 出口和 194 ms 往返，562 KiB 的单帧仅传输加往返就约 1.03 秒。现网点击和最大化的端到端时延需经俄勒冈链路验收。
+
+### 容量测量
+
+在隔离本地容器里用一个共享 Chromium 进程，按每个老师一个 context 和 2–3 个分属不同站点的标签打开表格、图表，十会话各推一路并行处理点击。使用 cgroup v2 读取内存峰值和 PID 计数，内存已含 `/tmp` 中的 profile 与 Chromium 共享内存文件。Chromium 带 `--disable-dev-shm-usage`，实测 `/dev/shm` 占用为 0。
+
+| 负载 | 内存 | PID 计数 | `/tmp` 采样占用 |
+|---|---:|---:|---:|
+| worker + 空闲 Chromium | 179 MiB | 51 | 0.7 MiB |
+| 1 会话、2 标签、DPR 1.5 | 401 MiB | 86 | 97 MiB |
+| 1 会话、3 标签、DPR 1.5 | 544 MiB | 99 | 146 MiB |
+| 10 会话、30 标签、1920×1080、DPR 1.5 | 峰值 2.83 GiB | 峰值 437 | 952 MiB |
+| 10 会话、30 标签、1920×1200、DPR 2 | 峰值 3.92 GiB | 峰值 440 | 1.44 GiB |
+
+两组十会话测试的 `memory.events` 中 max、oom、oom_kill 和 `pids.events` 中 max 均为 0。宿主 Compose 取 6 GiB 和 1024 PID，给 DPR 2 测得的峰值留下约 2.1 GiB 和 584 个 PID 的余量。运行时与 Compose 都设 10 个会话，启动中的会话先占额度。现网十会话仍需部署后重测。

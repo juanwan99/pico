@@ -199,6 +199,7 @@ services:
       PICO_SANDBOX_HOST: "0.0.0.0"
       PICO_SANDBOX_PORT: "18767"
       PICO_SANDBOX_TOKEN: ${PICO_SANDBOX_TOKEN:-}
+      PICO_SANDBOX_MAX_SESSIONS: "10"
       HOME: /tmp/pico-sandbox-home
       XDG_CONFIG_HOME: /tmp/pico-sandbox-home/.config
       XDG_CACHE_HOME: /tmp/pico-sandbox-home/.cache
@@ -207,8 +208,10 @@ services:
       PICO_SANDBOX_DISK: /var/lib/pico/teacher-disks
     volumes:
       - ${PICO_SANDBOX_DISK_HOST:-./data/teacher-disks}:/var/lib/pico/teacher-disks
-    mem_limit: 512m
-    pids_limit: 256
+    # #1446: 10 browser desks with 3 tabs each peaked at 3.92 GiB and 440 threads
+    # at DPR 2, including Chromium's /tmp backing files.
+    mem_limit: 6g
+    pids_limit: 1024
 
   # pico-office — the office computer (#959 · PLAN-OFFICE-COMPUTER-V2).
   # Same image as pico-sandbox; runs teacher office scripts with a full Python.

@@ -17,7 +17,8 @@ import mimetypes
 import os
 import secrets
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,7 @@ from sandbox_worker.browser import (
     BrowserHands,
     BrowserPage,
     RefBook,
+    ScreencastFrame,
     open_chromium,
 )
 from sandbox_worker.files import FilesSurface, list_workspace_files, open_files_surface
@@ -56,7 +58,7 @@ logger = logging.getLogger(__name__)
 HUMAN_LOGIN_COPY = "这是你的隔离浏览器，可以直接在画面里操作"
 HUMAN_OFFICE_COPY = "沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF，也不是下载。"
 SESSION_TTL_S = int(os.environ.get("PICO_SANDBOX_TTL_S") or str(30 * 60))
-MAX_SESSIONS = int(os.environ.get("PICO_SANDBOX_MAX_SESSIONS") or "8")
+MAX_SESSIONS = int(os.environ.get("PICO_SANDBOX_MAX_SESSIONS") or "10")
 # A committed page can still stall Chromium calls. Leave room under the sidecar deadline.
 LOADING_SCREENSHOT_TIMEOUT_S = 10.0
 LOADING_SNAPSHOT_TIMEOUT_S = 8.0
@@ -68,8 +70,8 @@ APPLIED_COPY = "已把操作送进 sidecar Chromium。登录状态存在你自�
 # Clearing the teacher disk, or logging out on the site, drops it.
 LOGIN_FILE = ".browser-login.json"
 LOGIN_SAVE_EVERY_S = 15.0
-# Live pane (#1215): check focus / session once a second, keep proxies awake.
-STREAM_CHECK_S = 1.0
+# Live pane (#1215): follow tab/focus changes promptly, keep proxies awake.
+STREAM_CHECK_S = 0.1
 STREAM_PING_S = 15.0
 # "current" = the caller's own desk (one per school+membership). Lets the AI act
 # on a pane the teacher opened without having the session id in hand.
@@ -137,6 +139,8 @@ class SandboxSession:
     human_hold: bool = False
     ai_acted_at: float = 0.0
     act_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    live_panes: dict[asyncio.Event, str] = field(default_factory=dict)
+    frame_acks: dict[str, Callable[[], Awaitable[None]]] = field(default_factory=dict)
 
     def focused(self) -> SandboxWindow:
         for item in self.windows:
@@ -152,6 +156,9 @@ class SandboxSession:
             if item.kind == "browser":
                 return item.surface  # type: ignore[return-value]
         return None
+
+    def is_streaming(self, win: SandboxWindow) -> bool:
+        return win.window_id in self.live_panes.values()
 
     @property
     def desktop(self) -> OfficeDesktop | None:
@@ -231,7 +238,18 @@ class SandboxRuntime:
 
     def __init__(self, open_browser: OpenBrowser | None = None) -> None:
         self._sessions: dict[str, SandboxSession] = {}
+        self._opening = 0
         self._open_browser = open_browser or open_chromium
+
+    @contextmanager
+    def _reserve_session(self) -> Iterator[None]:
+        if len(self._sessions) + self._opening >= MAX_SESSIONS:
+            raise ToolError("sandbox.quota", f"沙箱已满（最多 {MAX_SESSIONS} 路），请关掉一路再开。")
+        self._opening += 1
+        try:
+            yield
+        finally:
+            self._opening -= 1
 
     async def _purge(self) -> None:
         now = time.time()
@@ -322,17 +340,18 @@ class SandboxRuntime:
         win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="files", surface=surface)
         sess.windows.append(win)
 
-    async def _sync(self, sess: SandboxSession) -> None:
+    async def _sync(self, sess: SandboxSession, *, capture: bool = True) -> None:
         win = sess.focused()
         surface = win.surface
         sess.kind = win.kind
         sess.url = surface.url
         sess.title = await surface.title()
-        sess.h1 = await surface.h1()
-        png = await surface.screenshot_png()
-        if not png.startswith(PNG_MAGIC):
-            raise ToolError("sandbox.raster_failed", "隔离窗口未能截取画面")
-        sess.screenshot_png = png
+        if capture:
+            sess.h1 = await surface.h1()
+            png = await surface.screenshot_png()
+            if not png.startswith(PNG_MAGIC):
+                raise ToolError("sandbox.raster_failed", "隔离窗口未能截取画面")
+            sess.screenshot_png = png
         describe = getattr(surface, "describe_inputs", None)
         if callable(describe):
             try:
@@ -429,39 +448,38 @@ class SandboxRuntime:
         existing = self._find_desk(school, member)
         if existing is not None:
             return await self._attach_browser(existing, url)
-        if len(self._sessions) >= MAX_SESSIONS:
-            raise ToolError("sandbox.quota", "沙箱已满（最多 8 路），请关掉一路再开。机器未继续扩进程。")
-        page = await self._open_browser(url, login_state=self._login_path(school, member))
-        loading = _loading_meta(page)
-        stored = False
-        try:
-            parse_public_http_url(page.url)
-            session_id = "sbox_" + secrets.token_hex(12)
-            ws = workspace_id_for(school, member, run)
-            win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="browser", surface=page)
-            sess = SandboxSession(
-                session_id=session_id,
-                school_id=school,
-                membership_id=member,
-                run_id=run,
-                workspace_id=ws,
-                url=page.url,
-                title="",
-                h1="",
-                screenshot_png=b"",
-                created_at=time.time(),
-                windows=[win],
-                focused_id=win.window_id,
-                kind="browser",
-            )
-            await self._ensure_files_window(sess)
-            await self._sync_after_navigation(sess, loading)
-            self._sessions[session_id] = sess
-            stored = True
-        except Exception:
-            if not stored:
-                await page.close()
-            raise
+        with self._reserve_session():
+            page = await self._open_browser(url, login_state=self._login_path(school, member))
+            loading = _loading_meta(page)
+            stored = False
+            try:
+                parse_public_http_url(page.url)
+                session_id = "sbox_" + secrets.token_hex(12)
+                ws = workspace_id_for(school, member, run)
+                win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="browser", surface=page)
+                sess = SandboxSession(
+                    session_id=session_id,
+                    school_id=school,
+                    membership_id=member,
+                    run_id=run,
+                    workspace_id=ws,
+                    url=page.url,
+                    title="",
+                    h1="",
+                    screenshot_png=b"",
+                    created_at=time.time(),
+                    windows=[win],
+                    focused_id=win.window_id,
+                    kind="browser",
+                )
+                await self._ensure_files_window(sess)
+                await self._sync_after_navigation(sess, loading)
+                self._sessions[session_id] = sess
+                stored = True
+            except Exception:
+                if not stored:
+                    await page.close()
+                raise
         return self._public_meta(
             sess,
             message=(
@@ -489,31 +507,30 @@ class SandboxRuntime:
                     break
             await self._sync(existing)
             return self._public_meta(existing, message=PERSIST_COPY)
-        if len(self._sessions) >= MAX_SESSIONS:
-            raise ToolError("sandbox.quota", "沙箱已满（最多 8 路），请关掉一路再开。机器未继续扩进程。")
-        session_id = "sbox_" + secrets.token_hex(12)
-        ws = workspace_id_for(school, member, run)
-        sess = SandboxSession(
-            session_id=session_id,
-            school_id=school,
-            membership_id=member,
-            run_id=run,
-            workspace_id=ws,
-            url="sandbox://files",
-            title="",
-            h1="",
-            screenshot_png=b"",
-            created_at=time.time(),
-            windows=[],
-            focused_id="",
-            kind="files",
-        )
-        await self._ensure_files_window(sess)
-        if not sess.windows:
-            raise ToolError("sandbox.session_not_found", "老师盘未能打开")
-        sess.focused_id = sess.windows[-1].window_id
-        await self._sync(sess)
-        self._sessions[session_id] = sess
+        with self._reserve_session():
+            session_id = "sbox_" + secrets.token_hex(12)
+            ws = workspace_id_for(school, member, run)
+            sess = SandboxSession(
+                session_id=session_id,
+                school_id=school,
+                membership_id=member,
+                run_id=run,
+                workspace_id=ws,
+                url="sandbox://files",
+                title="",
+                h1="",
+                screenshot_png=b"",
+                created_at=time.time(),
+                windows=[],
+                focused_id="",
+                kind="files",
+            )
+            await self._ensure_files_window(sess)
+            if not sess.windows:
+                raise ToolError("sandbox.session_not_found", "老师盘未能打开")
+            sess.focused_id = sess.windows[-1].window_id
+            await self._sync(sess)
+            self._sessions[session_id] = sess
         return self._public_meta(sess, message=PERSIST_COPY)
 
     async def open_document(
@@ -538,35 +555,34 @@ class SandboxRuntime:
             return await self._attach_office(
                 existing, kind=resolved, filename=safe_name, document=payload
             )
-        if len(self._sessions) >= MAX_SESSIONS:
-            raise ToolError("sandbox.quota", "沙箱已满（最多 8 路），请关掉一路再开。机器未继续扩进程。")
-        desktop = await open_office(kind=resolved, filename=safe_name, document=payload)
-        session_id = "sbox_" + secrets.token_hex(12)
-        ws = workspace_id_for(school, member, run)
-        win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind=resolved, surface=desktop)
-        sess = SandboxSession(
-            session_id=session_id,
-            school_id=school,
-            membership_id=member,
-            run_id=run,
-            workspace_id=ws,
-            url=desktop.url,
-            title="",
-            h1="",
-            screenshot_png=b"",
-            created_at=time.time(),
-            windows=[win],
-            focused_id=win.window_id,
-            kind=resolved,
-        )
-        try:
-            self._write_workspace_file(sess, safe_name, payload)
-            await self._ensure_files_window(sess)
-            await self._sync(sess)
-        except Exception:
-            await desktop.close()
-            raise
-        self._sessions[session_id] = sess
+        with self._reserve_session():
+            desktop = await open_office(kind=resolved, filename=safe_name, document=payload)
+            session_id = "sbox_" + secrets.token_hex(12)
+            ws = workspace_id_for(school, member, run)
+            win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind=resolved, surface=desktop)
+            sess = SandboxSession(
+                session_id=session_id,
+                school_id=school,
+                membership_id=member,
+                run_id=run,
+                workspace_id=ws,
+                url=desktop.url,
+                title="",
+                h1="",
+                screenshot_png=b"",
+                created_at=time.time(),
+                windows=[win],
+                focused_id=win.window_id,
+                kind=resolved,
+            )
+            try:
+                self._write_workspace_file(sess, safe_name, payload)
+                await self._ensure_files_window(sess)
+                await self._sync(sess)
+            except Exception:
+                await desktop.close()
+                raise
+            self._sessions[session_id] = sess
         label = KIND_LABEL.get(resolved, resolved)
         return self._public_meta(
             sess,
@@ -667,6 +683,14 @@ class SandboxRuntime:
             png_sha256=hashlib.sha256(session.screenshot_png).hexdigest()[:16],
         )
 
+    async def pane_meta(self, session: SandboxSession) -> dict[str, Any]:
+        win = session.focused()
+        if not session.is_streaming(win):
+            return await self.screenshot(session)
+        await self._sync(session, capture=False)
+        await self._save_login(session, throttle=True)
+        return self._public_meta(session)
+
     async def apply_input(
         self,
         session: SandboxSession,
@@ -680,23 +704,38 @@ class SandboxRuntime:
         key: str = "",
         viewport_width: int | None = None,
         viewport_height: int | None = None,
+        device_pixel_ratio: float | None = None,
         drag: str = "",
+        frame_ack: str = "",
     ) -> dict[str, Any]:
+        if frame_ack:
+            confirm = session.frame_acks.pop(frame_ack, None)
+            if confirm is not None:
+                await confirm()
+            return {"ok": True}
         await self._purge()
-        surface = session.focused().surface
+        win = session.focused()
+        surface = win.surface
+        streaming = session.is_streaming(win)
+        motion = {"settle": False} if streaming else {}
         hand = getattr(surface, "drag", None)
         if drag and callable(hand) and click_x is not None and click_y is not None:
-            await hand(drag, int(click_x), int(click_y))
+            await hand(drag, int(click_x), int(click_y), **motion)
             if drag != "up":
                 # Mid-drag: the pane watches the stream; no full screenshot per move.
                 return {"ok": True, "drag": drag}
             click_x = click_y = None
         fit = getattr(surface, "set_viewport", None)
         if viewport_width and viewport_height and callable(fit):
-            await fit(int(viewport_width), int(viewport_height))
+            if device_pixel_ratio is None:
+                await fit(viewport_width, viewport_height)
+            else:
+                await fit(viewport_width, viewport_height, device_pixel_ratio)
+            for wake in session.live_panes:
+                wake.set()
         clicked = click_x is not None and click_y is not None
         if clicked:
-            await surface.click(int(click_x), int(click_y))
+            await surface.click(int(click_x), int(click_y), **motion)
         if text is not None:
             if password:
                 session.secret_fields.add(field)
@@ -706,7 +745,19 @@ class SandboxRuntime:
             await scroll(int(scroll_dy))
         press = getattr(surface, "press_human_key", None)
         if key and callable(press):
-            await press(key)
+            await press(key, **motion)
+        if streaming:
+            await self._sync(session, capture=False)
+            await self._save_login(session, throttle=True)
+            return {
+                "ok": True,
+                "url": session.url,
+                "title": session.title,
+                "has_text_input": session.has_text_input,
+                "has_password_input": session.has_password_input,
+                "clicked": clicked,
+                "typed": bool(text),
+            }
         await self._sync(session)
         await self._save_login(session)
         return self._public_meta(
@@ -896,45 +947,72 @@ class SandboxRuntime:
             return ""
         return sess.focused().window_id
 
-    async def stream(self, sess: SandboxSession) -> AsyncIterator[dict[str, Any]]:
+    async def stream(self, sess: SandboxSession) -> AsyncGenerator[dict[str, Any], None]:
         """Live pane (#1215): JPEG frames from the focused browser window.
 
         Office / files windows yield ``poll`` once; the pane keeps polling PNG.
         Ends when the session is destroyed. Watching does not keep it alive.
         """
+        wake = asyncio.Event()
+        sess.live_panes[wake] = ""
+        waiting = ""
         last = time.monotonic()
-        while window_id := self._alive_focus(sess):
-            win = sess.focused()
-            token = getattr(win.surface, "page_token", 0)
-            cast = getattr(win.surface, "screencast", None)
-            stop = None
-            frames: asyncio.Queue[str] = asyncio.Queue(maxsize=1)
-            if callable(cast):
-                try:
-                    stop = await cast(_keep_latest(frames))
-                except Exception:
-                    logger.debug("screencast start failed", exc_info=True)
-            if stop is None:
-                yield {"poll": True, "window_id": window_id}
-                last = time.monotonic()
-            try:
-                # A new / switched tab re-attaches the screencast (#1217).
-                while (
-                    self._alive_focus(sess) == window_id
-                    and getattr(win.surface, "page_token", 0) == token
-                ):
+        try:
+            while window_id := self._alive_focus(sess):
+                win = sess.focused()
+                token = getattr(win.surface, "page_token", 0)
+                cast = getattr(win.surface, "screencast", None)
+                stop = None
+                frames: asyncio.Queue[ScreencastFrame] = asyncio.Queue(maxsize=1)
+                if callable(cast):
                     try:
-                        b64 = await asyncio.wait_for(frames.get(), STREAM_CHECK_S)
-                    except TimeoutError:
-                        if time.monotonic() - last >= STREAM_PING_S:
-                            last = time.monotonic()
-                            yield {"ping": True}
-                        continue
+                        stop = await cast(_keep_latest(frames, wake))
+                    except Exception:
+                        logger.debug("screencast start failed", exc_info=True)
+                if stop is None:
+                    sess.live_panes[wake] = ""
+                    yield {"poll": True, "window_id": window_id}
                     last = time.monotonic()
-                    yield {"jpeg": b64, "window_id": window_id}
-            finally:
-                if stop is not None:
-                    await stop()
+                try:
+                    # A tab switch or new viewport starts a cast at the new size.
+                    while (
+                        self._alive_focus(sess) == window_id
+                        and getattr(win.surface, "page_token", 0) == token
+                    ):
+                        wake.clear()
+                        if not waiting and not frames.empty():
+                            frame = frames.get_nowait()
+                            waiting = secrets.token_hex(12)
+
+                            async def confirm(frame: ScreencastFrame = frame) -> None:
+                                nonlocal waiting
+                                await frame.ack()
+                                waiting = ""
+                                wake.set()
+
+                            sess.frame_acks[waiting] = confirm
+                            sess.live_panes[wake] = window_id
+                            last = time.monotonic()
+                            yield {
+                                "jpeg": frame.jpeg,
+                                "width": frame.width,
+                                "height": frame.height,
+                                "frame_id": waiting,
+                                "window_id": window_id,
+                            }
+                            continue
+                        try:
+                            await asyncio.wait_for(wake.wait(), STREAM_CHECK_S)
+                        except TimeoutError:
+                            if time.monotonic() - last >= STREAM_PING_S:
+                                last = time.monotonic()
+                                yield {"ping": True}
+                finally:
+                    if stop is not None:
+                        await stop()
+        finally:
+            sess.frame_acks.pop(waiting, None)
+            del sess.live_panes[wake]
 
     async def destroy(self, session_id: str) -> None:
         # Close Chromium / LibreOffice only. Owner disk stays on the host bind.
@@ -953,13 +1031,22 @@ def _mime_of(name: str) -> str:
     return mimetypes.guess_type(name)[0] or "application/octet-stream"
 
 
-def _keep_latest(frames: asyncio.Queue[str]) -> Callable[[str], None]:
+def _keep_latest(
+    frames: asyncio.Queue[ScreencastFrame], wake: asyncio.Event
+) -> Callable[[ScreencastFrame], None]:
     """A slow viewer skips stale frames instead of piling them up."""
 
-    def push(b64: str) -> None:
+    async def discard(frame: ScreencastFrame) -> None:
+        try:
+            await frame.ack()
+        except Exception:
+            logger.debug("discarded screencast frame ack failed", exc_info=True)
+
+    def push(frame: ScreencastFrame) -> None:
         if frames.full():
-            frames.get_nowait()
-        frames.put_nowait(b64)
+            asyncio.create_task(discard(frames.get_nowait()))
+        frames.put_nowait(frame)
+        wake.set()
 
     return push
 

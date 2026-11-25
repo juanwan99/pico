@@ -29,7 +29,7 @@ from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.sandbox_s2 import encode_rgb_png
 from pico_orchestrator.sandbox_sidecar import sidecar_stream
 from pico_orchestrator.web_guard import parse_public_http_url
-from sandbox_worker.browser import HUMAN_KEYS, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
+from sandbox_worker.browser import HUMAN_KEYS, VIEWPORT_HEIGHT, VIEWPORT_WIDTH, ScreencastFrame
 from sandbox_worker.runtime import RUNTIME, SandboxWindow, sse_event
 
 
@@ -45,6 +45,7 @@ class StillSurface:
         self._url = url
         self.scrolled: list[int] = []
         self.keys: list[str] = []
+        self.shots = 0
 
     @property
     def url(self) -> str:
@@ -57,10 +58,11 @@ class StillSurface:
         return ""
 
     async def screenshot_png(self) -> bytes:
+        self.shots += 1
         return _png()
 
-    async def click(self, x: int, y: int) -> None:
-        _ = (x, y)
+    async def click(self, x: int, y: int, *, settle: bool = True) -> None:
+        self.click_settled = settle
 
     async def type_text(self, text: str, *, password: bool) -> None:
         _ = (text, password)
@@ -79,21 +81,32 @@ class CastSurface(StillSurface):
         self.push = None
         self.casting = 0
         self.stops = 0
+        self.acks: list[str] = []
+        self.saves = 0
+
+    def frame(self, jpeg: str) -> None:
+        async def ack() -> None:
+            self.acks.append(jpeg)
+
+        self.push(ScreencastFrame(jpeg, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, ack))
 
     async def screencast(self, push):
         self.push = push
         self.casting += 1
-        push("FIRST")
+        self.frame("FIRST")
 
         async def stop() -> None:
             self.stops += 1
 
         return stop
 
+    async def save_login(self, _path: Path) -> None:
+        self.saves += 1
+
     async def scroll(self, dy: int) -> None:
         self.scrolled.append(dy)
 
-    async def press_human_key(self, key: str) -> None:
+    async def press_human_key(self, key: str, *, settle: bool = True) -> None:
         if key not in HUMAN_KEYS:
             raise ToolError("tool.invalid_arguments", "bad key")
         self.keys.append(key)
@@ -141,9 +154,12 @@ async def test_frames_flow_and_stream_ends_when_sandbox_is_destroyed(live_runtim
     sess = await _open(runtime)
     agen = runtime.stream(sess)
     first = await _next(agen)
-    assert first == {"jpeg": "FIRST", "window_id": sess.focused_id or sess.windows[0].window_id}
-    pages[0].push("NEXT")
-    assert (await _next(agen))["jpeg"] == "NEXT"
+    assert first["jpeg"] == "FIRST" and first["window_id"] == sess.focused_id
+    await runtime.apply_input(sess, frame_ack=first["frame_id"])
+    pages[0].frame("NEXT")
+    second = await _next(agen)
+    assert second["jpeg"] == "NEXT"
+    await runtime.apply_input(sess, frame_ack=second["frame_id"])
     # A still page sends nothing but a keep-alive ping.
     assert await _next(agen) == {"ping": True}
     await runtime.destroy(sess.session_id)
@@ -157,11 +173,17 @@ async def test_slow_viewer_gets_latest_frame_not_a_backlog(live_runtime) -> None
     runtime, pages = live_runtime
     sess = await _open(runtime)
     agen = runtime.stream(sess)
-    await _next(agen)
+    first = await _next(agen)
     for n in range(5):
-        pages[0].push(f"F{n}")
+        pages[0].frame(f"F{n}")
+    assert await _next(agen) == {"ping": True}
+    assert pages[0].acks == ["F0", "F1", "F2", "F3"]
+    assert list(sess.frame_acks) == [first["frame_id"]]
+    await runtime.apply_input(sess, frame_ack=first["frame_id"])
     assert (await _next(agen))["jpeg"] == "F4"
+    assert pages[0].acks[-1] == "FIRST"
     await agen.aclose()
+    assert not sess.frame_acks and not sess.live_panes
     assert pages[0].stops == 1
 
 
@@ -174,9 +196,47 @@ async def test_office_window_says_poll_and_switching_back_restarts_cast(live_run
     sess.focused_id = "win_office"
     agen = runtime.stream(sess)
     assert await _next(agen) == {"poll": True, "window_id": "win_office"}
+    office = sess.focused().surface
+    await runtime.apply_input(sess, click_x=10, click_y=20)
+    assert office.shots == 1
     sess.focused_id = browser_id
     assert (await _next(agen))["jpeg"] == "FIRST"
     assert pages[0].casting == 1
+    await agen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_live_input_and_meta_skip_png_and_throttle_login(live_runtime) -> None:
+    runtime, pages = live_runtime
+    sess = await _open(runtime)
+    page = pages[0]
+    agen = runtime.stream(sess)
+    await _next(agen)
+    for _ in range(2):
+        meta = await runtime.apply_input(sess, click_x=10, click_y=20)
+        assert meta["clicked"] and meta["title"] == "Page"
+    await runtime.pane_meta(sess)
+    assert page.click_settled is False
+    assert page.shots == 1 and page.saves == 1
+    await agen.aclose()
+    await runtime.apply_input(sess, click_x=10, click_y=20)
+    assert page.click_settled is True
+    assert page.shots == 2 and page.saves == 2
+
+
+@pytest.mark.asyncio
+async def test_failed_cast_keeps_polling_png(live_runtime, monkeypatch) -> None:
+    runtime, pages = live_runtime
+    sess = await _open(runtime)
+
+    async def fail(_push):
+        raise RuntimeError("CDP unavailable")
+
+    monkeypatch.setattr(pages[0], "screencast", fail)
+    agen = runtime.stream(sess)
+    assert (await _next(agen))["poll"] is True
+    await runtime.apply_input(sess, click_x=10, click_y=20)
+    assert pages[0].shots == 2
     await agen.aclose()
 
 
@@ -208,6 +268,35 @@ async def test_api_stream_helper_checks_owner_then_streams(live_runtime) -> None
     await chunks.aclose()
 
 
+@pytest.mark.asyncio
+async def test_parallel_opens_reserve_capacity_before_starting_chromium(
+    live_runtime, monkeypatch
+) -> None:
+    runtime, _pages = live_runtime
+    monkeypatch.setattr(runtime_mod, "MAX_SESSIONS", 1)
+    opening = asyncio.Event()
+    release = asyncio.Event()
+
+    async def delayed_open(url, **_kw):
+        opening.set()
+        await release.wait()
+        return CastSurface(url)
+
+    monkeypatch.setattr(runtime, "_open_browser", delayed_open)
+    first = asyncio.create_task(_open(runtime))
+    await opening.wait()
+    try:
+        with pytest.raises(ToolError) as denied:
+            await runtime.open_session(
+                school_id="school-a", membership_id="member-b", run_id=None,
+                url="https://example.com/",
+            )
+        assert denied.value.code == "sandbox.quota"
+    finally:
+        release.set()
+        await first
+
+
 # ---------------------------------------------------------------- real Chromium
 
 
@@ -234,7 +323,12 @@ async def test_real_chromium_pushes_frames_on_change_and_none_when_still() -> No
         )
         surface = PlaywrightPage(context, page, Path("/tmp/unused-profile"))
         frames: list[str] = []
-        stop = await surface.screencast(frames.append)
+
+        def push(frame: ScreencastFrame) -> None:
+            frames.append(frame.jpeg)
+            asyncio.create_task(frame.ack())
+
+        stop = await surface.screencast(push)
         await asyncio.sleep(1.5)
         moving = len(frames)
         await asyncio.sleep(1.0)
