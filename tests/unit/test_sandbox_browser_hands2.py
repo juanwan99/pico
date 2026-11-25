@@ -12,6 +12,8 @@ import os
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -54,6 +56,86 @@ async def _fulfil(route) -> None:
         await route.abort()
         return
     await route.fulfill(status=200, content_type="text/html; charset=utf-8", body=body)
+
+
+@pytest.fixture
+def navigation_page(monkeypatch, tmp_path):
+    page = Mock(
+        url=SITE + "/a",
+        goto=AsyncMock(return_value=SimpleNamespace(status=200)),
+        go_back=AsyncMock(return_value=SimpleNamespace(status=200)),
+        wait_for_load_state=AsyncMock(),
+    )
+    context = Mock(pages=[page], route=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(browser_mod, "_ensure_browser", AsyncMock(
+        return_value=Mock(new_context=AsyncMock(return_value=context)),
+    ))
+    monkeypatch.setattr(browser_mod, "PROFILE_ROOT", tmp_path)
+    surface = browser_mod.PlaywrightPage(context, page, tmp_path)
+    return page, context, surface
+
+
+@pytest.mark.parametrize("action", ["open", "navigate", "back"])
+async def test_committed_navigation_survives_dom_timeout(
+    action, navigation_page, monkeypatch, caplog
+) -> None:
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+    page, context, surface = navigation_page
+    page.wait_for_load_state.side_effect = PlaywrightTimeoutError("fixture DOM wait expired")
+    monkeypatch.setattr(browser_mod, "time", SimpleNamespace(
+        monotonic=Mock(side_effect=[100.0, 125.0]),
+    ))
+    with caplog.at_level("INFO", logger=browser_mod.__name__):
+        if action == "open":
+            surface = await browser_mod.open_chromium(page.url)
+        elif action == "navigate":
+            await surface.navigate(page.url)
+        else:
+            await surface.navigate_back()
+    if action == "back":
+        page.go_back.assert_awaited_once_with(wait_until="commit", timeout=60_000)
+    else:
+        page.goto.assert_awaited_once_with(page.url, wait_until="commit", timeout=60_000)
+    page.wait_for_load_state.assert_awaited_once_with("domcontentloaded", timeout=35_000)
+    assert surface.url == SITE + "/a"
+    assert surface.loading_note == "页面还在加载，可稍后再取快照 / 截图。"
+    assert "fixture DOM wait expired" in caplog.text
+    context.close.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("error_text", "reason"),
+    [
+        ("net::ERR_CONNECTION_REFUSED", "连接被拒绝"),
+        ("net::ERR_NAME_NOT_RESOLVED", "DNS 失败"),
+        ("net::ERR_BLOCKED_BY_CLIENT", "访问被拦截"),
+        ("timeout", "超时"),
+    ],
+)
+async def test_open_reports_failure_before_commit(
+    error_text, reason, navigation_page, caplog
+) -> None:
+    from playwright.async_api import Error
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+    page, context, _ = navigation_page
+    error_type = PlaywrightTimeoutError if error_text == "timeout" else Error
+    page.goto.side_effect = error_type(f"Page.goto: {error_text} at {page.url}")
+    with pytest.raises(ToolError, match=reason) as failure:
+        await browser_mod.open_chromium(page.url)
+    assert failure.value.code == "sandbox.fetch_failed"
+    assert error_text in caplog.text
+    page.wait_for_load_state.assert_not_awaited()
+    context.close.assert_awaited_once()
+
+
+async def test_back_reports_http_error_before_waiting_for_dom(navigation_page) -> None:
+    page, _, surface = navigation_page
+    page.go_back.return_value = SimpleNamespace(status=503)
+    with pytest.raises(ToolError, match="HTTP 503"):
+        await surface.navigate_back()
+    page.wait_for_load_state.assert_not_awaited()
 
 
 @pytest.mark.asyncio

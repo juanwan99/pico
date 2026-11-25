@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import os
 import re
@@ -219,6 +220,36 @@ async def test_browser_open_public_page_and_view_copy(embedded_runtime) -> None:
     )
     assert LOGIN_COPY in html
     assert "可以直接在画面里操作" in html
+
+
+@pytest.mark.parametrize("name", ["Login success", "Login success.png"])
+async def test_browser_screenshot_can_name_artifacts_and_avoid_duplicates(
+    embedded_runtime, name, monkeypatch
+) -> None:
+    store = MemoryArtifactStore(run_id="run-b2")
+    gw = build_default_gateway(store)
+    owner = P("school-a", "member-a", ["ai:run"])
+    await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    for gateway in (gw, build_default_gateway(store)):
+        await gateway.invoke(owner, "sandbox_browser_screenshot", {"name": name})
+    # Two calls can pick names concurrently, including across gateway instances.
+    write = store.write
+
+    async def yield_before_write(principal, **kwargs):
+        await asyncio.sleep(0)
+        return await write(principal, **kwargs)
+
+    monkeypatch.setattr(store, "write", yield_before_write)
+    await asyncio.gather(
+        gw.invoke(owner, "sandbox_browser_screenshot", {}),
+        build_default_gateway(store).invoke(owner, "sandbox_browser_screenshot", {}),
+    )
+    assert [row["title"] for row in store.rows[("school-a", "member-a")]] == [
+        "Login_success.png",
+        "Login_success-2.png",
+        "Example_Domain-1.png",
+        "Example_Domain-2.png",
+    ]
 
 
 @pytest.mark.asyncio

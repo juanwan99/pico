@@ -18,6 +18,7 @@ from pico_orchestrator.artifact_types import (
     reject_fake_protected_write_message,
     title_protected_extension,
 )
+from pico_orchestrator.browser_screenshot import write_browser_screenshot
 from pico_orchestrator.diagram_generate import render_diagram_bytes
 from pico_orchestrator.document_generators import (
     build_docx_document,
@@ -2120,16 +2121,13 @@ def _workspace_handlers(
                 # the text the ledger keeps (#1206 · model sees the page now).
                 out = {**out, "image_png_base64": base64.b64encode(png).decode("ascii")}
                 try:
-                    shot_title = (
-                        f"shot-{safe_segment(session_id, fallback='page')}.png"
-                    )
-                    deny_secret_filename(shot_title)
                     shot = await with_io_timeout(
-                        store.write(
+                        write_browser_screenshot(
+                            store,
                             principal,
-                            title=shot_title,
-                            content=png,
-                            kind="image",
+                            name=str(args.get("name") or ""),
+                            page_title=str(out.get("title") or ""),
+                            png=png,
                         ),
                         what="sandbox_browser_screenshot_png",
                     )
@@ -2717,7 +2715,7 @@ def build_default_gateway(
                 "Look at the current sandbox browser screen: the image comes back to you "
                 "in this call and the PNG is remembered so the teacher's next question "
                 "can see the page. session_id defaults to the teacher's open sandbox. "
-                "Args: session_id?."
+                "Args: session_id?, name? (PNG filename; defaults to page title and number)."
             ),
             handler=browser_screenshot,
             school_scoped=False,
@@ -3202,6 +3200,10 @@ def openai_tool_schemas(
                 "session_id": {
                     "type": "string",
                     "description": "Sandbox session id; omit for the teacher's open sandbox",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "PNG filename for the teacher; omit for page title and number",
                 },
             },
         },

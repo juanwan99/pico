@@ -468,6 +468,9 @@ export default function (pi: ExtensionAPI) {
     Type.Object(
       {
         session_id: Type.Optional(Type.String()),
+        name: Type.Optional(Type.String({
+          description: "A descriptive filename for the teacher. .png is added automatically; omit for page title and number.",
+        })),
       },
       { additionalProperties: true },
     ),
