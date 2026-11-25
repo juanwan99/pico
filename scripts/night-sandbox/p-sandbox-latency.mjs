@@ -13,6 +13,7 @@ import {
   limitedSandboxLink,
   loadPlaywright,
   login,
+  loginWithEdu,
   sendPrompt,
   writeJson,
 } from './lib.mjs';
@@ -26,37 +27,6 @@ const HEIGHT = 1080;
 const SCROLL_MS = 8000;
 const WINDOW = { width: 2000, height: 1210 };
 const CROP = [24, 380, 2706, 240];
-
-const FIXTURE = `<!doctype html><meta charset="utf-8"><title>Sandbox latency worksheet</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#fff;font:12px "Liberation Sans",sans-serif;color:#26313d}
-header{position:sticky;top:0;height:64px;background:#eef2f7;padding:12px 16px}
-button{border:0;width:96px;height:32px;background:#3459a5;color:white}
-button.active{background:#238337}
-strong{margin-left:16px;font-size:16px}
-i{position:absolute;right:18px;top:12px;width:32px;height:20px;background:#7d3294}
-@media(min-width:1500px){i{background:#167fb3}}
-section{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));padding:0 12px}
-span{padding:4px 6px;height:40px;overflow:hidden;white-space:nowrap;border-bottom:1px solid #d9e0ea}
-span:nth-child(4n){background:#f4f7fb}
-aside{height:180px;display:flex;align-items:end;gap:16px;padding:12px 24px;background:#f0f4fa}
-aside b{flex:1;background:linear-gradient(#449cd7,#51437d)}
-output{position:absolute;top:13px;left:480px;display:flex}
-output b{width:14px;height:18px;background:#fff}
-output b[data-on]{background:#000}
-</style>
-<header><button onclick="this.classList.toggle('active')">Checked</button><strong>Class progress and attendance</strong><i></i><output></output></header>
-<main></main>
-<script>{
-const words=['Reading review','Fractions','植物的生长','Weekly practice','课堂反馈','Geometry','实验记录','Class discussion','课后练习'];
-const cells=Array.from({length:2200},(_,i)=>'<span>'+words[(i*17+(i>>4))%words.length]+' · '+(7919*i%100003)+' / '+(i%37+64)+'%</span>');
-const chart='<aside>'+Array.from({length:42},(_,i)=>'<b style="height:'+(25+i*71%125)+'px"></b>').join('')+'</aside>';
-document.querySelector('main').innerHTML=(location.search.includes('chart')?chart:'')+'<section>'+cells.join('')+'</section>';
-const bits=Array.from({length:10},()=>document.querySelector('output').appendChild(document.createElement('b')));
-addEventListener('scroll',()=>bits.forEach((b,i)=>b.toggleAttribute('data-on',(Math.floor(scrollY/12)&(1<<i))!==0)));
-}</script>
-`;
 
 function watchPane({ image, fullscreen }) {
   const now = () => performance.timeOrigin + performance.now();
@@ -375,17 +345,33 @@ async function requireEmptyDesk(sessions, headers) {
   }
 }
 
+async function loginWithEmail(page, base, { email, password }) {
+  const [loggedIn] = await Promise.all([
+    page.waitForResponse((res) =>
+      res.url() === `${base}/api/auth/login` && res.request().method() === 'POST',
+    ),
+    login(page, base, email, password),
+  ]);
+  if (!loggedIn.ok()) throw new Error(`sandbox login HTTP ${loggedIn.status()}`);
+  const { token } = await loggedIn.json();
+  return token;
+}
+
 async function main() {
   const { values: args } = parseArgs({
     options: {
       'base-url': { type: 'string', default: 'http://127.0.0.1:3090' },
       'fixture-url': { type: 'string' },
+      'edu-login': { type: 'string' },
+      'edu-base': { type: 'string', default: 'https://edu.weiyuji.cn' },
+      'edu-school': { type: 'string' },
       'print-fixture': { type: 'boolean' },
       limit: { type: 'boolean' },
     },
   });
   if (args['print-fixture']) {
-    process.stdout.write(FIXTURE);
+    const fixture = await fs.readFile(new URL('./sandbox-latency-fixture.html', import.meta.url));
+    process.stdout.write(fixture);
     return;
   }
   if (!args['fixture-url']) {
@@ -394,11 +380,12 @@ async function main() {
     );
   }
   const fixture = new URL(args['fixture-url']);
-  // The chat routes bare *.html URLs to file preview unless they have a query.
-  fixture.searchParams.set('pico-latency', '1');
+  // The chat treats bare *.html URLs as files. Keep supplied query strings intact.
+  if (!fixture.search) fixture.searchParams.set('pico-latency', '1');
   const fixtureUrl = fixture.href;
-  const { email, password } = emailPass();
-  if (!email || !password)
+  const eduLogin = args['edu-login'];
+  const emailCredentials = eduLogin === undefined ? emailPass() : null;
+  if (emailCredentials && (!emailCredentials.email || !emailCredentials.password))
     throw new Error('Set PICO_E2E_EMAIL and PICO_E2E_PASSWORD.');
   const out = path.join(ROOT, '.gpt-out', 'sandbox-latency');
   await fs.mkdir(out, { recursive: true });
@@ -425,14 +412,13 @@ async function main() {
       viewport: WINDOW,
       deviceScaleFactor: DPR,
     });
-    const [loggedIn] = await Promise.all([
-      page.waitForResponse((res) =>
-        res.url() === `${base}/api/auth/login` && res.request().method() === 'POST',
-      ),
-      login(page, base, email, password),
-    ]);
-    if (!loggedIn.ok()) throw new Error(`sandbox login HTTP ${loggedIn.status()}`);
-    const { token } = await loggedIn.json();
+    const token = emailCredentials
+      ? await loginWithEmail(page, base, emailCredentials)
+      : await loginWithEdu(page, base, {
+        eduBase: args['edu-base'],
+        school: args['edu-school'],
+        loginName: eduLogin,
+      });
     const headers = { authorization: `Bearer ${token}` };
     const sessions = `${base}/api/pico/v1/sandbox/sessions`;
     await requireEmptyDesk(sessions, headers);
@@ -516,7 +502,7 @@ async function main() {
   });
 }
 
-export { FIXTURE, watchPane };
+export { watchPane };
 
 if (
   process.argv[1] &&
