@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "longtask-eval.py"
 CASES = ROOT / "testdata" / "longtask-eval"
@@ -109,20 +111,45 @@ def test_fake_green_flagged_explicitly() -> None:
     assert "假绿" in table and "| 是 |" in table and "假绿：1" in table
 
 
-def test_png_counts_as_a_produced_artifact() -> None:
+@pytest.mark.parametrize(
+    "artifact", [{"kind": "image", "title": "x.png"}, {"kind": "png", "title": "x"}]
+)
+def test_png_counts_as_a_produced_artifact(artifact: dict[str, str]) -> None:
     case = {"id": "PNG", "expect": {"kinds": ["png"]}}
-    arts = [{"id": "image", "kind": "png", "title": "screenshot.png"}]
+    arts = [{"id": "image", **artifact}]
     pico = Mock(spec=lte.Pico)
-    pico.download.return_value = b"\x89PNG\r\n\x1a\n"
     res = lte.CaseResult(case=case["id"])
 
     lte.score_case(case, arts, pico, res)
-    lte.flag_fake_green(res, "succeeded")
+    lte.flag_fake_green(res, "succeeded", kinds=case["expect"]["kinds"])
 
     assert res.artifacts == 1
     assert res.artifact_kinds == ["png"]
     assert res.auto_score == res.max_score == 1
     assert res.ok and not res.fake_green
+    pico.download.assert_not_called()
+
+
+@pytest.mark.parametrize("expect, fake_green", [({}, False), ({"kinds": ["docx"]}, True)])
+def test_run_with_png_flags_fake_green_only_when_docx_expected(
+    expect: dict[str, list[str]], fake_green: bool
+) -> None:
+    pico = Mock(spec=lte.Pico)
+    pico.timeout_s = 60
+    pico.tasks.return_value = [{"latest_run": {"id": "r1", "status": "succeeded"}}]
+    pico.run.return_value = {"status": "succeeded"}
+    pico.events.return_value = []
+    pico.artifacts.return_value = [
+        {"id": "image", "kind": "image", "title": "x.png"},
+        {"id": "upload", "kind": "edu_office", "title": "input.docx"},
+    ]
+
+    res = lte.run_case(pico, {"id": "X", "expect": expect}, "test")
+
+    assert res.artifacts == 1 and res.artifact_kinds == ["png"]
+    assert res.fake_green is fake_green
+    assert res.ok is not fake_green
+    pico.download.assert_not_called()
 
 
 def test_coding_suite_cases_and_checkers() -> None:
@@ -703,3 +730,15 @@ def test_per_turn_round_with_no_new_files_is_fake_green() -> None:
     whole = lte.CaseResult(case="LT1", title="t", ok=True, artifacts=1)
     lte.flag_fake_green(whole, "succeeded", per_turn=False, turn_arts=[[], []])
     assert whole.fake_green is False and whole.ok is True
+
+
+@pytest.mark.parametrize("kind", ["docx", "zip"])
+def test_per_turn_round_with_wrong_kind_is_fake_green(kind: str) -> None:
+    res = lte.CaseResult(case="X", ok=True, artifacts=2, artifact_kinds=[kind, "png"])
+    res.turn_status = {1: "succeeded", 2: "succeeded"}
+    turn_arts = [[{"kind": kind, "title": f"report.{kind}"}], [{"kind": "image", "title": "x.png"}]]
+
+    lte.flag_fake_green(res, "succeeded", per_turn=True, turn_arts=turn_arts, kinds=[kind])
+
+    assert res.fake_green and not res.ok
+    assert res.notes == ["succeeded, 0 new expected files: R2"]

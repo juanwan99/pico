@@ -73,6 +73,8 @@ def look_read_call(tool: str, args: dict[str, Any]) -> bool:
 CASES_DIR = ROOT / "testdata" / "longtask-eval"
 CHECKS_DIR = CASES_DIR / "checks"
 PRODUCED_KINDS = {"xlsx", "docx", "pptx", "html", "png"}
+# Office and text uploads land as edu_office / file / excerpts; the reply summary is doc.
+NOT_DELIVERED_KINDS = {"edu_office", "edu_excerpt", "kb_text", "file", "doc"}
 SUITES = {"office": "LT", "coding": "LC", "hard": "LH", "xlong": "LX", "look": "LV"}
 DEFAULT_SUITES = ("office", "coding", "hard")
 
@@ -84,7 +86,7 @@ class CaseResult:
     ok: bool = False
     auto_score: int = 0
     max_score: int = 0
-    # run.status succeeded yet nothing landed: the fake green #1091 measured.
+    # run.status succeeded yet no expected output landed: the fake green #1091 measured.
     fake_green: bool = False
     tool_calls: int = 0
     agent_steps: int = 0
@@ -388,21 +390,26 @@ GENERATORS = {
 }
 
 
+def _kind_of(art: dict[str, Any]) -> str:
+    # Match pico-ruler.py's title-first rule with this evaluator's produced kinds.
+    _, dot, suffix = str(art.get("title") or "").lower().rpartition(".")
+    if dot and suffix in PRODUCED_KINDS:
+        return suffix
+    return str(art.get("kind") or "").lower()
+
+
 def _produced(arts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [a for a in arts if str(a.get("kind") or "").lower() in PRODUCED_KINDS]
+    return [
+        a
+        for a in arts
+        if str(a.get("kind") or "").lower() not in NOT_DELIVERED_KINDS
+        and _kind_of(a) in PRODUCED_KINDS
+    ]
 
 
 def _latest_kind(arts: list[dict[str, Any]], kind: str) -> dict[str, Any] | None:
-    matches = [a for a in arts if str(a.get("kind") or "").lower() == kind]
-    if not matches:
-        matches = [
-            a
-            for a in arts
-            if str(a.get("title") or "").lower().endswith("." + kind)
-        ]
-    if not matches:
-        return None
-    return max(matches, key=lambda a: str(a.get("created_at") or ""))
+    matches = (a for a in arts if _kind_of(a) == kind)
+    return max(matches, key=lambda a: str(a.get("created_at") or ""), default=None)
 
 
 def _pptx_slide_count(raw: bytes) -> int:
@@ -578,11 +585,6 @@ def pass_bar(expect: dict[str, Any]) -> int:
     return min(3, max_points(expect))
 
 
-# Uploads land as edu_office / file / excerpts; the reply summary is doc.
-# Workspace deliveries carry their extension as kind (py, zip, csv, html…).
-NOT_DELIVERED_KINDS = {"edu_office", "edu_excerpt", "kb_text", "file", "doc"}
-
-
 def _latest_by_title(arts: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Delivered files only, newest per title."""
     out: dict[str, dict[str, Any]] = {}
@@ -705,7 +707,7 @@ def score_case(
     if expect.get("files") or expect.get("check"):
         latest = _latest_by_title(arts)
         res.artifacts = len(latest)
-        res.artifact_kinds = sorted({str(a.get("kind") or "").lower() for a in latest.values() if a.get("kind")})
+        res.artifact_kinds = sorted({_kind_of(a) for a in latest.values()} - {""})
         files = {title: pico.download(a["id"]) for title, a in latest.items() if a.get("id")}
         turn_files = None
         if (expect.get("check") or {}).get("per_turn"):
@@ -717,19 +719,19 @@ def score_case(
         return
     produced = _produced(arts)
     res.artifacts = len(produced)
-    res.artifact_kinds = sorted({str(a.get("kind") or "").lower() for a in produced if a.get("kind")})
+    res.artifact_kinds = sorted({_kind_of(a) for a in produced})
     points = 0
     kinds = [str(k).lower() for k in expect.get("kinds") or []]
     blobs: dict[str, str] = {}
-    raws: dict[str, bytes] = {}
     for kind in kinds:
         item = _latest_kind(produced, kind)
         if not item:
             res.notes.append(f"missing kind {kind}")
             continue
-        raw = pico.download(item["id"])
-        raws[kind] = raw
         points += 1
+        if kind == "png":
+            continue
+        raw = pico.download(item["id"])
         if kind == "docx":
             text, npara = _docx_blob(raw)
             blobs[kind] = text
@@ -794,25 +796,40 @@ def score_case(
 
 
 def flag_fake_green(
-    res: CaseResult, status: str, per_turn: bool = False, turn_arts: list[list[dict[str, Any]]] | None = None
+    res: CaseResult,
+    status: str,
+    per_turn: bool = False,
+    turn_arts: list[list[dict[str, Any]]] | None = None,
+    *,
+    kinds: list[str] | None = None,
 ) -> None:
-    """A run that says succeeded with nothing landed never counts as a pass."""
-    if status == "succeeded" and res.artifacts <= 0:
+    """Flag success with no deliveries of the expected kinds, or no deliveries at all."""
+    expected = {str(k).lower() for k in kinds or []}
+    empty_run = expected.isdisjoint(res.artifact_kinds) if expected else res.artifacts <= 0
+    if status == "succeeded" and empty_run:
         res.fake_green = True
         res.ok = False
-        res.notes.append("run succeeded, 0 artifacts")
+        res.notes.append(
+            "run succeeded, 0 expected artifacts" if expected else "run succeeded, 0 artifacts"
+        )
     if not per_turn:
         return
     # #1167: every per-turn round ships files; "已重新打包交付" with none is fake green.
     empty = [
         n
         for n, new in enumerate(turn_arts or [], 1)
-        if not new and res.turn_status.get(n) == "succeeded"
+        if res.turn_status.get(n) == "succeeded"
+        and (
+            expected.isdisjoint(map(_kind_of, _latest_by_title(new).values()))
+            if expected
+            else not new
+        )
     ]
     if empty:
         res.fake_green = True
         res.ok = False
-        res.notes.append("succeeded, 0 new files: " + ",".join(f"R{n}" for n in empty))
+        files = "expected files" if expected else "files"
+        res.notes.append(f"succeeded, 0 new {files}: " + ",".join(f"R{n}" for n in empty))
 
 
 def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runtime: str = "") -> CaseResult:
@@ -851,8 +868,9 @@ def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runt
         score_case(case, arts, pico, res, image, runtime, turn_arts)
         if status == "failed" and not res.fail_reason:
             res.fail_reason = "other"
-        per_turn = bool(((case.get("expect") or {}).get("check") or {}).get("per_turn"))
-        flag_fake_green(res, status, per_turn, turn_arts)
+        expect = case.get("expect") or {}
+        per_turn = bool((expect.get("check") or {}).get("per_turn"))
+        flag_fake_green(res, status, per_turn, turn_arts, kinds=expect.get("kinds"))
         if status == "failed":
             res.ok = False
             if not res.notes:
