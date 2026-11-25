@@ -17,7 +17,7 @@ import base64
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 
 from pico_orchestrator.delivery_policy import (
@@ -153,9 +153,14 @@ def answer_claims_files(answer: str) -> bool:
 
 
 def self_check_facts(
-    answer: str, report: Mapping[str, Any], *, had_files_before: bool, asked: str = ""
+    answer: str,
+    report: Mapping[str, Any],
+    *,
+    had_files_before: bool,
+    asked: str = "",
+    artifact_titles: Collection[str] = (),
 ) -> list[str]:
-    """Chinese fact lines when the answer and outputs/ disagree. Empty = fine.
+    """Chinese fact lines when the answer and delivered files disagree. Empty = fine.
 
     ``asked`` = what the teacher sent this turn. A quoted name that appears there is a
     file the teacher gave (edu sidebar inlines attachments into the text, so they are
@@ -166,19 +171,20 @@ def self_check_facts(
         return []
     files = [f for f in report.get("files") or [] if isinstance(f, Mapping)]
     names = {str(n) for n in report.get("names") or []}
+    names.update(artifact_titles)
     others = {str(n) for n in report.get("others") or []}
-    facts: list[str] = []
-    # Same reading as the API delivery gate (#1167): restating earlier files is fine,
-    # saying they were made (again) this turn with nothing new is not.
-    if not files and (
-        (looks_like_delivery_claim(text) and not had_files_before) or looks_like_redelivery_claim(text)
-    ):
-        facts.append("回答说交了文件，但这一轮 outputs 里没有新文件，也没有改过的文件。")
-    # An outputs/ path must be in outputs; a quoted name may also be a file the teacher gave (attachments/).
     named: dict[str, bool] = {}
     for m in _NAMED_FILE.finditer(text):
         name = os.path.basename(m.group(1) or m.group(2))
         named[name] = named.get(name, False) or bool(m.group(1))
+    facts: list[str] = []
+    # A ledger artifact from this run also substantiates a delivery claim.
+    # Otherwise keep the same reading as the API delivery gate (#1167).
+    if not files and not artifact_titles and (
+        (looks_like_delivery_claim(text) and not had_files_before) or looks_like_redelivery_claim(text)
+    ):
+        facts.append("回答说交了文件，但这一轮 outputs 里没有新文件，也没有改过的文件。")
+    # An outputs/ path must match a delivery. A quoted name may also be a teacher's input.
     for name, in_outputs in named.items():
         if name not in names and (in_outputs or (name not in others and name not in (asked or ""))):
             facts.append(f"回答提到的 {name} 在 outputs 里没有。")
@@ -207,8 +213,11 @@ def self_check_facts(
             facts.append(f"{pdfs[0].get('name')} 有 {have} 页，回答说 {said.pop()} 页。")
     # 「N 份」: several separate files but fewer than N. One combined file is a choice, not a miss.
     said = {_num(m.group(1)) for m in _COPIES.finditer(text)} - {0}
-    if len(said) == 1 and 2 <= len(files) < next(iter(said)):
-        facts.append(f"这一轮 outputs 里有 {len(files)} 个新文件，回答说 {next(iter(said))} 份。")
+    delivered_titles = {str(f.get("name") or "") for f in files}
+    delivered_titles.update(named.keys() & artifact_titles)
+    count = len(delivered_titles)
+    if len(said) == 1 and 2 <= count < next(iter(said)):
+        facts.append(f"这一轮有 {count} 个新文件，回答说 {next(iter(said))} 份。")
     return facts
 
 

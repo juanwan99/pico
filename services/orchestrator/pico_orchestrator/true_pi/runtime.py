@@ -17,12 +17,14 @@ import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pico_orchestrator.gateway import ArtifactStore, Principal
 from pico_orchestrator.pi_runtime import count_write_tool_successes
 from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.run_types import EventEmitter, RunCaps, RunResult
+from pico_orchestrator.sandbox_s1 import with_io_timeout
+from pico_orchestrator.sandbox_upload_files import _RunArtifactStore
 from pico_orchestrator.tools_builtin import build_default_gateway
 from pico_orchestrator.true_pi import steer as teacher_steer
 from pico_orchestrator.true_pi.client import (
@@ -1335,7 +1337,10 @@ async def _run_true_pi_once(
             )
             and await _turn_healthy()
         ):
-            check_facts = await _self_check_now(client, state, ws_before, rid, prompt)
+            check_facts = await _self_check_now(
+                client, state, ws_before, rid, prompt,
+                artifact_store=artifact_store, principal=principal,
+            )
             if check_facts:
                 state.event_kinds.append("run.resume")
                 await emit(
@@ -1360,7 +1365,10 @@ async def _run_true_pi_once(
                 if early is not None:
                     return early
                 if state.step != steps_before and await _turn_healthy():
-                    check_facts = await _self_check_now(client, state, ws_before, rid, prompt)
+                    check_facts = await _self_check_now(
+                        client, state, ws_before, rid, prompt,
+                        artifact_store=artifact_store, principal=principal,
+                    )
         if state.visual_output:
             logger.info(
                 "true_pi look run_id=%s steered=%s reads=%s",
@@ -1651,9 +1659,16 @@ async def _write_self_check(client: Any, facts: list[str], rid: str) -> bool:
 
 
 async def _self_check_now(
-    client: Any, state: EventMapState, before: dict[str, Any] | None, rid: str, asked: str = ""
+    client: Any,
+    state: EventMapState,
+    before: dict[str, Any] | None,
+    rid: str,
+    asked: str,
+    *,
+    artifact_store: ArtifactStore | None,
+    principal: Principal,
 ) -> list[str]:
-    """Run the read-only outputs check in the live box; [] when fine or unknown."""
+    """Check live outputs and the current run's delivered artifact titles."""
     from pico_orchestrator.true_pi.self_check import (
         CHECK_TIMEOUT_S,
         box_check_command,
@@ -1677,7 +1692,19 @@ async def _self_check_now(
         logger.info("true_pi self_check unreadable run_id=%s", rid)
         return []
     had = any(not os.path.basename(p).startswith(".") for p in (before or {}))
-    facts = self_check_facts(answer, report, had_files_before=had, asked=asked)
+    artifact_titles = (
+        await with_io_timeout(
+            cast(_RunArtifactStore, artifact_store).list_run_titles(
+                principal, run_id=rid, exclude_kinds=("plan",)
+            ),
+            what="list current run artifact titles",
+        )
+        if artifact_store is not None
+        else {}
+    )
+    facts = self_check_facts(
+        answer, report, had_files_before=had, asked=asked, artifact_titles=artifact_titles
+    )
     logger.info("true_pi self_check run_id=%s files=%s facts=%s", rid, len(report["files"]), len(facts))
     return facts
 

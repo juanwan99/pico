@@ -10,6 +10,7 @@ import math
 import operator
 import re
 import time
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -136,7 +137,9 @@ class _UnavailableArtifactStore:
     async def list(self, *_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
         raise ToolError("artifact.store_unavailable", "Artifact ledger is unavailable")
 
-    async def list_run_titles(self, *_args: Any, **_kwargs: Any) -> dict[str, str]:
+    async def list_run_titles(
+        self, principal: Principal, *, run_id: str, exclude_kinds: Collection[str] = ()
+    ) -> dict[str, str]:
         raise ToolError("artifact.store_unavailable", "Artifact ledger is unavailable")
 
 
