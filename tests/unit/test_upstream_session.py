@@ -58,7 +58,7 @@ def test_session_is_fixed_per_conversation_and_hides_the_id() -> None:
 def test_default_caps_are_the_measured_ones(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(upstream.KEY_MAX_ENV, raising=False)
     monkeypatch.delenv(upstream.MEMBER_MAX_ENV, raising=False)
-    assert (upstream.key_max(), upstream.member_max()) == (4, 2)
+    assert (upstream.key_max(), upstream.member_max()) == (8, 2)
     monkeypatch.setenv(upstream.KEY_MAX_ENV, "1")
     assert upstream.key_max() == 1
 
@@ -132,20 +132,20 @@ async def test_handwriting_reads_have_their_own_slots(monkeypatch: pytest.Monkey
 
 @pytest.mark.asyncio
 async def test_exam_paper_reads_have_their_own_slots(monkeypatch: pytest.MonkeyPatch) -> None:
-    """edu-core#4095: a paper parse (4 pages + 2 copies) no longer holds the 4 chat slots."""
+    """edu-core#4095: a paper parse (4 pages + 2 copies) uses separate slots."""
     for env in (upstream.KEY_MAX_ENV, upstream.EXAM_KEY_MAX_ENV):
         monkeypatch.delenv(env, raising=False)
     assert upstream.stats()["exam_key_max"] == 6
     reads = [await asyncio.wait_for(upstream.acquire("k", "exam"), 1) for _ in range(6)]
     seventh = asyncio.ensure_future(upstream.acquire("k", "exam"))
-    chats = [await asyncio.wait_for(upstream.acquire("k", "direct"), 1) for _ in range(4)]
-    fifth_chat = asyncio.ensure_future(upstream.acquire("k", "pi_step"))
+    chats = [await asyncio.wait_for(upstream.acquire("k", "direct"), 1) for _ in range(8)]
+    ninth_chat = asyncio.ensure_future(upstream.acquire("k", "pi_step"))
     await asyncio.sleep(0.05)
-    assert not seventh.done() and not fifth_chat.done()
+    assert not seventh.done() and not ninth_chat.done()
     reads.pop()()
     (await asyncio.wait_for(seventh, 1))()
     chats.pop()()
-    (await asyncio.wait_for(fifth_chat, 1))()
+    (await asyncio.wait_for(ninth_chat, 1))()
     for release in (*reads, *chats):
         release()
     assert upstream.stats()["inflight"] == {}
@@ -340,11 +340,15 @@ def test_pressure_report_reads_new_api_log() -> None:
     # AIProxy is for long Pi sessions only: the direct road's one-shot calls miss.
     assert m["one_shot"] == 3
     assert rep.verdict(m) == ["一问请求 3 次（应为 0）"]
-    rows.append(_log(109, 20, 10, 0, "01a1...6aaa"))
+    rows.append(_log(109, 20, 10, 10, "01a1...6aaa"))
     rows.append(_log(110, 1, 10, 0, "01a1...7bbb"))  # a Pi run that ended in one step
+    rows.extend(_log(t, 20, 10, 10, "01a1...6aaa") for t in range(111, 114))
     m = rep.measure(rows)
     assert m["single_request_sessions"] == 1
-    assert rep.verdict(m)[-1] == "同时请求峰值 5 > 4"
+    assert m["peak"] == 8
+    assert rep.verdict(m) == ["一问请求 3 次（应为 0）"]
+    rows.append(_log(114, 20, 10, 10, "01a1...6aaa"))
+    assert rep.verdict(rep.measure(rows))[-1] == "同时请求峰值 9 > 8"
 
 
 def test_pressure_report_judges_only_picos_token(tmp_path: Path) -> None:

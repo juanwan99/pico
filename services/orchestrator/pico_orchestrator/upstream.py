@@ -40,13 +40,13 @@ from email.utils import parsedate_to_datetime
 CALL_BUDGET = 3
 RUN_SPARE = 6
 KEY_MAX_ENV = "PICO_UPSTREAM_KEY_MAX"
-# 14 days live (10-18): at most 5 runs at once, one per teacher (pico#1344).
-_KEY_MAX_DEFAULT = 4
+# r6 (pico#1450): 20 concurrent users saw LLM p50 of 52 s; no upstream 429s in 24 h.
+_KEY_MAX_DEFAULT = 8
 MEMBER_MAX_ENV = "PICO_UPSTREAM_MEMBER_MAX"
 _MEMBER_MAX_DEFAULT = 2
 # Exam handwriting reads (lane pico-ocr) get their own slots: one-shot reads at
 # 1–2 s each, 400 a subject; on the shared 2 per teacher a subject took 573 s
-# (edu-core#3927, owner 10-26 15:52「AI 阅卷识别太慢，要提高」). Chat / Pi keep 2 / 4.
+# (edu-core#3927, owner 10-26 15:52「AI 阅卷识别太慢，要提高」).
 OCR_KEY_MAX_ENV = "PICO_UPSTREAM_OCR_KEY_MAX"
 OCR_MEMBER_MAX_ENV = "PICO_UPSTREAM_OCR_MEMBER_MAX"
 _OCR_MAX_DEFAULT = 16

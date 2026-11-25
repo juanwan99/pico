@@ -24,7 +24,7 @@ Only Pico's own token is judged (``--token``, default ``pico-gateway``); other
 tokens on the channel (smoke checks, probes) are counted on one line apart.
 
 Pass lines (card acceptance): one-shot requests 0, second-step-on hit share
->= 90 %, peak <= 4 (backstop). Exit 1 on a miss.
+>= 90 %, peak <= 8 (backstop). Exit 1 on a miss.
 
     python3 scripts/pico-upstream-pressure-report.py --days 1
     python3 scripts/pico-upstream-pressure-report.py --since "2026-10-19 08:00" --until "2026-10-19 20:00"
@@ -42,7 +42,7 @@ from datetime import datetime, timedelta, timezone
 
 SH = timezone(timedelta(hours=8))
 DB = "/home/ops/new-api/data/one-api.db"
-PEAK_MAX = 4
+PEAK_MAX = 8
 LATER_HIT_MIN = 0.90
 
 
