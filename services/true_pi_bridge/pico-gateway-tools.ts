@@ -561,7 +561,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_file_upload",
-    "Attach files to the file input (or upload button) with the given ref. Use filenames for this run's artifacts (title, outputs/<name>, or /workspace/outputs/<name>; newest matching title wins) or files on the teacher's sandbox disk. You can also specify Pico ledger artifact_ids. Max 10 files, 25 MB. Rules: see sandbox_browser_snapshot.",
+    "Attach files to the file input (or upload button) with the given ref. Use filenames (name, outputs/<name>, or /workspace/outputs/<name>) for this run's ledger artifacts or files already written to this workspace's outputs. The newest matching ledger title takes precedence. Teacher sandbox disk filenames and Pico ledger artifact_ids also work. Max 10 files, 25 MB. Rules: see sandbox_browser_snapshot.",
     Type.Object(
       {
         ref: Type.String(),

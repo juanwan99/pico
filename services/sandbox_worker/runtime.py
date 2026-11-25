@@ -61,6 +61,8 @@ MAX_SESSIONS = int(os.environ.get("PICO_SANDBOX_MAX_SESSIONS") or "8")
 LOADING_SCREENSHOT_TIMEOUT_S = 10.0
 LOADING_SNAPSHOT_TIMEOUT_S = 8.0
 LOADING_METADATA_TIMEOUT_S = 8.0
+# 15 s in the queue + up to 71 s for navigation and sync fits pico-api's 90 s.
+ACT_LOCK_TIMEOUT_S = 15.0
 APPLIED_COPY = "已把操作送进 sidecar Chromium。登录状态存在你自己的老师盘上，下次打开不用再登。"
 # Saved login (owner 2026-10-11 09:17): one file per teacher on their own disk.
 # Clearing the teacher disk, or logging out on the site, drops it.
@@ -768,7 +770,11 @@ class SandboxRuntime:
         await self._purge()
         # Playwright changes the current tab and refreshes aria refs on snapshot.
         # Keep each action and its snapshot together on this teacher's desk.
-        async with session.act_lock:
+        try:
+            await asyncio.wait_for(session.act_lock.acquire(), ACT_LOCK_TIMEOUT_S)
+        except TimeoutError as exc:
+            raise ToolError("browser.busy", "上一个浏览器操作还没做完，稍后再试") from exc
+        try:
             self.require_owner(
                 session.session_id, school_id=session.school_id, membership_id=session.membership_id
             )
@@ -861,6 +867,8 @@ class SandboxRuntime:
                 )
             finally:
                 session.last_used = time.time()
+        finally:
+            session.act_lock.release()
 
     def _upload_payload(
         self,

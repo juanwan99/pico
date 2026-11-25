@@ -2231,10 +2231,10 @@ def _workspace_handlers(
             upload_artifacts: dict[str, str] = {}
             if action == "file_upload":
                 filenames = [str(n) for n in (args.get("filenames") or []) if str(n).strip()]
-                body["filenames"], filename_ids, upload_artifacts = await resolve_upload_filenames(
-                    store, principal, run_id, filenames
+                body["filenames"], filename_ids, box_files, upload_artifacts = (
+                    await resolve_upload_filenames(store, principal, run_id, filenames)
                 )
-                body["files"] = await _upload_from_ledger(
+                body["files"] = box_files + await _upload_from_ledger(
                     principal, args.get("artifact_ids") or [], filename_ids=filename_ids
                 )
                 if not body["filenames"] and not body["files"]:
@@ -2297,7 +2297,7 @@ def _workspace_handlers(
             except ToolError as exc:
                 await _emit(False, {"error_code": exc.code})
                 if action == "file_upload" and exc.code == "sandbox.file_not_found":
-                    raise upload_file_not_found(exc, upload_artifacts) from exc
+                    raise await upload_file_not_found(exc, upload_artifacts, run_id) from exc
                 raise
 
         return hand

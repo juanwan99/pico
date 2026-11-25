@@ -545,6 +545,76 @@ async def test_file_upload_resolves_latest_title_in_this_run(hands_runtime) -> N
 
 
 @pytest.mark.asyncio
+async def test_file_upload_reads_outputs_from_busy_box_without_landing(
+    hands_runtime, monkeypatch, tmp_path
+) -> None:
+    from pi_runner.app import Runner, build_control_app
+    from pi_runner.policy import RunnerSettings
+    from pi_runner.policy import WorkspaceKey as RunnerKey
+    from pico_orchestrator.true_pi.runner import (
+        ProxyEntry,
+        WorkspaceKey,
+        register_proxy,
+        unregister_proxy,
+    )
+
+    _, pages = hands_runtime
+    owner = P("school-a", "member-a", ["ai:run"])
+    run_id = "run-hands"
+    key = WorkspaceKey.for_run(
+        school_id=owner.school_id,
+        membership_id=owner.membership_id,
+        conversation_id="conversation-a",
+        run_id=run_id,
+    )
+    runner_key = RunnerKey.parse(key.school, key.member, key.conv)
+    token = "r" * 32
+    runner = Runner(RunnerSettings(token=token, workspace_root=tmp_path / "runner"))
+    workspace = runner.prepare_workspace(runner_key, with_memory=False)
+    runner.sessions[run_id] = SimpleNamespace(key=runner_key)
+    runner_app = build_control_app(runner)
+    client = httpx.AsyncClient
+    monkeypatch.setenv("PICO_RUNNER_URL", "http://runner")
+    monkeypatch.setenv("PICO_RUNNER_TOKEN", token)
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kw: client(transport=httpx.ASGITransport(app=runner_app), **kw)
+    )
+    store = MemoryArtifactStore(run_id=run_id)
+    saved = await store.write(owner, title="x.png", content=b"ledger")
+    gw = build_default_gateway(store)
+    await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    html = b"<h1>Workspace output</h1>"
+    (workspace / "outputs/卷面.html").write_bytes(html)
+    (workspace / "outputs/x.png").write_bytes(b"workspace")
+    register_proxy(ProxyEntry(run_id, "", "", "", "", "", workspace_key=key))
+    try:
+        for name in ("outputs/卷面.html", "/workspace/outputs/卷面.html", "卷面.html"):
+            result = await gw.invoke(
+                owner, "sandbox_browser_file_upload", {"ref": "e1", "filenames": [name]}
+            )
+            assert result["action"] == "file_upload"
+        assert pages[0].uploaded == [("卷面.html", "text/html", html)] * 3
+        assert await store.list_run_titles(owner, run_id=run_id) == {"x.png": saved["artifact_id"]}
+
+        await gw.invoke(
+            owner, "sandbox_browser_file_upload", {"ref": "e1", "filenames": ["x.png"]}
+        )
+        assert pages[0].uploaded[-1] == ("x.png", "image/png", b"ledger")
+        with pytest.raises(ToolError) as exc:
+            await gw.invoke(
+                owner,
+                "sandbox_browser_file_upload",
+                {"ref": "e1", "filenames": ["outputs/不存在.html"]},
+            )
+        assert exc.value.code == "sandbox.file_not_found"
+        assert "outputs/卷面.html" in exc.value.message
+        assert f"《x.png》({saved['artifact_id']})" in exc.value.message
+        assert "artifact_ids" in exc.value.message
+    finally:
+        unregister_proxy(run_id)
+
+
+@pytest.mark.asyncio
 async def test_upload_title_query_reads_only_this_runs_owned_metadata() -> None:
     from app.artifact_store import LedgerArtifactStore
     from app.db import ArtifactRow, Base, TaskRow
@@ -909,6 +979,43 @@ async def test_parallel_click_and_fill_keep_current_session(
         assert clicked.result()["session_id"] == sid
     assert pages[0].logged_in != click_fails and pages[0].fields["e1"] == "张三"
     assert not pages[0].closed
+
+
+@pytest.mark.asyncio
+async def test_act_lock_timeout_returns_busy_without_running_the_action(
+    http_sidecar, monkeypatch
+) -> None:
+    import sandbox_worker.runtime as runtime_mod
+
+    runtime, pages = http_sidecar
+    monkeypatch.setattr(runtime_mod, "ACT_LOCK_TIMEOUT_S", 0.01)
+    gw = _gw()
+    owner = P("school-a", "member-a", ["ai:run"])
+    opened = await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    session = runtime.get(opened["session_id"])
+    assert session is not None
+    args = {"fields": [{"ref": "e1", "value": "没执行"}]}
+    async with session.act_lock, asyncio.timeout(2):
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "http://sidecar/v1/internal/sessions/current/act",
+                json={
+                    **args,
+                    "action": "fill_form",
+                    "school_id": owner.school_id,
+                    "membership_id": owner.membership_id,
+                },
+            )
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "browser.busy"
+        with pytest.raises(ToolError) as exc:
+            await gw.invoke(owner, "sandbox_browser_fill_form", args)
+        assert exc.value.code == "browser.busy"
+        assert exc.value.message == "上一个浏览器操作还没做完，稍后再试"
+
+    listed = await gw.invoke(owner, "sandbox_browser_tabs", {"action": "list"})
+    assert listed["session_id"] == session.session_id
+    assert pages[0].fields["e1"] == ""
 
 
 @pytest.mark.asyncio

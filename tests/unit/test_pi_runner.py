@@ -362,16 +362,25 @@ def test_workspace_key_fail_closed_without_tenant() -> None:
         WorkspaceKey.for_run(school_id="s", membership_id=" ", conversation_id="c", run_id="r")
 
 
-def test_control_refuses_files_while_box_runs(control) -> None:
+def test_control_allows_only_output_reads_while_box_runs(control) -> None:
     from types import SimpleNamespace
 
     from pi_runner.policy import WorkspaceKey as RKey
 
-    client, _ = control
+    client, workspace = control
+    (workspace / "outputs").mkdir(parents=True)
+    (workspace / "outputs/a").write_bytes(b"box output")
     client.runner.sessions["live"] = SimpleNamespace(key=RKey.parse(S, M, C))
     try:
-        assert client.get(f"{BASE}/outputs", headers=H).status_code == 409
-        assert client.get(f"{BASE}/file", params={"path": "outputs/a"}, headers=H).status_code == 409
+        listed = client.get(f"{BASE}/outputs", headers=H)
+        assert listed.status_code == 200
+        assert [row["path"] for row in listed.json()["files"]] == ["outputs/a"]
+        read = client.get(f"{BASE}/file", params={"path": "outputs/a"}, headers=H)
+        assert read.status_code == 200 and read.content == b"box output"
+        idle_only = client.get(f"{BASE}/outputs", params={"idle_only": True}, headers=H)
+        assert idle_only.status_code == 409
+        attachment = client.get(f"{BASE}/file", params={"path": "attachments/a"}, headers=H)
+        assert attachment.status_code == 409
         r = client.put(f"{BASE}/file", params={"path": "attachments/a"}, content=b"x", headers=H)
         assert r.status_code == 409
     finally:

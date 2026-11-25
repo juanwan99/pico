@@ -177,7 +177,8 @@ def test_loading_navigation_leaves_room_under_sidecar_timeout() -> None:
     assert 0 < runtime_mod.LOADING_SCREENSHOT_TIMEOUT_S <= 10
     assert 0 < runtime_mod.LOADING_SNAPSHOT_TIMEOUT_S <= 10
     assert (
-        browser_mod.GOTO_TIMEOUT_MS / 1000
+        runtime_mod.ACT_LOCK_TIMEOUT_S
+        + browser_mod.GOTO_TIMEOUT_MS / 1000
         + runtime_mod.LOADING_SNAPSHOT_TIMEOUT_S
         + runtime_mod.LOADING_SCREENSHOT_TIMEOUT_S
         + runtime_mod.LOADING_METADATA_TIMEOUT_S
