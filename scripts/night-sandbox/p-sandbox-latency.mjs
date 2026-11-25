@@ -128,6 +128,7 @@ function watchPane({ image, fullscreen }) {
       height,
       scroll,
       natural: [img.naturalWidth, img.naturalHeight],
+      ready: button[2] > 140 && button[1] < 105,
       clicked: button[1] > 105 && button[2] < 95,
       wide: layout[1] > 90 && layout[0] < 45,
     });
@@ -145,10 +146,10 @@ export async function measurePane(page, maximize, { out, getReference, run }) {
   await page.waitForFunction(
     () =>
       window.sandboxLatency.frames.some(
-        (f) => f.width === 720 && f.height === 700 && f.natural[0] === 1080,
+        (f) => f.ready && f.width === 720 && f.height === 700 && f.natural[0] === 1080,
       ),
     null,
-    wait,
+    { ...wait, timeout: 60000 },
   );
   await img.click({ position: { x: 30, y: 24 } });
   await page.waitForFunction(
