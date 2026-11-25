@@ -7,6 +7,9 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import Mock
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "longtask-eval.py"
@@ -106,6 +109,47 @@ def test_fake_green_flagged_explicitly() -> None:
     assert with_files.fake_green is False and with_files.ok is True
     table = lte.render_markdown([res, with_files])
     assert "假绿" in table and "| 是 |" in table and "假绿：1" in table
+
+
+@pytest.mark.parametrize(
+    "artifact", [{"kind": "image", "title": "x.png"}, {"kind": "png", "title": "x"}]
+)
+def test_png_counts_as_a_produced_artifact(artifact: dict[str, str]) -> None:
+    case = {"id": "PNG", "expect": {"kinds": ["png"]}}
+    arts = [{"id": "image", **artifact}]
+    pico = Mock(spec=lte.Pico)
+    res = lte.CaseResult(case=case["id"])
+
+    lte.score_case(case, arts, pico, res)
+    lte.flag_fake_green(res, "succeeded", kinds=case["expect"]["kinds"])
+
+    assert res.artifacts == 1
+    assert res.artifact_kinds == ["png"]
+    assert res.auto_score == res.max_score == 1
+    assert res.ok and not res.fake_green
+    pico.download.assert_not_called()
+
+
+@pytest.mark.parametrize("expect, fake_green", [({}, False), ({"kinds": ["docx"]}, True)])
+def test_run_with_png_flags_fake_green_only_when_docx_expected(
+    expect: dict[str, list[str]], fake_green: bool
+) -> None:
+    pico = Mock(spec=lte.Pico)
+    pico.timeout_s = 60
+    pico.tasks.return_value = [{"latest_run": {"id": "r1", "status": "succeeded"}}]
+    pico.run.return_value = {"status": "succeeded"}
+    pico.events.return_value = []
+    pico.artifacts.return_value = [
+        {"id": "image", "kind": "image", "title": "x.png"},
+        {"id": "upload", "kind": "edu_office", "title": "input.docx"},
+    ]
+
+    res = lte.run_case(pico, {"id": "X", "expect": expect}, "test")
+
+    assert res.artifacts == 1 and res.artifact_kinds == ["png"]
+    assert res.fake_green is fake_green
+    assert res.ok is not fake_green
+    pico.download.assert_not_called()
 
 
 def test_coding_suite_cases_and_checkers() -> None:
