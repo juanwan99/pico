@@ -80,7 +80,8 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
 - **换 token**：Meili 读回来的 `apiKey` 是打码的，看不出换没换。所以嵌入配置带一个请求头 `X-Pico-Key`（token 的 sha256 前 8 位），`ensure()` 看到它变了就只 PATCH apiKey 和这个头。本机用真 `ensure()` 验过：重嵌 0 条，之后新文档用新 token。
 - **知识库重建限速**：pico-api 在后台跑发版增量重建。设置 `PICO_KB_REINDEX_FORCE=1` 可发起整库重建。发版门确认入队 HTTP 202 和 `pico_materials` 至少有 1 个文档，然后照常跑冒烟。
   - 每批最多 20 个分块。等 Meili 完成上一批后，再留出空闲时间，取分块数 × 60 ÷ `PICO_KB_REBUILD_PER_MIN`（默认 600）与上一批实际耗时中的较大值。重建批次占用 Meili 的时间最多为忙闲周期的一半。
-  - 完成、失败和取消结果由 `log_rebuild_result` 记在 pico-api 日志。
+  - Meili 容器的内存上限须容纳整份索引 `data.mdb` 和额外的 1 GB 建索引内存，避免 LMDB 文件页反复被淘汰和读回。
+  - 完成、失败和取消结果由 `log_rebuild_result` 记在 pico-api 日志。成功时在 WARNING 级别输出 `kb reindex completed` 和重建计数。
 
 ## 看数
 

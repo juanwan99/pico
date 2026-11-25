@@ -213,4 +213,4 @@ def log_rebuild_result(task: asyncio.Task[dict[str, Any]]) -> None:
     except Exception:
         logger.exception("kb reindex failed")
     else:
-        logger.info("kb reindex completed %s", result)
+        logger.warning("kb reindex completed %s", result)

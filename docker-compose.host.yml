@@ -165,7 +165,8 @@ services:
       MEILI_MAX_INDEXING_MEMORY: 1Gb
     volumes:
       - pico_meili:/meili_data
-    mem_limit: 2g
+    # Fit all of data.mdb plus 1 Gb for indexing to avoid repeated LMDB page eviction and rereads (#1434).
+    mem_limit: 6g
 
   pico-sandbox:
     image: pico-sandbox:v13
