@@ -151,12 +151,19 @@ def test_artifact_ids_ignores_incomplete_artifacts():
 
 class _Art:
     def __init__(
-        self, aid: str, title: str, origin: str = "upload", *, kind: str = "material"
+        self,
+        aid: str,
+        title: str,
+        origin: str = "upload",
+        *,
+        kind: str = "material",
+        run_id: str | None = None,
     ) -> None:
         self.id = aid
         self.kind = kind
         self.title = title
         self.origin = origin
+        self.run_id = run_id
         self.content_encoding = "utf8"
         self.inline = "正文 " * 20
         self.created_at = None
@@ -169,7 +176,7 @@ class _Task:
     title = "edu-read · 旧.docx"
 
 
-def _fake_session_factory(rows, body_reads):
+def _fake_session_factory(rows, reads):
     from app.db import ArtifactRow
 
     class _Result:
@@ -179,6 +186,12 @@ def _fake_session_factory(rows, body_reads):
         def all(self):
             return self.entries
 
+        def one_or_none(self):
+            if not self.entries:
+                return None
+            (entry,) = self.entries
+            return entry
+
     class _Session:
         async def __aenter__(self):
             return self
@@ -187,17 +200,25 @@ def _fake_session_factory(rows, body_reads):
             return False
 
         async def execute(self, stmt):
+            compiled = stmt.compile()
             if stmt.column_descriptions[0]["expr"] is ArtifactRow:
                 # Even deferred inline data can be read by SQLite when the SELECT
                 # projects later fields. Assert the actual compiled projection.
-                projection = str(stmt.compile()).split("\nFROM ", 1)[0].removeprefix("SELECT ")
+                projection = str(compiled).split("\nFROM ", 1)[0].removeprefix("SELECT ")
                 assert {col.split(" AS ", 1)[0] for col in projection.split(", ")} == {
-                    "artifacts.id", "artifacts.task_id", "artifacts.kind", "artifacts.title",
+                    "artifacts.id", "artifacts.task_id", "artifacts.run_id",
+                    "artifacts.kind", "artifacts.title",
                     "tasks.id", "tasks.school_id", "tasks.membership_id", "tasks.title",
                 }
                 return _Result(rows)
-            ids = set(stmt.compile().params["id_1"])
-            body_reads.update(ids)
+            columns = list(stmt.selected_columns.keys())
+            if columns == ["origin"]:
+                ids = {compiled.params["id_1"]}
+                reads["origin"].update(ids)
+            else:
+                assert columns == ["id", "content_encoding", "created_at", "inline"]
+                ids = set(compiled.params["id_1"])
+                reads["body"].update(ids)
             return _Result([artifact for artifact, _ in rows if artifact.id in ids])
 
     return lambda: _Session
@@ -207,7 +228,8 @@ def _wire_rebuild(monkeypatch: pytest.MonkeyPatch, rows, known):
     from app import kb_rebuild
 
     chunked: list[str] = []
-    body_reads: set[str] = set()
+    reads: dict[str, set[str]] = {"origin": set(), "body": set()}
+
     def artifact_ids():
         if isinstance(known, Exception):
             raise known
@@ -219,26 +241,26 @@ def _wire_rebuild(monkeypatch: pytest.MonkeyPatch, rows, known):
         artifact_ids=artifact_ids,
     )
     monkeypatch.setattr(kb_rebuild, "MeiliIndex", lambda: index)
-    monkeypatch.setattr(kb_rebuild, "session_factory", _fake_session_factory(rows, body_reads))
+    monkeypatch.setattr(kb_rebuild, "session_factory", _fake_session_factory(rows, reads))
 
     def _chunks(_p, *, artifact_id, **_k):
         chunked.append(artifact_id)
         return [{"id": f"{artifact_id}:0", "artifact_id": artifact_id}]
 
     monkeypatch.setattr(kb_rebuild, "material_chunk_docs", _chunks)
-    return kb_rebuild, chunked, body_reads, index
+    return kb_rebuild, chunked, reads, index
 
 
 def test_rebuild_incremental_skips_already_indexed(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = [(_Art("old", "旧.docx"), _Task()), (_Art("new", "新.docx"), _Task())]
-    kb_rebuild, chunked, body_reads, _ = _wire_rebuild(monkeypatch, rows, {"old"})
+    kb_rebuild, chunked, reads, _ = _wire_rebuild(monkeypatch, rows, {"old"})
 
     out = asyncio.run(kb_rebuild.rebuild_materials(None))
     assert out["mode"] == "incremental"
     assert out["indexed"] == 1 and out["unchanged"] == 1 and out["skipped"] == 0
     assert out["total"] == 2
     assert chunked == ["new"]
-    assert body_reads == {"new"}
+    assert reads == {"origin": {"new"}, "body": {"new"}}
 
 
 def test_rebuild_force_rechunks_everything(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -263,8 +285,11 @@ async def test_rebuild_upload_uses_kb_text_and_skips_excerpt(monkeypatch: pytest
     kb_text.inline = "上传正文"
     binary_text = _Art("binary-text", title, kind="kb_text")
     binary_text.content_encoding = "base64"
-    rows = [(artifact, _Task()) for artifact in (original, excerpt, kb_text, binary_text)]
-    _, _, body_reads, index = _wire_rebuild(monkeypatch, rows, {"kb-text", "binary-text"})
+    pico_text = _Art("pico-text", title, origin="pico", kind="kb_text", run_id="r1")
+    rows = [
+        (artifact, _Task()) for artifact in (original, excerpt, kb_text, binary_text, pico_text)
+    ]
+    _, _, reads, index = _wire_rebuild(monkeypatch, rows, {"kb-text", "binary-text"})
     chunk = {"artifact_id": original.id}
 
     def material_chunk_docs(_task, *, artifact_id, content, stored_text, **_):
@@ -275,19 +300,19 @@ async def test_rebuild_upload_uses_kb_text_and_skips_excerpt(monkeypatch: pytest
 
     monkeypatch.setattr(kb_rebuild, "material_chunk_docs", material_chunk_docs)
     out = await kb_rebuild.rebuild_materials()
-    assert out["indexed"] == 1 and out["unchanged"] == 2 and out["skipped"] == 1
-    assert body_reads == {"original", "kb-text", "binary-text"}
+    assert out["indexed"] == 1 and out["unchanged"] == 2 and out["skipped"] == 2
+    assert reads == {"origin": {"original"}, "body": {"original", "kb-text", "binary-text"}}
     index.upsert_rebuild_batch.assert_awaited_once_with([chunk])
 
 
 def test_rebuild_stops_when_index_unreadable(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = [(_Art("old", "旧.docx"), _Task())]
     error = RuntimeError("meili documents/fetch http 500")
-    kb_rebuild, chunked, body_reads, index = _wire_rebuild(monkeypatch, rows, error)
+    kb_rebuild, chunked, reads, index = _wire_rebuild(monkeypatch, rows, error)
 
     with pytest.raises(RuntimeError, match="documents/fetch http 500"):
         asyncio.run(kb_rebuild.rebuild_materials())
-    assert not chunked and not body_reads
+    assert not chunked and reads == {"origin": set(), "body": set()}
     index.upsert_rebuild_batch.assert_not_awaited()
 
 
@@ -428,7 +453,8 @@ async def test_rebuild_paces_by_chunk_count_and_meili_busy_time(monkeypatch: pyt
     assert starts == [0, 10, 13]
 
 
-def test_rebuild_leaves_pico_drafts_out(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("force", [False, True])
+def test_rebuild_leaves_pico_drafts_out(monkeypatch: pytest.MonkeyPatch, force: bool) -> None:
     """pico#1298: Pico-made files never enter the library, old or new."""
 
     class _RunTask(_Task):
@@ -437,12 +463,16 @@ def test_rebuild_leaves_pico_drafts_out(monkeypatch: pytest.MonkeyPatch) -> None
     rows = [
         (_Art("up", "上传.docx"), _Task()),
         (_Art("legacy-up", "旧上传.docx", origin=""), _Task()),
-        (_Art("draft", "讲义.docx", origin="pico"), _RunTask()),
+        (_Art("draft", "讲义.docx", origin="pico", run_id="r1"), _Task()),
         (_Art("legacy-draft", "旧讲义.docx", origin=""), _RunTask()),
+        (_Art("runless-draft", "草稿.docx", origin="pico"), _Task()),
     ]
-    kb_rebuild, chunked, body_reads, _ = _wire_rebuild(monkeypatch, rows, set())
+    kb_rebuild, chunked, reads, _ = _wire_rebuild(monkeypatch, rows, set())
 
-    out = asyncio.run(kb_rebuild.rebuild_materials(None, force=True))
+    out = asyncio.run(kb_rebuild.rebuild_materials(None, force=force))
     assert sorted(chunked) == ["legacy-up", "up"]
-    assert body_reads == {"legacy-up", "up", "draft", "legacy-draft"}
-    assert out["skipped"] == 2
+    assert reads == {
+        "origin": {"legacy-up", "up", "runless-draft"},
+        "body": {"legacy-up", "up"},
+    }
+    assert out["indexed"] == 2 and out["skipped"] == 3

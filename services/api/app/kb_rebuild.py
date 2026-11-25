@@ -15,7 +15,7 @@ from sqlalchemy.orm import load_only
 
 from app.artifact_store import decode_artifact_payload
 from app.auth import Principal
-from app.db import ArtifactRow, TaskRow, is_teacher_material, session_factory
+from app.db import UPLOAD_TASK_PREFIX, ArtifactRow, TaskRow, is_teacher_material, session_factory
 
 logger = logging.getLogger(__name__)
 _BATCH_SIZE = 20
@@ -98,6 +98,7 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
             load_only(
                 ArtifactRow.id,
                 ArtifactRow.task_id,
+                ArtifactRow.run_id,
                 ArtifactRow.kind,
                 ArtifactRow.title,
                 raiseload=True,
@@ -115,7 +116,7 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
 
     stored_by_task_title: dict[tuple[str, str], list[str]] = {}
     for artifact, task in rows:
-        if artifact.kind == "kb_text":
+        if artifact.kind == "kb_text" and artifact.run_id is None:
             stored_by_task_title.setdefault((task.id, artifact.title), []).append(artifact.id)
 
     pace = _Pace(rebuild_per_min())
@@ -125,7 +126,9 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
     pending: list[dict[str, Any]] = []
     for artifact, task in rows:
         if (
-            is_lab_school(str(task.school_id or ""))
+            artifact.run_id is not None
+            or not (task.title or "").startswith(UPLOAD_TASK_PREFIX)
+            or is_lab_school(str(task.school_id or ""))
             or not is_material(kind=artifact.kind, title=artifact.title)
             or artifact.kind == "edu_excerpt"
         ):
@@ -138,10 +141,17 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
         # Read bodies only for materials being rebuilt. Release SQLite before embedding.
         stored_ids = stored_by_task_title.get((task.id, artifact.title), [])
         async with factory() as session:
+            origin_row = (
+                await session.execute(
+                    select(ArtifactRow.origin).where(ArtifactRow.id == artifact.id)
+                )
+            ).one_or_none()
+            if origin_row is None or not is_teacher_material(origin_row.origin, task.title):
+                skipped += 1
+                continue
             result = await session.execute(
                 select(
                     ArtifactRow.id,
-                    ArtifactRow.origin,
                     ArtifactRow.content_encoding,
                     ArtifactRow.created_at,
                     ArtifactRow.inline,
@@ -149,7 +159,7 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
             )
             payloads = {row.id: row for row in result.all()}
         payload = payloads.get(artifact.id)
-        if payload is None or not is_teacher_material(payload.origin, task.title):
+        if payload is None:
             skipped += 1
             continue
         stored_text = None
