@@ -106,7 +106,18 @@ async def test_committed_navigation_survives_dom_timeout(
     png = io.BytesIO()
     Image.new("RGB", (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)).save(png, format="PNG")
     capture = AsyncMock(return_value={"data": base64.b64encode(png.getvalue()).decode()})
-    context.new_cdp_session = AsyncMock(return_value=Mock(send=capture))
+
+    async def send(method, *args):
+        if method == "Page.getLayoutMetrics":
+            return {
+                "cssLayoutViewport": {
+                    "clientWidth": VIEWPORT_WIDTH,
+                    "clientHeight": VIEWPORT_HEIGHT,
+                },
+            }
+        return await capture(method, *args)
+
+    context.new_cdp_session = AsyncMock(return_value=Mock(send=send))
     page.is_closed.return_value = False
     context.storage_state = AsyncMock(return_value={})
 
