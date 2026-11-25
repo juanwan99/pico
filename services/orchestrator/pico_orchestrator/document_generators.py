@@ -179,17 +179,10 @@ def office_shell_reason(raw: bytes, ext: str) -> str | None:
     else:
         return None
 
-    # The delivery gate runs after the workspace closes. Only a tool call
-    # has a bound run here whose available execution path can be named.
-    bind = current_usage_bind()
-    if bind is not None:
-        from pico_orchestrator.true_pi.runner import proxy_entry
-
+    # The gateway office tool has a usage bind. The delivery gate runs without one.
+    if current_usage_bind() is not None:
         kind = suffix.removeprefix(".")
-        if proxy_entry(bind.run_id) is not None:
-            reason += f"请用 bash 运行 {OFFICE_PYTHON_LIBRARIES[kind]} 写到 outputs/<文件名>.{kind}。"
-        else:
-            reason += f"请使用 sandbox_office_lib（kind={kind}）写出文件。"
+        reason += f"请使用 sandbox_office_lib（kind={kind}）写出文件。"
     return reason
 
 

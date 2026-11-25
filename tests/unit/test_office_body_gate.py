@@ -21,33 +21,20 @@ sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 
 @pytest.mark.parametrize(
-    ("kind", "library", "make_empty"),
-    [("docx", "python-docx", Document), ("pptx", "python-pptx", Presentation)],
+    ("kind", "make_empty"), [("docx", Document), ("pptx", Presentation)]
 )
-def test_office_shell_reason_uses_bound_run_mode(kind, library, make_empty) -> None:
+def test_office_shell_reason_with_usage_bind_names_gateway_tool(kind, make_empty) -> None:
     from pico_orchestrator.document_generators import office_shell_reason
-    from pico_orchestrator.true_pi import runner
     from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
 
     data = io.BytesIO()
     make_empty().save(data)
     raw = data.getvalue()
-    key = runner.WorkspaceKey.for_run(
-        school_id="s", membership_id="m", conversation_id=None, run_id="office-run"
-    )
-    entry = runner.ProxyEntry("office-run", "", "", "", "", "", workspace_key=key)
-    token = bind_usage_context(school_id="s", membership_id="m", run_id=entry.run_id)
+    token = bind_usage_context(school_id="s", membership_id="m", run_id="office-run")
     try:
         gateway_reason = office_shell_reason(raw, f".{kind}")
         assert gateway_reason and f"sandbox_office_lib（kind={kind}）" in gateway_reason
-
-        runner.register_proxy(entry)
-        box_reason = office_shell_reason(raw, f".{kind}")
-        assert box_reason and "sandbox_office_lib" not in box_reason
-        assert "bash" in box_reason
-        assert library in box_reason and f"outputs/<文件名>.{kind}" in box_reason
     finally:
-        runner.unregister_proxy(entry.run_id)
         reset_usage_context(token)
 
 
