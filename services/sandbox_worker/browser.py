@@ -236,8 +236,8 @@ CHROMIUM_ARGS = (
     "--no-first-run",
     "--password-store=basic",
     "--hide-scrollbars",
-    # Give the compositor enough backing pixels for the highest pane DPR.
-    f"--force-device-scale-factor={MAX_DEVICE_SCALE}",
+    # JPEG chroma subsampling blurs LCD subpixel text. Rasterize grayscale text.
+    "--disable-lcd-text",
 )
 
 
@@ -626,6 +626,8 @@ class PlaywrightPage:
         self._viewport_lock = asyncio.Lock()
         self._viewport_task: asyncio.Task[None] | None = None
         self._metrics: dict[Any, Any] = {}
+        self._screen_cdp: Any = None
+        self._screen: dict[str, Any] | None = None
         self._dialogs: list[str] = []
         self._rate_limit: tuple[float, str] | None = None
         # Values the AI typed into boxes; masked on box lines in snapshots (pico#1320).
@@ -653,13 +655,15 @@ class PlaywrightPage:
         if page is not self._page:
             self._page = page
             self.page_token += 1
-            if page.viewport_size != self._size_dict() or self._device_scale != 1 or page in self._metrics:
+            if (
+                self._viewport != (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+                or self._device_scale != 1
+                or page in self._metrics
+            ):
                 self._viewport_task = asyncio.create_task(self._fit_page(page))
+                self._viewport_task.add_done_callback(self._tab_fit_done)
             else:
                 self._viewport_task = None
-
-    def _size_dict(self) -> dict[str, int]:
-        return {"width": self._viewport[0], "height": self._viewport[1]}
 
     async def _fit_page(self, page: Any) -> None:
         try:
@@ -667,30 +671,79 @@ class PlaywrightPage:
                 if not page.is_closed():
                     await self._apply_metrics(page, self._viewport, self._device_scale)
         except Exception:
-            if page.is_closed():
-                logger.debug("tab closed during viewport update", exc_info=True)
-            else:
-                logger.warning("sandbox tab viewport update failed", exc_info=True)
-        finally:
-            if self._viewport_task is asyncio.current_task():
-                self._viewport_task = None
+            if not page.is_closed():
+                raise
+            logger.debug("tab closed during viewport update", exc_info=True)
+
+    def _tab_fit_done(self, task: asyncio.Task[None]) -> None:
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            # Retain the failed fit so an existing or reconnecting stream polls PNG.
+            logger.warning("sandbox tab viewport update failed", exc_info=error)
+        elif self._viewport_task is task:
+            self._viewport_task = None
 
     async def _apply_metrics(self, page: Any, viewport: tuple[int, int], scale: float) -> None:
-        size = {"width": viewport[0], "height": viewport[1]}
-        if page.viewport_size != size:
-            await page.set_viewport_size(size)
+        cdp = await self._page_metrics(page)
+        await self._place_on_screen(cdp, max(1.0, scale))
+        await cdp.send(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": viewport[0],
+                "height": viewport[1],
+                "mobile": False,
+                "deviceScaleFactor": scale,
+            },
+        )
+
+    async def _place_on_screen(self, cdp: Any, scale: float) -> None:
+        # Use Chromium's native headless display DPR so screencast has no resize filter.
+        if scale == 1 and self._screen_cdp is None:
+            return
+        if self._screen_cdp is None:
+            self._screen_cdp = await self._context.browser.new_browser_cdp_session()
+        previous = self._screen
+        if scale == 1:
+            self._screen = None
+        elif previous is None or scale != self._device_scale:
+            # Moving to a new display updates the compositor DPR. Updating the
+            # old display in place can leave Chromium capturing with its old DPR.
+            async with _LOCK:
+                screens = (await self._screen_cdp.send("Emulation.getScreenInfos"))["screenInfos"]
+                full_width = VIEWPORT_MAX[0] * MAX_DEVICE_SCALE
+                occupied = {screen["left"] for screen in screens}
+                left = full_width
+                while left in occupied:
+                    left += full_width
+                added = await self._screen_cdp.send(
+                    "Emulation.addScreen",
+                    {
+                        "left": left,
+                        "top": 0,
+                        "width": full_width,
+                        "height": VIEWPORT_MAX[1] * MAX_DEVICE_SCALE,
+                        "devicePixelRatio": scale,
+                    },
+                )
+                self._screen = added["screenInfo"]
+        try:
+            window = await cdp.send("Browser.getWindowForTarget")
+            bounds = {"left": self._screen["left"] if self._screen is not None else 0, "top": 0}
+            if any(window["bounds"][key] != value for key, value in bounds.items()):
+                await cdp.send(
+                    "Browser.setWindowBounds", {"windowId": window["windowId"], "bounds": bounds},
+                )
+        finally:
+            if previous is not None and previous is not self._screen:
+                await self._screen_cdp.send("Emulation.removeScreen", {"screenId": previous["id"]})
+
+    async def _page_metrics(self, page: Any) -> Any:
         cdp = self._metrics.get(page)
-        if scale != 1 or cdp is not None:
-            if cdp is None:
-                cdp = self._metrics[page] = await self._context.new_cdp_session(page)
-            await cdp.send(
-                "Emulation.setDeviceMetricsOverride",
-                {
-                    **size,
-                    "mobile": False,
-                    "deviceScaleFactor": scale,
-                },
-            )
+        if cdp is None:
+            cdp = self._metrics[page] = await self._context.new_cdp_session(page)
+        return cdp
 
     async def set_viewport(
         self, width: int, height: int, device_scale: float = 1.0
@@ -703,11 +756,14 @@ class PlaywrightPage:
         scale = min(device_scale, MAX_DEVICE_SCALE)
         async with self._viewport_lock:
             if size != self._viewport or scale != self._device_scale:
-                # Retire the old cast before Chromium repaints at intermediate sizes.
+                # Reattach at the new size so a still page gets a fresh frame.
                 self.page_token += 1
+                task = self._viewport_task
                 await self._apply_metrics(self._page, size, scale)
                 self._viewport = size
                 self._device_scale = scale
+                if self._viewport_task is task:
+                    self._viewport_task = None
         return size
 
     def _on_new_page(self, page: Any) -> None:
@@ -845,31 +901,16 @@ class PlaywrightPage:
 
     async def screenshot_png(self) -> bytes:
         async with self._viewport_lock:
-            page = self._page
-            cdp = self._metrics.get(page)
-            if cdp is None:
-                raw = await page.screenshot(type="png", full_page=False, scale="css")
-            else:
-                # Capture on the session that owns the DPR override, in CSS pixels as before.
-                viewport = (await cdp.send("Page.getLayoutMetrics"))["cssVisualViewport"]
-                screenshot = await cdp.send(
-                    "Page.captureScreenshot",
-                    {
-                        "format": "png",
-                        "clip": {
-                            "x": viewport["pageX"],
-                            "y": viewport["pageY"],
-                            "width": viewport["clientWidth"],
-                            "height": viewport["clientHeight"],
-                            "scale": 1 / self._device_scale,
-                        },
-                    },
-                )
-                raw = base64.b64decode(screenshot["data"])
-        png = bytes(raw)
+            cdp = await self._page_metrics(self._page)
+            layout = (await cdp.send("Page.getLayoutMetrics"))["cssLayoutViewport"]
+            viewport = (layout["clientWidth"], layout["clientHeight"])
+            # A window snapshot reads the current compositor surface. A surface
+            # screenshot with emulation or a clip temporarily resizes the live view.
+            screenshot = await cdp.send("Page.captureScreenshot", {"fromSurface": False})
+        png = base64.b64decode(screenshot["data"])
         if not png.startswith(PNG_MAGIC):
             raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能截取 viewport")
-        return png
+        return await asyncio.to_thread(_png_at_css_size, png, viewport)
 
     async def click(self, x: int, y: int, *, settle: bool = True) -> None:
         before = self.url
@@ -1351,18 +1392,25 @@ class PlaywrightPage:
         """
         from playwright.async_api import Error
 
-        task = self._viewport_task
+        # A resize already in progress can replace the result of the tab fit.
+        async with self._viewport_lock:
+            task = self._viewport_task
         if task is not None:
             await asyncio.shield(task)
         async with self._viewport_lock:
             width, height = self._viewport
             scale = self._device_scale
             cdp = await self._context.new_cdp_session(self._page)
+        native_scale = max(1.0, scale)
+        native_width = math.ceil(width * native_scale)
+        native_height = math.ceil(height * native_scale)
         max_width = math.ceil(width * scale)
         max_height = math.ceil(height * scale)
         active = True
+        last_jpeg: str | None = None
 
         async def on_frame(event: dict[str, Any]) -> None:
+            nonlocal last_jpeg
             if not active:
                 return
             try:
@@ -1374,18 +1422,23 @@ class PlaywrightPage:
             if not active:
                 return
             meta = event["metadata"]
-            css_width, css_height = round(meta["deviceWidth"]), round(meta["deviceHeight"])
+            # Chromium rounds the compositor raster using float32 DPR.
+            # Allow the one-pixel difference from Python's double precision.
+            if (
+                abs(round(meta["deviceWidth"] * native_scale) - native_width) > 1
+                or abs(round(meta["deviceHeight"] * native_scale) - native_height) > 1
+            ):
+                return
             # Chromium can pair a queued bitmap with the current view's metadata on resize.
             # Check the JPEG header before using those coordinates for teacher input.
-            density = min(MAX_DEVICE_SCALE, max_width / css_width, max_height / css_height)
             jpeg = event["data"]
+            if jpeg == last_jpeg:
+                return
             with Image.open(io.BytesIO(base64.b64decode(jpeg))) as img:
-                if (
-                    abs(img.width - css_width * density) > 1
-                    or abs(img.height - css_height * density) > 1
-                ):
+                if abs(img.width - max_width) > 1 or abs(img.height - max_height) > 1:
                     return
-            push(ScreencastFrame(jpeg, css_width, css_height))
+            last_jpeg = jpeg
+            push(ScreencastFrame(jpeg, width, height))
 
         async def stop() -> None:
             nonlocal active
@@ -1421,7 +1474,26 @@ class PlaywrightPage:
         tmp.replace(path)
 
     async def close(self) -> None:
-        await _close_context(self._context, self._profile_dir)
+        async with self._viewport_lock:
+            await _close_context(self._context, self._profile_dir)
+            cdp, self._screen_cdp = self._screen_cdp, None
+            screen, self._screen = self._screen, None
+            if cdp is not None:
+                try:
+                    if screen is not None:
+                        await cdp.send("Emulation.removeScreen", {"screenId": screen["id"]})
+                finally:
+                    await cdp.detach()
+
+
+def _png_at_css_size(png: bytes, viewport: tuple[int, int]) -> bytes:
+    with Image.open(io.BytesIO(png)) as image:
+        if image.size == viewport:
+            return png
+        resized = image.resize(viewport, Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        resized.save(out, format="PNG")
+        return out.getvalue()
 
 
 async def _navigate_page(page: Any, url: str | None) -> str:

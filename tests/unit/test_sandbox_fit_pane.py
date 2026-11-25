@@ -9,9 +9,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import math
 import os
 import sys
 import time
+from contextlib import aclosing
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -34,49 +36,85 @@ from test_sandbox_live_pane import CastSurface, StillSurface, live_runtime  # no
 
 
 @pytest.mark.asyncio
-async def test_failed_tab_fit_does_not_disable_screencast(tmp_path, monkeypatch, caplog) -> None:
+async def test_failed_tab_fit_falls_back_to_png(
+    live_runtime,  # noqa: F811
+    tmp_path, monkeypatch,
+) -> None:
     from sandbox_worker.browser import PlaywrightPage
 
+    runtime, pages = live_runtime
+    meta = await runtime.open_session(
+        school_id="school-a", membership_id="member-a", run_id=None, url="https://example.com/"
+    )
+    sess = runtime.get(meta["session_id"])
     cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
     page = MagicMock()
     context = MagicMock(pages=[page], new_cdp_session=AsyncMock(return_value=cdp))
     surface = PlaywrightPage(context, page, tmp_path)
-    tab = MagicMock(viewport_size={"width": 900, "height": 700})
+    tab = MagicMock()
     tab.is_closed.return_value = False
     fit = AsyncMock(side_effect=RuntimeError("tab fit failed"))
     monkeypatch.setattr(surface, "_apply_metrics", fit)
+    monkeypatch.setattr(pages[0], "screencast", surface.screencast)
+    surface._viewport = (900, 700)
 
     surface._use(tab)
-    assert surface._viewport_task is not None
+    # The failed fit may already be complete by the time a viewer connects.
+    await asyncio.wait({surface._viewport_task})
     for _ in range(2):
-        stop = await surface.screencast(MagicMock())
-        assert surface._viewport_task is None
-        assert cdp.send.await_args.args[0] == "Page.startScreencast"
-        await stop()
+        async with aclosing(runtime.stream(sess)) as stream:
+            assert await asyncio.wait_for(anext(stream), 1) == {
+                "poll": True, "window_id": sess.focused_id,
+            }
+            assert (await runtime.pane_meta(sess))["mime"] == "image/png"
+    assert pages[0].shots == 3
+    cdp.send.assert_not_awaited()
     fit.assert_awaited_once()
-    assert "sandbox tab viewport update failed" in caplog.text
+
+    resizing = asyncio.Event()
+    finish_resize = asyncio.Event()
+
+    async def resize_metrics(*_args):
+        resizing.set()
+        await finish_resize.wait()
+
+    fit.side_effect = resize_metrics
+    resize = asyncio.create_task(surface.set_viewport(1000, 700))
+    await resizing.wait()
+    cast = asyncio.create_task(surface.screencast(MagicMock()))
+    await asyncio.sleep(0)
+    finish_resize.set()
+    await resize
+    stop = await cast
+    try:
+        assert cdp.send.await_args.args[0] == "Page.startScreencast"
+    finally:
+        await stop()
 
 
 @pytest.mark.asyncio
-async def test_screencast_discards_stale_bitmap_with_new_viewport_metadata(tmp_path) -> None:
+async def test_screencast_discards_stale_bitmap_with_new_viewport_metadata(
+    tmp_path, monkeypatch,
+) -> None:
     from sandbox_worker.browser import PlaywrightPage
 
     cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
     page = MagicMock(viewport_size={"width": 480, "height": 620})
     context = MagicMock(pages=[page], new_cdp_session=AsyncMock(return_value=cdp))
     surface = PlaywrightPage(context, page, tmp_path)
+    monkeypatch.setattr(surface, "_place_on_screen", AsyncMock())
     await surface.set_viewport(480, 620, 1.5)
     push = MagicMock()
     stop = await surface.screencast(push)
     try:
         on_frame = cdp.on.call_args.args[1]
-        for height in (450, 930):
+        for session_id, height in enumerate((450, 930, 930), start=1):
             buf = io.BytesIO()
             with Image.new("RGB", (720, height)) as jpeg:
                 jpeg.save(buf, format="JPEG")
             await on_frame({
                 "data": base64.b64encode(buf.getvalue()).decode(),
-                "sessionId": height,
+                "sessionId": session_id,
                 "metadata": {"deviceWidth": 480, "deviceHeight": 620},
             })
         push.assert_called_once()
@@ -84,8 +122,8 @@ async def test_screencast_discards_stale_bitmap_with_new_viewport_metadata(tmp_p
         assert (frame.width, frame.height) == (480, 620)
         with Image.open(io.BytesIO(base64.b64decode(frame.jpeg))) as jpeg:
             assert jpeg.size == (720, 930)
-        for height in (450, 930):
-            cdp.send.assert_any_await("Page.screencastFrameAck", {"sessionId": height})
+        for session_id in (1, 2, 3):
+            cdp.send.assert_any_await("Page.screencastFrameAck", {"sessionId": session_id})
     finally:
         await stop()
 
@@ -127,22 +165,35 @@ async def test_pane_size_reaches_the_browser_window_only(live_runtime, monkeypat
     assert pages[0].sizes == [(480, 620, 1.5)]
 
 
-@pytest.mark.asyncio
-async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(tmp_path, monkeypatch) -> None:
+@pytest.fixture()
+async def chromium():
     pytest.importorskip("playwright.async_api")
     from playwright.async_api import async_playwright
-    from sandbox_worker.browser import CHROMIUM_ARGS, PlaywrightPage
+    from sandbox_worker.browser import CHROMIUM_ARGS
 
+    async with async_playwright() as pw:
+        try:
+            browser = await pw.chromium.launch(headless=True, args=list(CHROMIUM_ARGS))
+        except Exception as exc:  # noqa: BLE001 — environment may lack browser bits
+            pytest.skip(f"Chromium unavailable: {exc}")
+        try:
+            yield browser
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
+    tmp_path, monkeypatch, chromium,
+) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    context = await chromium.new_context(
+        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+    )
+    page = await context.new_page()
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
     try:
-        pw = await async_playwright().start()
-        browser = await pw.chromium.launch(headless=True, args=list(CHROMIUM_ARGS))
-    except Exception as exc:  # noqa: BLE001 — environment may lack browser bits
-        pytest.skip(f"Chromium unavailable: {exc}")
-    try:
-        context = await browser.new_context(
-            viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
-        )
-        page = await context.new_page()
         await page.set_content(
             "<style>html{background:navy}#w{display:none}"
             "@media(max-width:600px){html{background:lime}#w{display:block}}"
@@ -153,7 +204,6 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(tmp_path,
             "<section><button aria-label='visible target' onclick='this.dataset.hit=1'>"
             "</button></section>"
         )
-        surface = PlaywrightPage(context, page, tmp_path / "profile")
         monkeypatch.setattr(runtime_mod, "STREAM_CHECK_S", 5)
         monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
         runtime = SandboxRuntime()
@@ -170,8 +220,7 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(tmp_path,
         await runtime.apply_input(
             sess, viewport_width=480, viewport_height=620, device_pixel_ratio=1.5,
         )
-        assert page.viewport_size == {"width": 480, "height": 620}
-        assert await page.evaluate("innerWidth") == 480
+        assert await page.evaluate("[innerWidth, innerHeight]") == [480, 620]
         assert await page.evaluate("devicePixelRatio") == 1.5
         assert await page.is_visible("#w")  # the site's own narrow layout
         resized = await asyncio.wait_for(frame, 1)
@@ -204,8 +253,25 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(tmp_path,
         )
         await runtime.apply_input(sess, click_x=60, click_y=60)
         assert await page.get_attribute("button", "data-hit") == "1"
-        await stream.aclose()
         await page.evaluate("scrollTo(0, 0)")
+
+        frame = asyncio.create_task(anext(stream))
+        await runtime.apply_input(
+            sess, viewport_width=900, viewport_height=700, device_pixel_ratio=1.5,
+        )
+        async with asyncio.timeout(2):
+            resized = await frame
+            while True:
+                await runtime.apply_input(sess, frame_ack=resized["frame_id"])
+                if resized["width"] == 900:
+                    break
+                resized = await anext(stream)
+        assert resized["height"] == 700
+        with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
+            assert jpeg.size == (1350, 1050)
+            red, green, blue = jpeg.getpixel((1300, 40))
+            assert blue > 100 and green < 20 and red < 20
+        await stream.aclose()
 
         assert await surface.set_viewport(10, 99_999) == (VIEWPORT_MIN[0], VIEWPORT_MAX[1])
         await surface.set_viewport(900, 700, 1.5)
@@ -216,11 +282,180 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(tmp_path,
             await asyncio.sleep(0.1)
         await asyncio.sleep(0.3)
         assert surface._page is not page
-        assert surface._page.viewport_size == {"width": 900, "height": 700}
+        assert await surface._page.evaluate("[innerWidth, innerHeight]") == [900, 700]
         assert await surface._page.evaluate("devicePixelRatio") == 1.5
     finally:
-        await browser.close()
-        await pw.stop()
+        await surface.close()
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_failed_tab_fit_keeps_png_click_coordinates(
+    tmp_path, monkeypatch, chromium,
+) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    context = await chromium.new_context(
+        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+    )
+    page = await context.new_page()
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
+    try:
+        await surface.set_viewport(720, 700, 1.5)
+        fit = AsyncMock(side_effect=RuntimeError("tab fit failed"))
+        monkeypatch.setattr(surface, "_fit_page", fit)
+        tab = await context.new_page()
+        await tab.set_content(
+            "<button style='position:absolute;left:930px;top:580px;width:60px;height:40px;"
+            "background:red;border:0' onclick='this.dataset.hit=1'></button>"
+        )
+        assert await tab.evaluate("[innerWidth, innerHeight, devicePixelRatio]") == [1280, 800, 1]
+
+        monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
+        runtime = SandboxRuntime()
+        win = SandboxWindow("win_browser", "browser", surface)
+        sess = SandboxSession(
+            "sbox_fit", "school-a", "member-a", "_norun", "ws", tab.url, "", "", b"",
+            time.time(), windows=[win], focused_id=win.window_id,
+        )
+        runtime._sessions[sess.session_id] = sess
+        async with aclosing(runtime.stream(sess)) as stream:
+            assert await asyncio.wait_for(anext(stream), 2) == {
+                "poll": True, "window_id": win.window_id,
+            }
+            fit.assert_awaited_once_with(tab)
+            assert (await runtime.pane_meta(sess))["mime"] == "image/png"
+            x, y = 960, 600
+            with Image.open(io.BytesIO(sess.screenshot_png)) as png:
+                assert png.size == (1280, 800)
+                assert png.getpixel((x, y)) == (255, 0, 0)
+            await runtime.apply_input(sess, click_x=x, click_y=y)
+            assert await tab.get_attribute("button", "data-hit") == "1"
+    finally:
+        await surface.close()
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_png_does_not_change_live_frame_coordinates(tmp_path, chromium) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    context = await chromium.new_context(
+        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+    )
+    page = await context.new_page()
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
+    try:
+        await page.set_content(
+            "<style>body{height:1500px;background:#000}"
+            "button{position:absolute;left:330px;top:800px;width:60px;height:40px;"
+            "background:red;border:0}button[data-hit]{background:lime}"
+            "i{position:fixed;width:20px;height:20px;background:white;"
+            "animation:repaint .5s linear infinite alternate}"
+            "@keyframes repaint{to{background:blue}}</style>"
+            "<i></i><button onclick='this.dataset.hit=1'></button>"
+        )
+        await surface.set_viewport(480, 620, 1.5)
+        await page.evaluate("scrollTo(0, 500)")
+        frames = asyncio.Queue()
+        stop = await surface.screencast(frames.put_nowait)
+        try:
+            first = await asyncio.wait_for(frames.get(), 2)
+            assert (first.width, first.height) == (480, 620)
+            for _ in range(3):
+                with Image.open(io.BytesIO(await surface.screenshot_png())) as png:
+                    assert png.size == (480, 620)
+                    assert png.getpixel((360, 320)) == (255, 0, 0)
+            assert not frames.empty()
+            assert await page.evaluate("devicePixelRatio") == 1.5
+
+            clicked = False
+            async with asyncio.timeout(3):
+                while True:
+                    frame = await frames.get()
+                    assert (frame.width, frame.height) == (480, 620)
+                    with Image.open(io.BytesIO(base64.b64decode(frame.jpeg))) as jpeg:
+                        assert jpeg.size == (720, 930)
+                        red, green, blue = jpeg.getpixel((540, 480))
+                    if not clicked and red > 235 and green < 20 and blue < 20:
+                        await surface.click(360, 320, settle=False)
+                        clicked = True
+                    if clicked and green > 235 and red < 20 and blue < 20:
+                        break
+            assert await page.get_attribute("button", "data-hit") == "1"
+        finally:
+            await stop()
+    finally:
+        await surface.close()
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_screencast_accepts_float32_dpr_rounding(tmp_path, chromium) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    context = await chromium.new_context(
+        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+    )
+    page = await context.new_page()
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
+    dpr = 1.100000023841858
+    try:
+        await surface.set_viewport(1000, 700, dpr)
+        assert await page.evaluate("[innerWidth, innerHeight, devicePixelRatio]") == [
+            1000, 700, dpr,
+        ]
+        frames = asyncio.Queue()
+        stop = await surface.screencast(frames.put_nowait)
+        try:
+            frame = await asyncio.wait_for(frames.get(), 2)
+            assert (frame.width, frame.height) == (1000, 700)
+            with Image.open(io.BytesIO(base64.b64decode(frame.jpeg))) as jpeg:
+                assert jpeg.size == (1100, 770)
+        finally:
+            await stop()
+    finally:
+        await surface.close()
+
+
+@pytest.mark.asyncio
+async def test_real_chromium_displays_follow_each_desk_dpr_and_are_removed(tmp_path, chromium) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    cdp = await chromium.new_browser_cdp_session()
+    original = await cdp.send("Emulation.getScreenInfos")
+    desks = []
+    try:
+        for i in range(2):
+            context = await chromium.new_context(
+                viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+            )
+            page = await context.new_page()
+            desks.append((PlaywrightPage(context, page, tmp_path / f"profile-{i}"), page))
+        (left, left_page), (right, right_page) = desks
+        await asyncio.gather(
+            left.set_viewport(481, 621, 1.5),
+            right.set_viewport(481, 621, 2),
+        )
+        for surface, page, scale in (
+            (left, left_page, 1.1),
+            (left, left_page, 1.75),
+            (left, left_page, 1),
+            (right, right_page, 2),
+        ):
+            await surface.set_viewport(481, 621, scale)
+            assert await page.evaluate("devicePixelRatio") == pytest.approx(scale)
+            frames = asyncio.Queue()
+            stop = await surface.screencast(frames.put_nowait)
+            try:
+                frame = await asyncio.wait_for(frames.get(), 2)
+                assert (frame.width, frame.height) == (481, 621)
+                with Image.open(io.BytesIO(base64.b64decode(frame.jpeg))) as jpeg:
+                    assert jpeg.size == (math.ceil(481 * scale), math.ceil(621 * scale))
+            finally:
+                await stop()
+    finally:
+        for surface, _page in desks:
+            await surface.close()
+        assert await cdp.send("Emulation.getScreenInfos") == original
+        await cdp.detach()
 
 
 @pytest.mark.asyncio

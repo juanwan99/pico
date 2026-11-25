@@ -8,6 +8,8 @@ Upstream = Playwright context ``page`` / page ``dialog`` events, ``go_back``,
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import os
 import re
 import sys
@@ -16,6 +18,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services"))
@@ -100,7 +103,21 @@ async def test_committed_navigation_survives_dom_timeout(
     page.aria_snapshot = AsyncMock(return_value='- heading "慢页面"')
     page.frames = [page]
     page.evaluate = AsyncMock(return_value=[])
-    page.screenshot = AsyncMock(return_value=browser_mod.PNG_MAGIC)
+    png = io.BytesIO()
+    Image.new("RGB", (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)).save(png, format="PNG")
+    capture = AsyncMock(return_value={"data": base64.b64encode(png.getvalue()).decode()})
+
+    async def send(method, *args):
+        if method == "Page.getLayoutMetrics":
+            return {
+                "cssLayoutViewport": {
+                    "clientWidth": VIEWPORT_WIDTH,
+                    "clientHeight": VIEWPORT_HEIGHT,
+                },
+            }
+        return await capture(method, *args)
+
+    context.new_cdp_session = AsyncMock(return_value=Mock(send=send))
     page.is_closed.return_value = False
     context.storage_state = AsyncMock(return_value={})
 
@@ -127,7 +144,7 @@ async def test_committed_navigation_survives_dom_timeout(
         async def wait_forever(*args, **kwargs):
             await asyncio.Future()
 
-        page.screenshot.side_effect = wait_forever
+        capture.side_effect = wait_forever
         page.aria_snapshot.side_effect = wait_forever
         context.storage_state.side_effect = wait_forever
         monkeypatch.setattr(runtime_mod, "LOADING_SCREENSHOT_TIMEOUT_S", 0)
