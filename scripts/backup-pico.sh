@@ -145,7 +145,7 @@ cmd_run() {
   flock -n 9 || fail "another run holds the lock"
   curl -sS -o /dev/null --max-time 8 -x "$PROXY" https://www.googleapis.com/ || fail "proxy ${PROXY} cannot reach googleapis"
   local stamp dir
-  # A run killed by the systemd timeout never reaches its EXIT trap: drop what it left (we hold the lock).
+  # Packaging-stage failures (no trap yet) and SIGKILL leave a stamp dir in $WORK: drop it (we hold the lock; KEEP_DIR untouched).
   find "$WORK" -mindepth 1 -maxdepth 1 -type d -name '20*' -exec rm -rf {} +
   stamp="$(date +%Y%m%dT%H%M%S%z)"
   dir="$WORK/$stamp"
