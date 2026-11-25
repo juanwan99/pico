@@ -47,6 +47,13 @@ def _call_args(src: str, start: int) -> list[str]:
                 i += 1
             elif ch == quote:
                 quote = ""
+        elif src.startswith("//", i):
+            # Comments are not arguments; an apostrophe in one must not open a quote.
+            i = src.index("\n", i)
+            continue
+        elif src.startswith("/*", i):
+            i = src.index("*/", i) + 2
+            continue
         elif ch in "\"'`":
             quote = ch
             cur.append(ch)
