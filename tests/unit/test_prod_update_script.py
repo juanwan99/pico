@@ -12,6 +12,8 @@ SCRIPT = ROOT / "scripts" / "prod-update.sh"
 IMPL = ROOT / "scripts" / "prod-update.impl.sh"
 SMOKE = ROOT / "scripts" / "e2e-smoke.sh"
 EDU_LOCK = ROOT / "scripts" / "edu-accept-lock.sh"
+FIRST_SCREEN = ROOT / "scripts" / "pico-first-screen-assets.sh"
+RELIABILITY = ROOT / "tests" / "acceptance" / "reliability-live.sh"
 
 
 # Windows: the `bash` on PATH is usually the WSL launcher, which cannot see C:/.
@@ -49,6 +51,7 @@ def _production_checkout(tmp_path: Path) -> tuple[Path, str]:
     shutil.copy2(IMPL, source / "scripts" / "prod-update.impl.sh")
     shutil.copy2(SMOKE, source / "scripts" / "e2e-smoke.sh")
     shutil.copy2(EDU_LOCK, source / "scripts" / "edu-accept-lock.sh")
+    shutil.copy2(FIRST_SCREEN, source / "scripts" / FIRST_SCREEN.name)
     (source / "docker-compose.host.yml").write_text("services: {}\n")
     _run("git", "add", ".", cwd=source)
     _run("git", "commit", "-m", "fixture", cwd=source)
@@ -74,6 +77,7 @@ def _fake_runtime(
     inflight_health_polls: int = 0,
     edu_gw_down: bool = False,
     smoke_models_http: str = "200",
+    first_asset_fails: bool = False,
 ) -> Path:
     """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w).
 
@@ -101,6 +105,8 @@ def _fake_runtime(
         (bin_dir / "volume-rm-fail").write_text("1\n")
     if edu_gw_down:
         (bin_dir / "edu-gw-down").write_text("1\n")
+    if first_asset_fails:
+        (bin_dir / "first-asset-fails").touch()
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
         'here="$(cd "$(dirname "$0")" && pwd)"\n'
@@ -164,16 +170,42 @@ def _fake_runtime(
     (bin_dir / "curl").write_text(
         "#!/usr/bin/env bash\n"
         "out_file=\"\"\n"
+        "format=\"\"\n"
         "args=(\"$@\")\n"
         "i=0\n"
         "while [ \"$i\" -lt \"${#args[@]}\" ]; do\n"
-        "  if [ \"${args[$i]}\" = \"-o\" ]; then\n"
-        "    i=$((i + 1))\n"
-        "    out_file=\"${args[$i]}\"\n"
-        "  fi\n"
+        '  case "${args[$i]}" in\n'
+        '    -o|--output) i=$((i + 1)); out_file="${args[$i]}" ;;\n'
+        '    --write-out) i=$((i + 1)); format="${args[$i]}" ;;\n'
+        '  esac\n'
         "  i=$((i + 1))\n"
         "done\n"
+        'here="$(dirname "$0")"\n'
+        'url="${@: -1}"\n'
+        'case "$url:$format" in\n'
+        '  https://pico.aivia.asia/login:*|https://pico.aivia.asia/assets/*:*|\\\n'
+        '  https://pico.aivia.asia/api/pico/tip:*time_total*)\n'
+        '    printf "%s\n" "$*" >>"$here/public-requests" ;;\n'
+        'esac\n'
         "case \"${*: -1}\" in\n"
+        '  https://pico.aivia.asia/login)\n'
+        '    cat >"$out_file" <<\'HTML\'\n'
+        '<script src="/assets/main.abc.js"></script>\n'
+        '<script data-src="/assets/legacy.def.js"></script>\n'
+        '<link rel="modulepreload" href="/assets/main.abc.js">\n'
+        '<link rel="stylesheet" href="/assets/main.ghi.css">\n'
+        'HTML\n'
+        "    printf '200 0.1' ;;\n"
+        '  https://pico.aivia.asia/assets/*)\n'
+        '    if [[ "$url" == */main.abc.js && -f "$here/first-asset-fails" ]]; then exit 28; fi\n'
+        '    cached=MISS\n'
+        '    state="$here/${url##*/}.cache"\n'
+        '    if [ -f "$state" ]; then cached=HIT; fi\n'
+        "    if [[ \"$*\" == *'Accept-Encoding: gzip, deflate, br, zstd'* ]]; then\n"
+        '      touch "$state"\n'
+        '    fi\n'
+        "    printf '200\\tapplication/octet-stream'\n"
+        '    if [[ "$format" == *%header* ]]; then printf \'\\t%s\' "$cached"; fi ;;\n'
         "  */health)\n"
         "    here=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\n"
         "    inflight_field=\"\"\n"
@@ -211,7 +243,7 @@ def _fake_runtime(
         # ---- E2E smoke gate endpoints (scripts/e2e-smoke.sh --prod) ----
         + "  */api/pico/tip)\n"
         "    [ -n \"$out_file\" ] && printf '{\"ok\":true,\"git_sha\":\"%s\"}' \"$PICO_GIT_SHA\" >\"$out_file\"\n"
-        "    printf '200' ;;\n"
+        "    if [[ \"$format\" == *time_total* ]]; then printf '200 0.1'; else printf '200'; fi ;;\n"
         "  */api/config)\n"
         "    [ -n \"$out_file\" ] && printf '{\"appTitle\":\"Pico\"}' >\"$out_file\"\n"
         "    printf '200' ;;\n"
@@ -263,7 +295,7 @@ def _advance_origin_main(tmp_path: Path, production: Path) -> str:
 
 
 def _run_prod_update(
-    production: Path, sha: str, bin_dir: Path, *, extra_env: dict[str, str] | None = None
+    production: Path, sha: str, bin_dir: Path
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [BASH, _bash_path(production / "scripts" / "prod-update.sh")],
@@ -278,7 +310,6 @@ def _run_prod_update(
             "PICO_EDU_ACCEPT_LOCK": _bash_path(production.parent / "no-edu-core" / "acceptance.lock"),
             # E2E smoke gate: the host reads PICO_OPENAI_PROXY_KEY from /opt/pico/.env.
             "PICO_SMOKE_KEY": "smoke-fixture-key",
-            **(extra_env or {}),
         },
         capture_output=True,
         text=True,
@@ -312,6 +343,62 @@ def test_prod_update_deploys_exact_clean_main_sha(tmp_path: Path) -> None:
     assert "smoke 12/12 PASS (prod)" in result.stdout
     assert "[pico] e2e smoke ok" in result.stdout
     assert "[pico] done" in result.stdout
+
+
+@pytest.mark.parametrize("first_asset_fails", [False, True])
+def test_prod_update_warms_first_screen_for_first_acceptance(
+    tmp_path: Path, first_asset_fails: bool
+) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, first_asset_fails=first_asset_fails)
+    deploy = _run_prod_update(production, sha, bin_dir)
+    expected_count = 2 if first_asset_fails else 3
+    expected_status = 1 if first_asset_fails else 0
+    assert deploy.returncode == expected_status, deploy.stderr
+    assert "[pico] e2e smoke ok" in deploy.stdout
+    assert f"Edge cache warmup fetched {expected_count}/3 bundles" in deploy.stdout
+    public_requests = bin_dir / "public-requests"
+    deploy_requests = public_requests.read_text().splitlines()
+    asset_urls = [
+        "https://pico.aivia.asia/assets/main.abc.js",
+        "https://pico.aivia.asia/assets/legacy.def.js",
+        "https://pico.aivia.asia/assets/main.ghi.css",
+    ]
+    assert [request.rsplit(" ", 1)[1] for request in deploy_requests] == [
+        "https://pico.aivia.asia/login",
+        *asset_urls,
+    ]
+    assert "--max-time 10 " in deploy_requests[0]
+    assert all("--proxy http://127.0.0.1:7893 " in request for request in deploy_requests)
+    for request in deploy_requests[1:]:
+        assert "Accept-Encoding: gzip, deflate, br, zstd" in request
+        assert "--compressed" not in request
+
+    acceptance = subprocess.run(
+        [BASH, _bash_path(RELIABILITY)],
+        env={
+            **os.environ,
+            "PATH": f"{_bash_path(bin_dir)}{os.pathsep}{os.environ['PATH']}",
+            "PICO_PUBLIC_BASE": "https://pico.aivia.asia",
+            "PICO_GIT_SHA": sha,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert acceptance.returncode == expected_status, acceptance.stderr
+    assert f"Edge cache served {expected_count}/3 bundles" in acceptance.stdout
+    acceptance_requests = public_requests.read_text().splitlines()[len(deploy_requests):]
+    assert [request.rsplit(" ", 1)[1] for request in acceptance_requests] == [
+        "https://pico.aivia.asia/login",
+        "https://pico.aivia.asia/api/pico/tip",
+        *asset_urls,
+    ]
+    assert all("--max-time 3 " in request for request in acceptance_requests[:2])
+    if first_asset_fails:
+        assert "FAIL edge cache /assets/main.abc.js" in deploy.stderr
+        assert "FAIL edge cache /assets/main.abc.js" in acceptance.stderr
+        assert "[pico] done" not in deploy.stdout
 
 
 def test_prod_update_fails_when_e2e_smoke_fails(tmp_path: Path) -> None:

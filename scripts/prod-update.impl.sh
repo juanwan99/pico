@@ -550,6 +550,17 @@ if ! PICO_SMOKE_EXPECT_SHA="$CURRENT_SHA" bash "$SMOKE" --prod; then
 fi
 echo "[pico] e2e smoke ok"
 
+echo "[pico] edge cache warmup:"
+(
+  . "$ROOT/scripts/pico-first-screen-assets.sh"
+  public_login="$(mktemp)"
+  trap 'rm -f "$public_login"' EXIT
+  public_base=https://pico.aivia.asia
+  proxy_args=(--proxy http://127.0.0.1:7893)
+  get_public_page "$public_base" /login "$public_login" 10 "${proxy_args[@]}"
+  fetch_first_screen_bundles "$public_base" "$public_login" warm "${proxy_args[@]}"
+)
+
 # Long-run continuity (edu-core#5337 · long-haul E1 resume / E3 stop): the last
 # 7 days of the ledger. Report only — never fails the deploy.
 echo "[pico] run continuity (7d):"
