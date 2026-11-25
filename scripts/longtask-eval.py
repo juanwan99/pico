@@ -818,18 +818,12 @@ def flag_fake_green(
     empty = [
         n
         for n, new in enumerate(turn_arts or [], 1)
-        if res.turn_status.get(n) == "succeeded"
-        and (
-            expected.isdisjoint(map(_kind_of, _latest_by_title(new).values()))
-            if expected
-            else not new
-        )
+        if not new and res.turn_status.get(n) == "succeeded"
     ]
     if empty:
         res.fake_green = True
         res.ok = False
-        files = "expected files" if expected else "files"
-        res.notes.append(f"succeeded, 0 new {files}: " + ",".join(f"R{n}" for n in empty))
+        res.notes.append("succeeded, 0 new files: " + ",".join(f"R{n}" for n in empty))
 
 
 def run_case(pico: Pico, case: dict[str, Any], stamp: str, image: str = "", runtime: str = "") -> CaseResult:

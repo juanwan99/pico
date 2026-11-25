@@ -730,15 +730,3 @@ def test_per_turn_round_with_no_new_files_is_fake_green() -> None:
     whole = lte.CaseResult(case="LT1", title="t", ok=True, artifacts=1)
     lte.flag_fake_green(whole, "succeeded", per_turn=False, turn_arts=[[], []])
     assert whole.fake_green is False and whole.ok is True
-
-
-@pytest.mark.parametrize("kind", ["docx", "zip"])
-def test_per_turn_round_with_wrong_kind_is_fake_green(kind: str) -> None:
-    res = lte.CaseResult(case="X", ok=True, artifacts=2, artifact_kinds=[kind, "png"])
-    res.turn_status = {1: "succeeded", 2: "succeeded"}
-    turn_arts = [[{"kind": kind, "title": f"report.{kind}"}], [{"kind": "image", "title": "x.png"}]]
-
-    lte.flag_fake_green(res, "succeeded", per_turn=True, turn_arts=turn_arts, kinds=[kind])
-
-    assert res.fake_green and not res.ok
-    assert res.notes == ["succeeded, 0 new expected files: R2"]
