@@ -86,7 +86,6 @@ async function main() {
     headless: true,
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
-  const fillers = [];
   try {
     const context = await browser.newContext({
       viewport: { width: 1280, height: 800 },
@@ -148,43 +147,56 @@ async function main() {
     report.s13 = 'Y';
     report.s13_status = shotPayload.status;
 
-    const psBeforeFill = sandboxPs();
-    fs.writeFileSync(path.join(args.out, 'S14-ps-before.txt'), psBeforeFill);
-    // The teacher from S13 already holds one of the ten desks.
-    for (let i = 0; i < 9; i++) {
-      const raw = ecs(
-        `curl -sS -m 40 -X POST http://127.0.0.1:18767/v1/internal/sessions/open -H 'content-type: application/json' -d '{"school_id":"cap","membership_id":"cap-${i}","url":"https://example.com/"}'`,
-      );
-      fillers.push(raw);
-      if (!JSON.parse(raw).session_id) {
-        throw new Error(`S14: desk ${i + 2} did not open: ${raw.slice(0, 220)}`);
-      }
-    }
-    const eleventh = ecs(
-      `curl -sS -m 20 -X POST http://127.0.0.1:18767/v1/internal/sessions/open -H 'content-type: application/json' -d '{"school_id":"cap","membership_id":"cap-eleventh","url":"https://example.com/"}'`,
-    );
-    fs.writeFileSync(path.join(args.out, 'S14-eleventh.json'), `${eleventh}\n`);
-    const free = ecs('free -h');
-    fs.writeFileSync(path.join(args.out, 'S14-free.txt'), free);
-    if (JSON.parse(eleventh).detail?.code !== 'sandbox.quota') {
-      throw new Error(`S14: eleventh desk not refused: ${eleventh.slice(0, 220)}`);
-    }
-    report.s14 = 'Y';
-
-    const psBefore = sandboxPs();
-    fs.writeFileSync(path.join(args.out, 'S15-ps-before.txt'), psBefore);
-    const beforeN = Number((psBefore.match(/COUNT=(\d+)/) || [0, '0'])[1]);
-    for (let i = 0; i < fillers.length; i++) {
-      try {
-        const sid = JSON.parse(fillers[i] || '{}').session_id;
-        if (!sid) continue;
-        ecs(
-          `curl -sS -m 10 -X POST 'http://127.0.0.1:18767/v1/internal/sessions/${sid}/destroy?school_id=cap&membership_id=cap-${i}'`,
+    const fillers = [];
+    const cleanupErrors = [];
+    let beforeN;
+    try {
+      const psBeforeFill = sandboxPs();
+      fs.writeFileSync(path.join(args.out, 'S14-ps-before.txt'), psBeforeFill);
+      // The teacher from S13 already holds one of the ten desks.
+      for (let i = 0; i < 9; i++) {
+        const member = `cap-${i}`;
+        const raw = ecs(
+          `curl -sS -m 40 -X POST http://127.0.0.1:18767/v1/internal/sessions/open -H 'content-type: application/json' -d '{"school_id":"cap","membership_id":"${member}","url":"https://example.com/"}'`,
         );
-      } catch {
-        /* continue */
+        const sid = JSON.parse(raw).session_id;
+        if (!sid) {
+          throw new Error(`S14: desk ${i + 2} did not open: ${raw.slice(0, 220)}`);
+        }
+        fillers.push({ sid, member });
+      }
+      const eleventh = ecs(
+        `curl -sS -m 20 -X POST http://127.0.0.1:18767/v1/internal/sessions/open -H 'content-type: application/json' -d '{"school_id":"cap","membership_id":"cap-eleventh","url":"https://example.com/"}'`,
+      );
+      const extra = JSON.parse(eleventh);
+      if (extra.session_id) fillers.push({ sid: extra.session_id, member: 'cap-eleventh' });
+      fs.writeFileSync(path.join(args.out, 'S14-eleventh.json'), `${eleventh}\n`);
+      const free = ecs('free -h');
+      fs.writeFileSync(path.join(args.out, 'S14-free.txt'), free);
+      if (extra.detail?.code !== 'sandbox.quota') {
+        throw new Error(`S14: eleventh desk not refused: ${eleventh.slice(0, 220)}`);
+      }
+      report.s14 = 'Y';
+
+      const psBefore = sandboxPs();
+      fs.writeFileSync(path.join(args.out, 'S15-ps-before.txt'), psBefore);
+      beforeN = Number((psBefore.match(/COUNT=(\d+)/) || [0, '0'])[1]);
+    } finally {
+      for (const { sid, member } of fillers) {
+        try {
+          const raw = ecs(
+            `curl -fsS -m 10 -X POST 'http://127.0.0.1:18767/v1/internal/sessions/${sid}/destroy?school_id=cap&membership_id=${member}'`,
+          );
+          if (!JSON.parse(raw).destroyed) throw new Error(raw.slice(0, 220));
+        } catch (err) {
+          cleanupErrors.push(`${sid}: ${err.message || err}`);
+        }
+      }
+      if (cleanupErrors.length) {
+        report.s15_cleanup_errors = cleanupErrors;
       }
     }
+    if (cleanupErrors.length) throw new Error('S15: failed to destroy all fill desks');
     await page.waitForTimeout(1500);
     const psAfter = sandboxPs();
     fs.writeFileSync(path.join(args.out, 'S15-ps-after.txt'), psAfter);
