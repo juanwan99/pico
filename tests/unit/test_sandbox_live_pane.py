@@ -1,7 +1,7 @@
 """Live pane (#1215): Chromium pushes JPEG frames on repaint (CDP screencast).
 
-Upstream = Chromium `Page.startScreencast` through Playwright 1.52
-`new_cdp_session` — the same mechanism Steel / browserless live view use.
+Upstream = Chromium `Page.startScreencast` through Playwright `new_cdp_session`,
+the same mechanism Steel / browserless live view use.
 Pico only wires sidecar → pico-api → LibreChat → pane. Office / files windows
 keep polling the PNG.
 """
@@ -81,14 +81,10 @@ class CastSurface(StillSurface):
         self.push = None
         self.casting = 0
         self.stops = 0
-        self.acks: list[str] = []
         self.saves = 0
 
     def frame(self, jpeg: str) -> None:
-        async def ack() -> None:
-            self.acks.append(jpeg)
-
-        self.push(ScreencastFrame(jpeg, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, ack))
+        self.push(ScreencastFrame(jpeg, VIEWPORT_WIDTH, VIEWPORT_HEIGHT))
 
     async def screencast(self, push):
         self.push = push
@@ -169,22 +165,62 @@ async def test_frames_flow_and_stream_ends_when_sandbox_is_destroyed(live_runtim
 
 
 @pytest.mark.asyncio
-async def test_slow_viewer_gets_latest_frame_not_a_backlog(live_runtime) -> None:
+async def test_slow_viewer_receives_final_frame_after_page_stops_repainting(live_runtime) -> None:
     runtime, pages = live_runtime
     sess = await _open(runtime)
     agen = runtime.stream(sess)
     first = await _next(agen)
+    pages[0].frame("SECOND")
+    assert (await _next(agen))["jpeg"] == "SECOND"
     for n in range(5):
         pages[0].frame(f"F{n}")
-    assert await _next(agen) == {"ping": True}
-    assert pages[0].acks == ["F0", "F1", "F2", "F3"]
-    assert list(sess.frame_acks) == [first["frame_id"]]
     await runtime.apply_input(sess, frame_ack=first["frame_id"])
     assert (await _next(agen))["jpeg"] == "F4"
-    assert pages[0].acks[-1] == "FIRST"
     await agen.aclose()
     assert not sess.frame_acks and not sess.live_panes
     assert pages[0].stops == 1
+
+
+@pytest.mark.asyncio
+async def test_stream_has_at_most_two_unconfirmed_frames(live_runtime, monkeypatch) -> None:
+    runtime, pages = live_runtime
+    monkeypatch.setattr(runtime_mod, "STREAM_PING_S", 5)
+    sess = await _open(runtime)
+    agen = runtime.stream(sess)
+    first = await _next(agen)
+    pages[0].frame("SECOND")
+    second = await _next(agen)
+    pages[0].frame("THIRD")
+    third = asyncio.create_task(_next(agen))
+    done, _ = await asyncio.wait({third}, timeout=0.05)
+    assert not done
+    assert set(sess.frame_acks) == {first["frame_id"], second["frame_id"]}
+    # POST responses and arrivals can be out of order.
+    await runtime.apply_input(sess, frame_ack=second["frame_id"])
+    received = await third
+    assert received["jpeg"] == "THIRD"
+    assert set(sess.frame_acks) == {first["frame_id"], received["frame_id"]}
+    await agen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_lost_ack_expires_within_the_ping_interval(live_runtime, monkeypatch) -> None:
+    runtime, pages = live_runtime
+    monkeypatch.setattr(runtime_mod, "STREAM_CHECK_S", 5)
+    sess = await _open(runtime)
+    agen = runtime.stream(sess)
+    first = await _next(agen)
+    pages[0].frame("SECOND")
+    await _next(agen)
+    pages[0].frame("STALE")
+    pages[0].frame("FINAL")
+    # No acknowledgements or further repaints. The timeout alone opens a slot.
+    delivered = await asyncio.wait_for(anext(agen), runtime_mod.STREAM_PING_S + 0.1)
+    assert delivered["jpeg"] == "FINAL"
+    assert first["frame_id"] not in sess.frame_acks
+    await runtime.apply_input(sess, frame_ack=first["frame_id"])
+    assert delivered["frame_id"] in sess.frame_acks
+    await agen.aclose()
 
 
 @pytest.mark.asyncio
@@ -326,7 +362,6 @@ async def test_real_chromium_pushes_frames_on_change_and_none_when_still() -> No
 
         def push(frame: ScreencastFrame) -> None:
             frames.append(frame.jpeg)
-            asyncio.create_task(frame.ack())
 
         stop = await surface.screencast(push)
         await asyncio.sleep(1.5)

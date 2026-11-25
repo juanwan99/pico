@@ -102,9 +102,9 @@ key 只显示 sha256 的前 8 位。进程重启后清零（`since` 是起点）
 
 ## 沙箱实时画面（pico#1446）
 
-Playwright 1.63.0 通过 Chromium CDP 取 JPEG。尺寸仍按 CSS 像素传递，`Emulation.setDeviceMetricsOverride` 同时设置 DPR 和捕获视口，`Page.startScreencast` 的像素上限按 DPR 放大。浏览器按 CSS 尺寸摆放画面和换算点击坐标。尺寸更改会重新启动捕获，静止网页也会送新帧。[Chromium 固定版本的设备模拟实现](https://github.com/chromium/chromium/blob/153.0.8010.12/content/browser/devtools/protocol/emulation_handler.cc)
+Playwright 1.63.0 通过 Chromium CDP 取 JPEG。尺寸按 CSS 像素传递，`Emulation.setDeviceMetricsOverride` 同时设置 DPR 和捕获视口，`Page.startScreencast` 的像素上限按 DPR 放大。浏览器按 CSS 尺寸摆放画面和换算点击坐标。更改尺寸前停用旧捕获，按新尺寸启动捕获，静止网页也会送新帧。[Chromium 固定版本的设备模拟实现](https://github.com/chromium/chromium/blob/153.0.8010.12/content/browser/devtools/protocol/emulation_handler.cc)
 
-沿用 SSE 和输入代理。每路 SSE 最多一帧等待客户端确认，worker 只留最新一帧待发。客户端解码后经输入口确认，worker 再向 CDP 确认该帧。未发送就被替换的帧在 worker 内释放。这与 noVNC 基本模式在处理更新后再请求下一次更新的做法一致。实时输入响应只读网址、标题和输入框标记，登录保存沿用 15 秒节流。Office、老师盘和推帧不可用时继续轮询 PNG。[noVNC 的 RFB 消息](https://github.com/novnc/noVNC/blob/master/docs/rfb_notes)
+沿用 SSE 和输入代理。Chromium 的帧到达 worker 就向 CDP 确认，worker 只留最新一帧待发。每路 SSE 有两个待确认名额，客户端解码后按顺序发起确认请求，同时继续读流。确认丢失时，发送满 15 秒的名额释放，有待发帧就发送最新一帧。静止前的最后一帧可以在名额释放后送达。实时输入响应只读网址、标题和输入框标记，登录保存沿用 15 秒节流。Office、老师盘和推帧不可用时继续轮询 PNG。[CDP Page 协议](https://chromedevtools.github.io/devtools-protocol/tot/Page/) · [noVNC 的 RFB 消息](https://github.com/novnc/noVNC/blob/master/docs/rfb_notes)
 
 ### JPEG 测量
 
@@ -115,7 +115,18 @@ Playwright 1.63.0 通过 Chromium CDP 取 JPEG。尺寸仍按 CSS 像素传递�
 | 1280×800 表格 | 191.7 KiB / 4.56 | 223.4 KiB / 3.47 | 251.4 KiB / 2.83 | 286.7 KiB / 2.23 |
 | 1920×1080 带图表 | 474.2 KiB / 4.18 | 562.0 KiB / 3.21 | 636.5 KiB / 2.63 | 741.8 KiB / 2.08 |
 
-质量取 80，小字误差比 70 降约 23–24%，比 85 每帧少传 28–75 KiB。按 #1445 的 5.5 Mbps 出口和 194 ms 往返，562 KiB 的单帧仅传输加往返就约 1.03 秒。现网点击和最大化的端到端时延需经俄勒冈链路验收。
+质量取 80，小字误差比 70 降约 23–24%，比 85 每帧少传 28–75 KiB。按 #1445 的 5.5 Mbps 出口和 194 ms 往返，直接发送 562 KiB base64 帧的传输加往返约 1.03 秒。LibreChat 用 Node.js zlib 压缩 SSE 的 base64 数据块，每块立即刷出，JPEG 画质由 Chromium 保持。浏览器通过 HTTP 的 `Accept-Encoding` 协商这层压缩。[Node.js zlib 流式刷新](https://nodejs.org/api/zlib.html#flushing)
+
+### 限速浏览器复测
+
+本地用真实 Chromium 面板经过 LibreChat、Pico API 和 worker 操作测试页。链路模拟双向 194 ms 往返及共享的 5.5 Mbps 下行，两类页面各跑 3 次。DPR 为 1.5，最大化从 720 CSS px 扩到 1920 CSS px。点击和最大化分别以 JPEG 出现按钮状态和新布局标记为终点。滚动按约 8 秒内实际显示的 JPEG 计数。
+
+| 页面 | 点击到新帧 | 最大化到新布局帧 | 连续滚动 |
+|---|---:|---:|---:|
+| 中英文表格 | 中位 457 ms（446–486） | 中位 1001 ms（946–1138） | 中位 3.07 帧/s |
+| 表格及彩色图表 | 中位 537 ms（527–545） | 中位 1536 ms（1496–1827） | 中位 2.83 帧/s |
+
+放大原始 JPEG 可辨 12 CSS px 中英文小字。另测 JPEG 75 的两次图表页最大化分别为 1169 和 2072 ms，保留质量 80。表格页部分样本及图表页全部样本超过最大化 1 秒目标。点击和最大化仍需经俄勒冈现网验收。
 
 ### 容量测量
 
@@ -130,3 +141,5 @@ Playwright 1.63.0 通过 Chromium CDP 取 JPEG。尺寸仍按 CSS 像素传递�
 | 10 会话、30 标签、1920×1200、DPR 2 | 峰值 3.92 GiB | 峰值 440 | 1.44 GiB |
 
 两组十会话测试的 `memory.events` 中 max、oom、oom_kill 和 `pids.events` 中 max 均为 0。宿主 Compose 取 6 GiB 和 1024 PID，给 DPR 2 测得的峰值留下约 2.1 GiB 和 584 个 PID 的余量。运行时与 Compose 都设 10 个会话，启动中的会话先占额度。现网十会话仍需部署后重测。
+
+返修复测在相同本地容器限制下开启 10 会话、30 标签，1920×1200、DPR 2。单会话 2 标签为 556 MiB / 90 PID，3 标签为 704 MiB / 104 PID。十会话各完成 6 次点击和取帧，峰值 3.96 GiB / 443 PID，采样时 `/tmp` 约 1.41 GiB，`/dev/shm` 为 0，内存及 PID 限额事件均为 0。

@@ -102,10 +102,15 @@ describe('SandboxWebPane fits the pane', () => {
     (streamPicoSandbox as jest.Mock).mockImplementation(stream);
     let decoded!: () => void;
     let dropStream!: (reason: Error) => void;
+    let dropAck!: (reason: Error) => void;
     const reader = {
       read: jest.fn()
         .mockResolvedValueOnce({
           value: 'data: {"jpeg":"abc","width":480,"height":620,"frame_id":"frame_a"}\n\n',
+          done: false,
+        })
+        .mockResolvedValueOnce({
+          value: 'data: {"jpeg":"def","width":480,"height":620,"frame_id":"frame_b"}\n\n',
           done: false,
         })
         .mockImplementation(() => new Promise((_resolve, reject) => { dropStream = reject; })),
@@ -127,8 +132,10 @@ describe('SandboxWebPane fits the pane', () => {
         ok: true,
         body: { pipeThrough: () => ({ getReader: () => reader }) },
       })
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { dropAck = reject; }))
       .mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
     Object.defineProperty(globalThis, 'fetch', { configurable: true, value: fetchMock });
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { unmount } = render(<SandboxWebPane sessionId="sbox_fit" kind="browser" />);
     try {
       await act(async () => { await Promise.resolve(); });
@@ -139,6 +146,18 @@ describe('SandboxWebPane fits the pane', () => {
         '/api/pico/v1/sandbox/sessions/sbox_fit/input',
         expect.objectContaining({ body: JSON.stringify({ frame_ack: 'frame_a' }) }),
       );
+      expect(reader.read).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await act(async () => decoded());
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        3,
+        '/api/pico/v1/sandbox/sessions/sbox_fit/input',
+        expect.objectContaining({ body: JSON.stringify({ frame_ack: 'frame_b' }) }),
+      );
+      const ackError = new Error('ack lost');
+      await act(async () => dropAck(ackError));
+      expect(warn).toHaveBeenCalledWith('Sandbox frame acknowledgement failed', ackError);
+      expect(reader.cancel).not.toHaveBeenCalled();
       const img = screen.getByTestId('sandbox-web-viewport');
       Object.defineProperties(img, {
         naturalWidth: { value: 720 },
@@ -162,6 +181,7 @@ describe('SandboxWebPane fits the pane', () => {
       expect(reader.cancel).toHaveBeenCalled();
     } finally {
       unmount();
+      warn.mockRestore();
       for (const [target, key, descriptor] of [
         [Image.prototype, 'decode', decode],
         [globalThis, 'TextDecoderStream', decoderStream],

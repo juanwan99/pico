@@ -260,7 +260,6 @@ class ScreencastFrame:
     jpeg: str
     width: int
     height: int
-    ack: Callable[[], Awaitable[None]]
 
 
 class BrowserHands(Protocol):
@@ -700,10 +699,11 @@ class PlaywrightPage:
         scale = min(device_scale, 2.0)
         async with self._viewport_lock:
             if size != self._viewport or scale != self._device_scale:
+                # Retire the old cast before Chromium repaints at intermediate sizes.
+                self.page_token += 1
                 await self._apply_metrics(self._page, size, scale)
                 self._viewport = size
                 self._device_scale = scale
-                self.page_token += 1
         return size
 
     def _on_new_page(self, page: Any) -> None:
@@ -1325,6 +1325,8 @@ class PlaywrightPage:
         Upstream CDP ``Page.startScreencast`` — the same thing Steel / browserless
         live view use. A still page sends nothing. Returns ``stop``.
         """
+        from playwright.async_api import Error
+
         if self._viewport_task is not None:
             await asyncio.shield(self._viewport_task)
         async with self._viewport_lock:
@@ -1333,14 +1335,17 @@ class PlaywrightPage:
             cdp = await self._context.new_cdp_session(self._page)
         active = True
 
-        def on_frame(event: dict[str, Any]) -> None:
-            frame_session = event["sessionId"]
-
-            async def confirm() -> None:
+        async def on_frame(event: dict[str, Any]) -> None:
+            if not active:
+                return
+            # Retain the frame in arrival order and release Chromium's slot right away.
+            push(ScreencastFrame(event["data"], width, height))
+            try:
+                await cdp.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
+            except Error:
                 if active:
-                    await cdp.send("Page.screencastFrameAck", {"sessionId": frame_session})
-
-            push(ScreencastFrame(event["data"], width, height, confirm))
+                    raise
+                logger.debug("screencast stopped while acknowledging a frame", exc_info=True)
 
         async def stop() -> None:
             nonlocal active

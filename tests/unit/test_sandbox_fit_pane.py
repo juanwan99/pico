@@ -1,7 +1,7 @@
 """Fit the pane (#1224): the sandbox page lays out at the pane's own size.
 
-Upstream = Playwright ``page.set_viewport_size``. Pico only carries the pane
-size along the existing pane-input route (LibreChat → pico-api → sidecar).
+Playwright and Chromium CDP set the viewport and pixel density. The existing
+pane-input route carries both values (LibreChat → pico-api → sidecar).
 """
 
 from __future__ import annotations
@@ -85,7 +85,8 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(tmp_path,
         )
         page = await context.new_page()
         await page.set_content(
-            "<style>#w{display:none}@media(max-width:600px){#w{display:block}}</style>"
+            "<style>html{background:navy}#w{display:none}"
+            "@media(max-width:600px){html{background:lime}#w{display:block}}</style>"
             "<p id=w>narrow</p><a href='about:blank' target=_blank>tab</a>"
         )
         surface = PlaywrightPage(context, page, tmp_path / "profile")
@@ -116,7 +117,10 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(tmp_path,
             await runtime.apply_input(sess, frame_ack=resized["frame_id"])
             resized = await asyncio.wait_for(anext(stream), 1)
         assert resized["height"] == 620
-        assert Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))).size == (720, 930)
+        with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
+            assert jpeg.size == (720, 930)
+            red, green, blue = jpeg.getpixel((700, 40))
+            assert green > 240 and red < 15 and blue < 15
         await stream.aclose()
         assert Image.open(io.BytesIO(await surface.screenshot_png())).size == (480, 620)
 
@@ -179,12 +183,23 @@ async def test_api_relays_dpr_and_frame_ack_to_worker(live_runtime, monkeypatch)
         ack = {"frame_ack": first["frame_id"]}
         outsider = issue_test_token(school_id="school-a", membership_id="member-b")
         denied = await api.post(path, json=ack, headers={"Authorization": f"Bearer {outsider}"})
-        assert denied.status_code >= 400 and page.acks == []
+        assert denied.status_code >= 400 and first["frame_id"] in sess.frame_acks
         assert (await api.post(path, json=ack, headers=headers)).json() == {"ok": True}
-        assert page.acks == ["FIRST"]
+        assert first["frame_id"] not in sess.frame_acks
 
+        runtime.hold(sess, hold=True)
         resize = {"viewport_width": 480, "viewport_height": 620, "device_pixel_ratio": 1.5}
         response = await api.post(path, json=resize, headers=headers)
         assert response.status_code == 200, response.text
+        assert response.json() == {
+            "ok": True,
+            "url": "https://example.com/",
+            "title": "Page",
+            "has_text_input": False,
+            "has_password_input": False,
+            "clicked": False,
+            "typed": False,
+        }
+        assert sess.human_hold
         assert page.sizes == [(480, 620, 1.5)] and page.shots == 1
         await agen.aclose()

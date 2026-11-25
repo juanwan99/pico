@@ -547,7 +547,13 @@ export async function streamPicoSandbox(
       for (const event of events) {
         await onEvent(event);
         if (event.frame_id && !signal.aborted) {
-          await postPicoSandboxInput(sessionId, { frame_ack: event.frame_id }, signal);
+          void postPicoSandboxInput(sessionId, { frame_ack: event.frame_id }, signal).catch(
+            (err) => {
+              if (!signal.aborted) {
+                console.warn('Sandbox frame acknowledgement failed', err);
+              }
+            },
+          );
         }
       }
     }

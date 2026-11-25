@@ -1255,7 +1255,8 @@ async def sandbox_session_input(
     accept = (request.headers.get("accept") or "").lower()
     if "application/json" in ctype or "application/json" in accept:
         meta = applied if isinstance(applied, dict) else {}
-        body = _sandbox_public_meta(session_id, meta)
+        # The live input reply only carries the page fields it refreshed.
+        body = _sandbox_public_meta(session_id, meta) if meta.get("session_id") else meta
         body["clicked"] = bool(meta.get("clicked"))
         body["typed"] = bool(meta.get("typed"))
         return JSONResponse(content=body, headers={"Cache-Control": "no-store"})

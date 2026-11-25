@@ -73,6 +73,7 @@ LOGIN_SAVE_EVERY_S = 15.0
 # Live pane (#1215): follow tab/focus changes promptly, keep proxies awake.
 STREAM_CHECK_S = 0.1
 STREAM_PING_S = 15.0
+STREAM_MAX_IN_FLIGHT = 2
 # "current" = the caller's own desk (one per school+membership). Lets the AI act
 # on a pane the teacher opened without having the session id in hand.
 CURRENT_SESSION = "current"
@@ -140,7 +141,7 @@ class SandboxSession:
     ai_acted_at: float = 0.0
     act_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     live_panes: dict[asyncio.Event, str] = field(default_factory=dict)
-    frame_acks: dict[str, Callable[[], Awaitable[None]]] = field(default_factory=dict)
+    frame_acks: dict[str, asyncio.Event] = field(default_factory=dict)
 
     def focused(self) -> SandboxWindow:
         for item in self.windows:
@@ -709,9 +710,9 @@ class SandboxRuntime:
         frame_ack: str = "",
     ) -> dict[str, Any]:
         if frame_ack:
-            confirm = session.frame_acks.pop(frame_ack, None)
-            if confirm is not None:
-                await confirm()
+            wake = session.frame_acks.pop(frame_ack, None)
+            if wake is not None:
+                wake.set()
             return {"ok": True}
         await self._purge()
         win = session.focused()
@@ -727,12 +728,12 @@ class SandboxRuntime:
             click_x = click_y = None
         fit = getattr(surface, "set_viewport", None)
         if viewport_width and viewport_height and callable(fit):
+            for wake in session.live_panes:
+                wake.set()
             if device_pixel_ratio is None:
                 await fit(viewport_width, viewport_height)
             else:
                 await fit(viewport_width, viewport_height, device_pixel_ratio)
-            for wake in session.live_panes:
-                wake.set()
         clicked = click_x is not None and click_y is not None
         if clicked:
             await surface.click(int(click_x), int(click_y), **motion)
@@ -955,7 +956,7 @@ class SandboxRuntime:
         """
         wake = asyncio.Event()
         sess.live_panes[wake] = ""
-        waiting = ""
+        waiting: dict[str, float] = {}
         last = time.monotonic()
         try:
             while window_id := self._alive_focus(sess):
@@ -980,38 +981,42 @@ class SandboxRuntime:
                         and getattr(win.surface, "page_token", 0) == token
                     ):
                         wake.clear()
-                        if not waiting and not frames.empty():
+                        now = time.monotonic()
+                        for frame_id, expires in tuple(waiting.items()):
+                            if now >= expires or frame_id not in sess.frame_acks:
+                                sess.frame_acks.pop(frame_id, None)
+                                del waiting[frame_id]
+                        if len(waiting) < STREAM_MAX_IN_FLIGHT and not frames.empty():
                             frame = frames.get_nowait()
-                            waiting = secrets.token_hex(12)
-
-                            async def confirm(frame: ScreencastFrame = frame) -> None:
-                                nonlocal waiting
-                                await frame.ack()
-                                waiting = ""
-                                wake.set()
-
-                            sess.frame_acks[waiting] = confirm
+                            frame_id = secrets.token_hex(12)
+                            waiting[frame_id] = now + STREAM_PING_S
+                            sess.frame_acks[frame_id] = wake
                             sess.live_panes[wake] = window_id
-                            last = time.monotonic()
+                            last = now
                             yield {
                                 "jpeg": frame.jpeg,
                                 "width": frame.width,
                                 "height": frame.height,
-                                "frame_id": waiting,
+                                "frame_id": frame_id,
                                 "window_id": window_id,
                             }
                             continue
+                        if now - last >= STREAM_PING_S:
+                            last = now
+                            yield {"ping": True}
+                            continue
+                        deadline = next(iter(waiting.values()), last + STREAM_PING_S)
+                        wait_s = min(STREAM_CHECK_S, deadline - now)
                         try:
-                            await asyncio.wait_for(wake.wait(), STREAM_CHECK_S)
-                        except TimeoutError:
-                            if time.monotonic() - last >= STREAM_PING_S:
-                                last = time.monotonic()
-                                yield {"ping": True}
+                            await asyncio.wait_for(wake.wait(), wait_s)
+                        except TimeoutError:  # swallow-ok: next iteration checks focus and deadlines
+                            continue
                 finally:
                     if stop is not None:
                         await stop()
         finally:
-            sess.frame_acks.pop(waiting, None)
+            for frame_id in waiting:
+                sess.frame_acks.pop(frame_id, None)
             del sess.live_panes[wake]
 
     async def destroy(self, session_id: str) -> None:
@@ -1036,15 +1041,9 @@ def _keep_latest(
 ) -> Callable[[ScreencastFrame], None]:
     """A slow viewer skips stale frames instead of piling them up."""
 
-    async def discard(frame: ScreencastFrame) -> None:
-        try:
-            await frame.ack()
-        except Exception:
-            logger.debug("discarded screencast frame ack failed", exc_info=True)
-
     def push(frame: ScreencastFrame) -> None:
         if frames.full():
-            asyncio.create_task(discard(frames.get_nowait()))
+            frames.get_nowait()
         frames.put_nowait(frame)
         wake.set()
 
