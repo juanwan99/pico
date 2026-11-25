@@ -7,6 +7,7 @@ import base64
 import json
 import subprocess
 import sys
+from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -275,22 +276,19 @@ _FIXED = json.dumps(
     {"files": [{"name": "高三（2）班班级公约.docx", "ext": ".docx", "chars": 200}], "names": ["高三（2）班班级公约.docx"]}
 )
 _CLAIM = "已修改，文件已保存到 `/workspace/outputs/高三（2）班班级公约.docx`。"
+_LEDGER_RUN = "self-check-ledger"
 
 
-@pytest.mark.asyncio
-async def test_current_run_ledger_screenshot_needs_no_extra_round(monkeypatch) -> None:
+@pytest.fixture
+async def run_ledger(monkeypatch) -> AsyncIterator[ArtifactStore]:
     from app.artifact_store import LedgerArtifactStore
     from app.db import Base, RunRow, TaskRow
-    from pico_orchestrator.browser_screenshot import write_browser_screenshot
-    from pico_orchestrator.sandbox_s2 import PNG_MAGIC
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     monkeypatch.delenv("PICO_SANDBOX_DISK", raising=False)
-    run_id = "self-check-screenshot"
     principal = _Principal()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    store = LedgerArtifactStore(factory, run_id=run_id)
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -298,22 +296,47 @@ async def test_current_run_ledger_screenshot_needs_no_extra_round(monkeypatch) -
             session.add(TaskRow(
                 school_id=principal.school_id,
                 membership_id=principal.membership_id,
-                runs=[RunRow(id=run_id)],
+                runs=[RunRow(id=_LEDGER_RUN)],
             ))
-        shot = await write_browser_screenshot(
-            store, principal, name="demoqa-form-submitted.png", page_title="", png=PNG_MAGIC
-        )
-        transport = FakeTransport(
-            scripted=_turn(f"已提交表单。截图见《{shot['title']}》。"),
-            bash_outputs=[json.dumps(_report())],
-        )
-        result, events = await _run(monkeypatch, transport, run_id=run_id, artifact_store=store)
+        yield LedgerArtifactStore(factory, run_id=_LEDGER_RUN)
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_current_run_ledger_screenshot_needs_no_extra_round(monkeypatch, run_ledger) -> None:
+    from pico_orchestrator.browser_screenshot import write_browser_screenshot
+    from pico_orchestrator.sandbox_s2 import PNG_MAGIC
+
+    shot = await write_browser_screenshot(
+        run_ledger, _Principal(), name="demoqa-form-submitted.png", page_title="", png=PNG_MAGIC
+    )
+    transport = FakeTransport(
+        scripted=_turn(f"已提交表单。截图见《{shot['title']}》。"),
+        bash_outputs=[json.dumps(_report())],
+    )
+    result, events = await _run(
+        monkeypatch, transport, run_id=_LEDGER_RUN, artifact_store=run_ledger
+    )
 
     assert result.status == "succeeded"
     assert not [p for k, p in events if k == "run.resume"]
     assert len([c for c in transport.sent if c.get("type") == "bash"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_current_run_with_only_a_plan_still_reports_missing_delivery(run_ledger) -> None:
+    principal = _Principal()
+    plan = await run_ledger.write(principal, title="工作计划", content="核对并截图", kind="plan")
+    assert await run_ledger.list_run_titles(principal, run_id=_LEDGER_RUN) == {
+        plan["title"]: plan["artifact_id"]
+    }
+    client = SimpleNamespace(bash=AsyncMock(return_value={"output": json.dumps(_report())}))
+    facts = await _self_check_now(
+        client, EventMapState(final_parts=["截图已生成"]), None, _LEDGER_RUN, "",
+        artifact_store=run_ledger, principal=principal,
+    )
+    assert facts == ["回答说交了文件，但这一轮 outputs 里没有新文件，也没有改过的文件。"]
 
 
 @pytest.mark.asyncio
@@ -330,7 +353,7 @@ async def test_current_run_title_lookup_propagates_io_timeout(monkeypatch) -> No
         )
 
     assert exc.value.code == "workspace.timeout"
-    store.list_run_titles.assert_called_once_with(principal, run_id="r1")
+    store.list_run_titles.assert_called_once_with(principal, run_id="r1", exclude_kinds=("plan",))
 
 
 @pytest.mark.asyncio

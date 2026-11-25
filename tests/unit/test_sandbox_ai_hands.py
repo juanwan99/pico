@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import tempfile
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -103,10 +104,12 @@ class MemoryArtifactStore:
     async def list(self, principal: P, *, limit: int):
         return self._rows[::-1][:limit]
 
-    async def list_run_titles(self, principal: P, *, run_id: str) -> dict[str, str]:
+    async def list_run_titles(
+        self, principal: P, *, run_id: str, exclude_kinds: Collection[str] = ()
+    ) -> dict[str, str]:
         titles: dict[str, str] = {}
         for row in reversed(self._rows):
-            if row["run_id"] == run_id:
+            if row["run_id"] == run_id and row["kind"] not in exclude_kinds:
                 titles.setdefault(row["title"], row["artifact_id"])
         return titles
 

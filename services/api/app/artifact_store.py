@@ -6,6 +6,7 @@ import asyncio
 import base64
 import hashlib
 import logging
+from collections.abc import Collection
 from typing import Any
 
 from pico_orchestrator.gateway import Principal, ToolError
@@ -364,7 +365,9 @@ class LedgerArtifactStore:
                 for artifact in result.scalars().all()
             ]
 
-    async def list_run_titles(self, principal: Principal, *, run_id: str) -> dict[str, str]:
+    async def list_run_titles(
+        self, principal: Principal, *, run_id: str, exclude_kinds: Collection[str] = ()
+    ) -> dict[str, str]:
         statement = (
             self._owned_artifacts(principal)
             .with_only_columns(
@@ -373,6 +376,8 @@ class LedgerArtifactStore:
             .where(ArtifactRow.run_id == run_id)
             .order_by(ArtifactRow.created_at.desc())
         )
+        if exclude_kinds:
+            statement = statement.where(ArtifactRow.kind.notin_(exclude_kinds))
         titles: dict[str, str] = {}
         async with self._factory() as session:
             for artifact_id, title, _, _ in await session.execute(statement):

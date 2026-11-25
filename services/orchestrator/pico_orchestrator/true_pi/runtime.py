@@ -1668,7 +1668,7 @@ async def _self_check_now(
     artifact_store: ArtifactStore | None,
     principal: Principal,
 ) -> list[str]:
-    """Check live outputs and the current run's settled artifact titles."""
+    """Check live outputs and the current run's delivered artifact titles."""
     from pico_orchestrator.true_pi.self_check import (
         CHECK_TIMEOUT_S,
         box_check_command,
@@ -1694,7 +1694,9 @@ async def _self_check_now(
     had = any(not os.path.basename(p).startswith(".") for p in (before or {}))
     artifact_titles = (
         await with_io_timeout(
-            cast(_RunArtifactStore, artifact_store).list_run_titles(principal, run_id=rid),
+            cast(_RunArtifactStore, artifact_store).list_run_titles(
+                principal, run_id=rid, exclude_kinds=("plan",)
+            ),
             what="list current run artifact titles",
         )
         if artifact_store is not None

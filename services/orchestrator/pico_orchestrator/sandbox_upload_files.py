@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Collection
 from pathlib import PurePosixPath
 from typing import Protocol, cast
 
@@ -14,7 +15,9 @@ _SUGGESTION_COUNT = 5
 
 
 class _RunArtifactStore(Protocol):
-    async def list_run_titles(self, principal: Principal, *, run_id: str) -> dict[str, str]: ...
+    async def list_run_titles(
+        self, principal: Principal, *, run_id: str, exclude_kinds: Collection[str] = ()
+    ) -> dict[str, str]: ...
 
 
 async def resolve_upload_filenames(
