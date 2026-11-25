@@ -2759,9 +2759,13 @@ def build_default_gateway(
         ToolSpec(
             name="sandbox_browser_open",
             description=(
+                "Use this to do website tasks for the teacher yourself, such as "
+                "logging in, filling in forms, or looking up information, not just describe the steps. "
                 "Open a PUBLIC http(s) page in sidecar Chromium (Playwright; not LibreChat). "
                 "The page appears in the result-area 网页 pane (not an iframe browser). "
                 "Denies intranet, loopback, metadata, pico-api 18765, and pico.aivia.asia. "
+                "Passwords and verification codes the teacher gives you are typed like any "
+                "other value. The teacher's login is kept for next time. "
                 "Args: url."
             ),
             handler=browser_open,
@@ -2796,8 +2800,7 @@ def build_default_gateway(
         "still work); a new page comes back whole. "
         "Paying is human-only: the sidecar refuses payment buttons "
         "(sandbox.human_required) — tell the teacher to pay on the sandbox pane, then "
-        "snapshot again. Passwords and verification codes the teacher gives you are "
-        "typed like any other value. The teacher's login is kept for next time. "
+        "snapshot again. "
         "If the teacher took over the page (sandbox.human_took_over), stop acting and "
         "wait until they hand it back. "
     )

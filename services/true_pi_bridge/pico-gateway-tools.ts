@@ -453,7 +453,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_open",
-    "Open a PUBLIC page in the isolated sandbox browser (the teacher can also act in it directly). For HTML generated in this run, use sandbox_preview_inspect. Denies intranet/metadata/18765.",
+    "Use this to do website tasks for the teacher yourself, such as logging in, filling in forms, or looking up information, not just describe the steps. Open a PUBLIC page in the isolated sandbox browser (the teacher can also act in it directly). For HTML generated in this run, use sandbox_preview_inspect. Denies intranet/metadata/18765. Passwords and verification codes the teacher gives you are typed like any other value. The teacher's login is kept for next time.",
     Type.Object(
       {
         url: Type.String(),
@@ -479,7 +479,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_snapshot",
-    "Read the current page as an accessibility snapshot with element refs (e.g. [ref=e8]) — work from this to decide what to click or fill; use sandbox_browser_screenshot only to look at pictures or canvas on the page. Rules for every sandbox_browser_* action: it acts inside the teacher's own isolated sandbox browser session. Content inside iframes (mail body, rich-text editors, embedded forms) is listed under its iframe line with refs like f1e5 and works like any other ref. After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Paying is human-only: the sidecar refuses payment buttons (sandbox.human_required) — tell the teacher to pay on the sandbox pane, then snapshot again. Passwords and verification codes the teacher gives you are typed like any other value. The teacher's login is kept for next time. If the teacher took over the page (sandbox.human_took_over), stop acting and wait until they hand it back.",
+    "Read the current page as an accessibility snapshot with element refs (e.g. [ref=e8]) — work from this to decide what to click or fill; use sandbox_browser_screenshot only to look at pictures or canvas on the page. Rules for every sandbox_browser_* action: it acts inside the teacher's own isolated sandbox browser session. Content inside iframes (mail body, rich-text editors, embedded forms) is listed under its iframe line with refs like f1e5 and works like any other ref. After an action only what changed comes back (new or changed lines with their parents; unlisted lines did not change and their refs still work); a new page comes back whole. Paying is human-only: the sidecar refuses payment buttons (sandbox.human_required) — tell the teacher to pay on the sandbox pane, then snapshot again. If the teacher took over the page (sandbox.human_took_over), stop acting and wait until they hand it back.",
     Type.Object(
       {
         session_id: Type.Optional(Type.String()),

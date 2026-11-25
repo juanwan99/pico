@@ -183,6 +183,22 @@ class RunState:
     answered: int = 0
     # Pi model calls on the loop clock: (reached pico-api, relay's first body chunk) (edu-core#5227).
     llm_calls: list[tuple[float, float]] = field(default_factory=list)
+    _llm_inflight: dict[Callable[[], None], float] = field(default_factory=dict)
+
+    @property
+    def llm_started_at(self) -> float | None:
+        """Earliest send time of a still-open model request, on the loop clock."""
+        return min(self._llm_inflight.values(), default=None)
+
+    def track_llm_request(self, release: Callable[[], None]) -> Callable[[], None]:
+        """Start at relay dispatch and clear when this request releases its slot."""
+        self._llm_inflight[release] = asyncio.get_running_loop().time()
+
+        def done() -> None:
+            self._llm_inflight.pop(release, None)
+            release()
+
+        return done
 
 
 _RUNS: OrderedDict[str, RunState] = OrderedDict()
