@@ -20,7 +20,7 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
 - **预算**：一次逻辑调用最多 3 个上游请求（`CALL_BUDGET`），首发、重试、换模型合起来算。
 - **一次运行一个备用池**：同一个 run 的重试、续跑（resume）共用 6 个额外请求（`RUN_SPARE`）。用完以后每个调用只发一次。
 - **重试只有一层**：
-  - 每个上游调用串行尝试。Pi 快档的首选模型等首字超时（`PICO_PI_STALL_SWITCH_S`，默认 25 s）后才换下一个。直连关闭思考时首字节超时为 60 s。
+  - 每个上游调用串行尝试。Pi 快档的首选模型在拿到名额、发出 New API 请求后才开始等首字；排队和重试间隔不计。单次请求等首字超时（`PICO_PI_STALL_SWITCH_S`，默认 25 s）后换下一个。120 s 内三次首字超时把模型置于备用链尾部 120 s。直连关闭思考时首字节超时为 60 s。
   - 只在首字之前，而且只针对 429 / 5xx / 连不上的情况重试，第一次隔 2 s，第二次隔 6 s。上游给了 `Retry-After` 就照它等，最多 20 s。换模型不等。
   - 三次都忙（429 / 503 / 529），老师看到「Pico 这会儿忙，请稍后再试。」。老师看到的话里不出现「模型」（`teacher_text`）。
   - 上游回 401 / 402 / 403（钥被停、没额度）或没有渠道时换模型，不重试。
@@ -90,7 +90,8 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
 - `calls.<用途>`：用途有 direct / exam / hosted / pi_step / pi_pass（沙箱里带附件的那一跳）/ image / rerank，各自给 sent / retry / budget_spent / busy / http_<状态码> 的次数；
 - `inflight`：每把 key 当前在途的请求数；
 - `peak`：每把 key 的峰值并发；
-- `key_max`：每把 key 的并发上限。
+- `key_max`：每把 key 的并发上限；
+- `down_models` 按模型名列出当前判下线的模型，包含 `remaining_seconds` 和 `reason`（`stall` 为反复首字超时，`dead` 为渠道或密钥不可用）。每次判下线时，`brain mark_down` 以 WARNING 记录模型、原因和持续秒数。
 
 key 只显示 sha256 的前 8 位。进程重启后清零（`since` 是起点）。
 

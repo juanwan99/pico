@@ -7,12 +7,15 @@ The switch is invisible to the teacher. Tests inject transport and skip this loo
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
 from typing import Any
 
 from pico_orchestrator.upstream import DEAD_STATUS
+
+logger = logging.getLogger(__name__)
 
 # New API has no channel for this model: retrying the same model cannot help.
 _CHANNEL_DEAD_MARKERS = (
@@ -59,7 +62,7 @@ _KEY_DEAD_MARKERS = (
 _MODEL_FAIL_CODES = ("true_pi.assistant_error", "model.usage_limit", "model.unconfigured")
 DOWN_ENV = "PICO_BRAIN_DOWN_S"
 _DOWN_DEFAULT_S = 300.0
-_down_until: dict[str, float] = {}
+_down_until: dict[str, tuple[float, str]] = {}
 # A whole channel can stall for minutes (10-15 09:30: four gemini hedges of one
 # Pi step all waited 134 s for the first token). Same-model hedges cannot get
 # out of that; the next model can. Fast lane only: deep thinking is slow on purpose.
@@ -128,8 +131,8 @@ def one_shot_model(model: str | None) -> str | None:
     return models[0] if models else None
 
 
-def mark_down(model: str, seconds: float | None = None) -> None:
-    """Skip a dead channel / key for a while instead of hitting it on every call."""
+def mark_down(model: str, seconds: float | None = None, *, reason: str = "dead") -> None:
+    """Put a model last for a while after channel death or repeated stalls."""
     span = seconds
     if span is None:
         try:
@@ -137,7 +140,8 @@ def mark_down(model: str, seconds: float | None = None) -> None:
         except ValueError:
             span = _DOWN_DEFAULT_S
     if model and span > 0:
-        _down_until[model] = time.monotonic() + span
+        _down_until[model] = (time.monotonic() + span, reason)
+        logger.warning("brain mark_down model=%s reason=%s seconds=%g", model, reason, span)
 
 
 def record_stall(model: str) -> None:
@@ -147,19 +151,30 @@ def record_stall(model: str) -> None:
     recent.append(now)
     if len(recent) == _STALL_DOWN_COUNT:
         _stall_times.pop(model, None)
-        mark_down(model, STALL_DOWN_S)
+        mark_down(model, STALL_DOWN_S, reason="stall")
     else:
         _stall_times[model] = recent
 
 
 def is_down(model: str) -> bool:
-    until = _down_until.get(model)
-    if until is None:
+    down = _down_until.get(model)
+    if down is None:
         return False
+    until, _ = down
     if time.monotonic() >= until:
         _down_until.pop(model, None)
         return False
     return True
+
+
+def down_models() -> dict[str, dict[str, float | str]]:
+    """Current down marks for /health, with seconds left on each."""
+    now = time.monotonic()
+    return {
+        model: {"remaining_seconds": until - now, "reason": reason}
+        for model, (until, reason) in _down_until.items()
+        if until > now
+    }
 
 
 def is_channel_dead(error: str) -> bool:

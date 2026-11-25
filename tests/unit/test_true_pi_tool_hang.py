@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from pico_orchestrator import upstream
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi import runtime
 from pico_orchestrator.true_pi.client import FakeTransport, RpcEvent
@@ -232,6 +233,7 @@ async def test_silent_head_model_is_cut_off_for_the_next_one() -> None:
 
     transport = AbortingTransport(scripted=[{"type": "agent_start"}, {"type": "turn_start"}])
     transport.mute = True
+    upstream.run_state("stall-t").track_llm_request(lambda: None)
     result = await runtime._run_true_pi_once(
         prompt="光合作用的产物？",
         principal=Principal(),
@@ -263,6 +265,7 @@ async def test_thinking_head_model_is_not_cut_but_the_wall_clock_still_ends_it()
         scripted=[{"type": "agent_start"}, {"type": "turn_start"}, {"type": "thinking_delta", "delta": "先看图…"}]
     )
     transport.mute = True
+    upstream.run_state("think-t").track_llm_request(lambda: None)
     t0 = time.monotonic()
     result = await runtime._run_true_pi_once(
         prompt="光合作用的产物？",

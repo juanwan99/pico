@@ -220,6 +220,7 @@ async def _proxy_step(run_id: str, body: bytes = b'{"model":"m"}'):
         call=upstream.Call("pi_step", run_id=run_id),
         key="sk-box",
         run_id=run_id,
+        bill_run=run_id,
     )
     if hasattr(resp, "body_iterator"):
         return resp.status_code, b"".join([c async for c in resp.body_iterator])
@@ -228,11 +229,17 @@ async def _proxy_step(run_id: str, body: bytes = b'{"model":"m"}'):
 
 @pytest.mark.asyncio
 async def test_proxy_in_order_and_slow_first_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    class EventStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"data: tok\n\n"
+            assert upstream.run_state("run-a").llm_started_at is not None
+
     async def handler(_req, n):
+        assert upstream.run_state("run-a").llm_started_at is not None
         if n == 2:
             await asyncio.sleep(0.05)
         return httpx.Response(
-            200, content=b"data: tok\n\n", headers={"content-type": "text/event-stream"}
+            200, stream=EventStream(), headers={"content-type": "text/event-stream"}
         )
 
     hits = _upstream(monkeypatch, handler)
@@ -241,6 +248,7 @@ async def test_proxy_in_order_and_slow_first_token(monkeypatch: pytest.MonkeyPat
     stream = b'{"model":"m","stream":true}'
     assert await _proxy_step("run-a", stream) == (200, b"data: tok\n\n")
     assert len(hits) == 2  # the slow step still sends one request
+    assert upstream.run_state("run-a").llm_started_at is None
 
 
 @pytest.mark.asyncio
@@ -255,6 +263,80 @@ async def test_proxy_concurrent_steps_share_the_key_cap(monkeypatch: pytest.Monk
     outs = await asyncio.gather(*(_proxy_step(f"run-{i}") for i in range(8)))
     assert outs == [(200, b"ok")] * 8 and len(hits) == 8
     assert max(upstream.stats()["peak"].values()) == 3
+
+
+@pytest.mark.asyncio
+async def test_pi_waiting_for_a_key_slot_does_not_stall(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.run_types import RunCaps
+    from pico_orchestrator.true_pi import runtime
+    from pico_orchestrator.true_pi.client import FakeTransport, RpcEvent
+
+    monkeypatch.setenv(upstream.KEY_MAX_ENV, "1")
+    stall_s = 0.2
+    first_sent = asyncio.Event()
+    release_slot = asyncio.Event()
+
+    async def relay(_request, n):
+        if n == 1:
+            first_sent.set()
+            await release_slot.wait()
+        return httpx.Response(200, text="ready")
+
+    hits = _upstream(monkeypatch, relay)
+
+    async def emit(_kind, _payload):
+        pass
+
+    async def not_cancelled():
+        return False
+
+    async def turn(group, run_id, prompted):
+        class PiTransport(FakeTransport):
+            async def send(self, command):
+                if command["type"] == "prompt":
+                    group.create_task(model_call())
+                    prompted.set()
+                await super().send(command)
+
+        async def model_call():
+            status, body = await _proxy_step(run_id)
+            assert status == 200
+            message = {"role": "assistant", "content": [{"type": "text", "text": body.decode()}]}
+            for kind in ("message_end", "turn_end"):
+                await transport._event_q.put(RpcEvent({"type": kind, "message": message}))
+            await transport._event_q.put(RpcEvent({"type": "agent_end", "messages": [message]}))
+
+        transport = PiTransport(scripted=[{"type": "agent_start"}, {"type": "turn_start"}])
+        return await runtime._run_true_pi_once(
+            prompt="hello",
+            principal=SimpleNamespace(school_id="s", membership_id=run_id),
+            emit=emit,
+            is_cancelled=not_cancelled,
+            caps=RunCaps(max_seconds=5),
+            transport=transport,
+            run_id=run_id,
+            stall_switch_s=stall_s,
+        )
+
+    async with asyncio.TaskGroup() as group:
+        group.create_task(_proxy_step("slot-holder"))
+        await asyncio.wait_for(first_sent.wait(), timeout=2)
+        prompted = [asyncio.Event() for _ in range(2)]
+        tasks = [
+            group.create_task(turn(group, f"queued-{i}", event))
+            for i, event in enumerate(prompted)
+        ]
+        for event in prompted:
+            await asyncio.wait_for(event.wait(), timeout=2)
+        await asyncio.sleep(stall_s * 2)
+        sent_while_queued = len(hits)
+        release_slot.set()
+
+    assert sent_while_queued == 1
+    assert len(hits) == 3
+    for task in tasks:
+        result = task.result()
+        assert result.status == "succeeded", result.error
 
 
 @pytest.mark.asyncio
@@ -839,7 +921,9 @@ async def test_llm_pass_races_unless_the_run_proxy_already_did(
     from app import llm_pass_router as lp
     from starlette.requests import Request
 
-    async def handler(_req, _n):
+    async def handler(_req, n):
+        run_id = "run-np" if n <= upstream.CALL_BUDGET else "run-box"
+        assert upstream.run_state(run_id).llm_started_at is not None
         return httpx.Response(503, content=b'{"error":{"message":"overloaded"}}')
 
     hits = _upstream(monkeypatch, handler)
@@ -865,6 +949,8 @@ async def test_llm_pass_races_unless_the_run_proxy_already_did(
     assert (await lp.llm_pass("run-np", "chat/completions", request([]))).status_code == 503
     assert len(hits) == 3
     assert upstream.upstream_error("run-np").startswith("upstream 503")
+    assert upstream.run_state("run-np").llm_started_at is None
     raced = request([(b"x-pico-door", b"raced")])
     assert (await lp.llm_pass("run-box", "chat/completions", raced)).status_code == 503
     assert len(hits) == 4  # once: the run proxy in front holds the retry
+    assert upstream.run_state("run-box").llm_started_at is None

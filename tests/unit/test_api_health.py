@@ -51,6 +51,43 @@ def test_health() -> None:
     assert not any("secret" in key or "token" in key for key in body)
 
 
+def test_health_lists_down_models_with_reason_and_time_left(monkeypatch, caplog) -> None:
+    from types import SimpleNamespace
+
+    from pico_orchestrator import brain_ha
+
+    now = 100.0
+    monkeypatch.setattr(brain_ha, "time", SimpleNamespace(monotonic=lambda: now))
+    monkeypatch.setenv(brain_ha.DOWN_ENV, "300")
+    brain_ha.mark_down("gpt-5.6-terra")
+    for _ in range(3):
+        brain_ha.record_stall("gpt-5.6-sol")
+
+    now += 20
+    client = TestClient(app)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["upstream"]["down_models"] == {
+        "gpt-5.6-terra": {"remaining_seconds": 280, "reason": "dead"},
+        "gpt-5.6-sol": {"remaining_seconds": 100, "reason": "stall"},
+    }
+    notices = [
+        (record.levelname, record.getMessage())
+        for record in caplog.records if record.name == brain_ha.__name__
+    ]
+    assert notices == [
+        ("WARNING", "brain mark_down model=gpt-5.6-terra reason=dead seconds=300"),
+        ("WARNING", "brain mark_down model=gpt-5.6-sol reason=stall seconds=120"),
+    ]
+
+    now += 100
+    assert client.get("/health").json()["upstream"]["down_models"] == {
+        "gpt-5.6-terra": {"remaining_seconds": 180, "reason": "dead"},
+    }
+    now += 180
+    assert client.get("/health").json()["upstream"]["down_models"] == {}
+
+
 def test_health_counts_inflight_runs_without_ids() -> None:
     """Deploy gate reads a count only; no run/tenant ids leak through /health."""
     import asyncio

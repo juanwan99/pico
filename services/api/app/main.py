@@ -288,10 +288,10 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
     from pico_orchestrator.meili_kb import health_fields as meili_health_fields
 
     body.update(await asyncio.to_thread(meili_health_fields))
-    # pico#1271: upstream requests by purpose / outcome, in-flight and peak per key.
-    from pico_orchestrator import upstream
+    # pico#1271, #1443: upstream request counters and current model down marks.
+    from pico_orchestrator import brain_ha, upstream
 
-    body["upstream"] = upstream.stats()
+    body["upstream"] = {**upstream.stats(), "down_models": brain_ha.down_models()}
     if pi_batch:
         body["pi_agent_canary_batch"] = pi_batch
     if kimi_batch:

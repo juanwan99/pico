@@ -89,6 +89,10 @@ async def _open(
     resp = None
     try:
         req = client.build_request(method, target, headers=headers, content=body or None)
+        # Only the hop holding the relay slot starts the clock, including llm-pass.
+        run = upstream.run_state(bill_run) if key and method == "POST" else None
+        if run is not None:
+            release = run.track_llm_request(release)
         resp = await client.send(req, stream=True)
         if resp.status_code >= 400:
             raw = await resp.aread()

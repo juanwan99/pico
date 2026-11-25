@@ -429,8 +429,8 @@ async def _run_true_pi_once(
     """Run one multi-step turn on true Pi (or fake transport).
 
     ``stall_switch_s`` > 0 (fast lane, head model only): no output (text, tools
-    or thinking) that many seconds after the prompt → fail over to the next
-    model (#1261, #1339).
+    or thinking) that many seconds after sending a request to the relay → fail over
+    to the next model (#1261, #1339, #1443).
     """
     caps = caps or RunCaps()
     rid = run_id or f"tp-{uuid.uuid4().hex[:12]}"
@@ -888,6 +888,10 @@ async def _run_true_pi_once(
             spent_milli = int(milli)
             return spent_milli >= spend_cap
 
+        from pico_orchestrator import upstream
+
+        relay_run = upstream.run_state(rid)
+
         async def _drive(prompt_text: str, images: list[dict[str, Any]]) -> RunResult | None:
             """One prompt on the live Pi session. Returns a RunResult only on an early stop."""
             async def _consume() -> None:
@@ -982,8 +986,7 @@ async def _run_true_pi_once(
                 # Consume must run while wait_response sits on prompt ack.
                 # Live Pi can stream text_delta before the prompt response;
                 # starting after prompt() made TTFB == generation wall time.
-                prompt_at = loop.time()
-                timing.mark("prompt_sent", prompt_at)
+                timing.mark("prompt_sent", loop.time())
                 await client.prompt(prompt_text, images=images)
                 timing.mark("prompt_ack", loop.time())
                 while not state.settled and not stop.is_set():
@@ -1039,6 +1042,7 @@ async def _run_true_pi_once(
                         state.settled = True
                         state.no_resume = True
                         break
+                    request_at = relay_run.llm_started_at if relay_run is not None else None
                     if (
                         stall_switch_s > 0
                         and not thinking_on
@@ -1048,7 +1052,8 @@ async def _run_true_pi_once(
                         # with no next model (#1339). The wall clock still bounds it.
                         and not state.thinking_emitted
                         and not state.failover_error
-                        and loop.time() - prompt_at >= stall_switch_s
+                        and request_at is not None
+                        and loop.time() - request_at >= stall_switch_s
                     ):
                         from pico_orchestrator.brain_ha import FIRST_TOKEN_STALL
 
@@ -1164,7 +1169,6 @@ async def _run_true_pi_once(
         # did work must not throw the whole long task away. Pi keeps the turn in
         # its session; ask it to carry on from where it stopped. Before any
         # output brain-HA still fails over to the next model instead.
-        from pico_orchestrator import upstream
         from pico_orchestrator.brain_ha import is_model_dead
         from pico_orchestrator.true_pi.config import resume_max
 
@@ -1173,7 +1177,6 @@ async def _run_true_pi_once(
         active_provider_now = resolve_provider()
         personal_turn = active_provider_now is not None and active_provider_now.name == "personal"
         budget = 0 if (toolless or personal_turn) else resume_max()
-        relay_run = upstream.run_state(rid)
         resume_waited = 0.0
 
         async def _drive_with_resume(
