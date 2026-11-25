@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
 from pico_orchestrator import upstream
+from pico_orchestrator.gateway import ArtifactStore
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import FakeTransport
 from pico_orchestrator.true_pi.runtime import run_true_pi_agent
@@ -41,6 +42,22 @@ def test_named_file_missing_is_a_fact() -> None:
     text = "好的，已按要求修改并重新生成 Word 文件。文件已保存到 `/workspace/outputs/高三（2）班班级公约.docx`。"
     facts = self_check_facts(text, _report(names=["班级公约.docx"]), had_files_before=True)
     assert facts == ["回答提到的 高三（2）班班级公约.docx 在 outputs 里没有。"]
+
+
+def test_named_screenshot_in_ledger_is_not_missing() -> None:
+    text = "已提交表单。截图见《demoqa-form-submitted.png》。"
+    assert self_check_facts(
+        text, _report(), had_files_before=False, artifact_titles={"demoqa-form-submitted.png"}
+    ) == []
+    assert self_check_facts(
+        text, _report(), had_files_before=False, artifact_titles={"other.png"}
+    ) == ["回答提到的 demoqa-form-submitted.png 在 outputs 里没有。"]
+    assert self_check_facts(
+        "请下载《demoqa-form-submitted.png》。",
+        _report(),
+        had_files_before=False,
+        artifact_titles={"demoqa-form-submitted.png"},
+    ) == []
 
 
 def test_naming_the_teachers_upload_is_not_a_miss() -> None:
@@ -194,7 +211,11 @@ async def _not_cancelled() -> bool:
 
 
 async def _run(
-    monkeypatch, transport: FakeTransport, *, run_id: str | None = None
+    monkeypatch,
+    transport: FakeTransport,
+    *,
+    run_id: str | None = None,
+    artifact_store: ArtifactStore | None = None,
 ) -> tuple[Any, list[tuple[str, dict[str, Any]]]]:
     from pico_orchestrator.true_pi import runner
 
@@ -218,6 +239,7 @@ async def _run(
         principal=_Principal(),
         emit=emit,
         is_cancelled=_not_cancelled,
+        artifact_store=artifact_store,
         caps=RunCaps(min_artifacts=0, max_seconds=20),
         transport=transport,
         run_id=run_id,
@@ -230,6 +252,45 @@ _FIXED = json.dumps(
     {"files": [{"name": "高三（2）班班级公约.docx", "ext": ".docx", "chars": 200}], "names": ["高三（2）班班级公约.docx"]}
 )
 _CLAIM = "已修改，文件已保存到 `/workspace/outputs/高三（2）班班级公约.docx`。"
+
+
+@pytest.mark.asyncio
+async def test_current_run_ledger_screenshot_needs_no_extra_round(monkeypatch) -> None:
+    from app.artifact_store import LedgerArtifactStore
+    from app.db import Base, RunRow, TaskRow
+    from pico_orchestrator.browser_screenshot import write_browser_screenshot
+    from pico_orchestrator.sandbox_s2 import PNG_MAGIC
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    monkeypatch.delenv("PICO_SANDBOX_DISK", raising=False)
+    run_id = "self-check-screenshot"
+    principal = _Principal()
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    store = LedgerArtifactStore(factory, run_id=run_id)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with factory.begin() as session:
+            session.add(TaskRow(
+                school_id=principal.school_id,
+                membership_id=principal.membership_id,
+                runs=[RunRow(id=run_id)],
+            ))
+        shot = await write_browser_screenshot(
+            store, principal, name="demoqa-form-submitted.png", page_title="", png=PNG_MAGIC
+        )
+        transport = FakeTransport(
+            scripted=_turn(f"已提交表单。截图见《{shot['title']}》。"),
+            bash_outputs=[json.dumps(_report())],
+        )
+        result, events = await _run(monkeypatch, transport, run_id=run_id, artifact_store=store)
+    finally:
+        await engine.dispose()
+
+    assert result.status == "succeeded"
+    assert not [p for k, p in events if k == "run.resume"]
+    assert len([c for c in transport.sent if c.get("type") == "bash"]) == 1
 
 
 @pytest.mark.asyncio

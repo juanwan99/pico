@@ -112,10 +112,17 @@ def test_fake_green_flagged_explicitly() -> None:
 
 
 @pytest.mark.parametrize(
-    "artifact", [{"kind": "image", "title": "x.png"}, {"kind": "png", "title": "x"}]
+    ("kind", "artifact"),
+    [
+        ("png", {"kind": "image", "title": "x.png"}),
+        ("png", {"kind": "png", "title": "x"}),
+        ("jpg", {"kind": "image", "title": "x.jpg"}),
+        ("jpg", {"kind": "jpg", "title": "x"}),
+        ("image", {"kind": "image", "title": "x"}),
+    ],
 )
-def test_png_counts_as_a_produced_artifact(artifact: dict[str, str]) -> None:
-    case = {"id": "PNG", "expect": {"kinds": ["png"]}}
+def test_image_counts_as_a_produced_artifact(kind: str, artifact: dict[str, str]) -> None:
+    case = {"id": "IMAGE", "expect": {"kinds": [kind]}}
     arts = [{"id": "image", **artifact}]
     pico = Mock(spec=lte.Pico)
     res = lte.CaseResult(case=case["id"])
@@ -124,10 +131,54 @@ def test_png_counts_as_a_produced_artifact(artifact: dict[str, str]) -> None:
     lte.flag_fake_green(res, "succeeded", kinds=case["expect"]["kinds"])
 
     assert res.artifacts == 1
-    assert res.artifact_kinds == ["png"]
+    assert res.artifact_kinds == [kind]
     assert res.auto_score == res.max_score == 1
     assert res.ok and not res.fake_green
     pico.download.assert_not_called()
+
+
+def test_r7_lz2_with_two_ledger_screenshots_is_not_fake_green() -> None:
+    # Recreate the two artifact rows reported for run 4df4a911.
+    arts = [
+        {"id": "shot-1", "kind": "image", "title": "login-success.png"},
+        {"id": "shot-2", "kind": "image", "title": "upload-success.png"},
+    ]
+    case = {"id": "LZ2", "expect": {"kinds": []}}
+    res = lte.CaseResult(case=case["id"])
+    pico = Mock(spec=lte.Pico)
+
+    lte.score_case(case, arts, pico, res)
+    lte.flag_fake_green(res, "succeeded", kinds=case["expect"]["kinds"])
+
+    assert res.artifacts == 2
+    assert res.artifact_kinds == ["png"]
+    assert res.ok and not res.fake_green
+    pico.download.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("artifacts", "count"),
+    [
+        ([{"id": "output", "kind": "pdf", "title": "result.pdf"}], 1),
+        ([], 0),
+    ],
+)
+def test_no_expected_kinds_counts_deliveries(artifacts, count) -> None:
+    case = {"id": "X", "expect": {"kinds": []}}
+    res = lte.CaseResult(case=case["id"])
+    pico = Mock(spec=lte.Pico)
+    artifacts = artifacts + [
+        {"id": "upload", "kind": "file", "title": "input.png"},
+        {"id": "summary", "kind": "doc", "title": "回复摘要"},
+        {"id": "plan", "kind": "plan", "title": "计划.md"},
+    ]
+
+    lte.score_case(case, artifacts, pico, res)
+    lte.flag_fake_green(res, "succeeded", kinds=case["expect"]["kinds"])
+
+    assert res.artifacts == count
+    assert res.fake_green is (count == 0)
+    assert res.ok is (count > 0)
 
 
 @pytest.mark.parametrize("expect, fake_green", [({}, False), ({"kinds": ["docx"]}, True)])

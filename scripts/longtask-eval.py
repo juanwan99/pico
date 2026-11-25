@@ -72,7 +72,8 @@ def look_read_call(tool: str, args: dict[str, Any]) -> bool:
 
 CASES_DIR = ROOT / "testdata" / "longtask-eval"
 CHECKS_DIR = CASES_DIR / "checks"
-PRODUCED_KINDS = {"xlsx", "docx", "pptx", "html", "png"}
+IMAGE_KINDS = {"png", "jpg", "image"}
+PRODUCED_KINDS = {"xlsx", "docx", "pptx", "html"} | IMAGE_KINDS
 # Office and text uploads land as edu_office / file / excerpts; the reply summary is doc.
 NOT_DELIVERED_KINDS = {"edu_office", "edu_excerpt", "kb_text", "file", "doc"}
 SUITES = {"office": "LT", "coding": "LC", "hard": "LH", "xlong": "LX", "look": "LV"}
@@ -398,12 +399,13 @@ def _kind_of(art: dict[str, Any]) -> str:
     return str(art.get("kind") or "").lower()
 
 
-def _produced(arts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _produced(arts: list[dict[str, Any]], *, any_kind: bool = False) -> list[dict[str, Any]]:
+    excluded_kinds = NOT_DELIVERED_KINDS | {"plan"}
     return [
         a
         for a in arts
-        if str(a.get("kind") or "").lower() not in NOT_DELIVERED_KINDS
-        and _kind_of(a) in PRODUCED_KINDS
+        if str(a.get("kind") or "").lower() not in excluded_kinds
+        and (any_kind or _kind_of(a) in PRODUCED_KINDS)
     ]
 
 
@@ -717,11 +719,11 @@ def score_case(
             ]
         score_code(case, files, res, image, runtime, turn_files)
         return
-    produced = _produced(arts)
+    kinds = [str(k).lower() for k in expect.get("kinds") or []]
+    produced = _produced(arts, any_kind=not kinds)
     res.artifacts = len(produced)
     res.artifact_kinds = sorted({_kind_of(a) for a in produced})
     points = 0
-    kinds = [str(k).lower() for k in expect.get("kinds") or []]
     blobs: dict[str, str] = {}
     for kind in kinds:
         item = _latest_kind(produced, kind)
@@ -729,7 +731,7 @@ def score_case(
             res.notes.append(f"missing kind {kind}")
             continue
         points += 1
-        if kind == "png":
+        if kind in IMAGE_KINDS:
             continue
         raw = pico.download(item["id"])
         if kind == "docx":
