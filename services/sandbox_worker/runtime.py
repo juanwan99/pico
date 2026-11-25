@@ -134,6 +134,7 @@ class SandboxSession:
     # Takeover (#1230): while held, the AI's hands (/act) are refused.
     human_hold: bool = False
     ai_acted_at: float = 0.0
+    act_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def focused(self) -> SandboxWindow:
         for item in self.windows:
@@ -232,13 +233,14 @@ class SandboxRuntime:
 
     async def _purge(self) -> None:
         now = time.time()
-        dead = [
-            sid
-            for sid, sess in self._sessions.items()
-            if now - (sess.last_used or sess.created_at) > SESSION_TTL_S
-        ]
-        for sid in dead:
-            await self.destroy(sid)
+        for sess in list(self._sessions.values()):
+            # Recheck after each awaited close. Another request may now be acting
+            # on this session or may have refreshed it.
+            if (
+                not sess.act_lock.locked()
+                and now - (sess.last_used or sess.created_at) > SESSION_TTL_S
+            ):
+                await self.destroy(sess.session_id)
 
     def get(self, session_id: str) -> SandboxSession | None:
         return self._sessions.get(session_id)
@@ -764,92 +766,101 @@ class SandboxRuntime:
         (sandbox.human_required). Never logs `text`.
         """
         await self._purge()
-        if session.human_hold:
-            raise ToolError("sandbox.human_took_over", HUMAN_HOLD_COPY)
-        verb = (action or "").strip().lower()
-        if verb not in HANDS_ACTIONS:
-            raise ToolError("tool.invalid_arguments", f"未知动作 {verb or '(空)'}")
-        session.ai_acted_at = time.time()
-        window = self._hands(session)
-        hands: BrowserHands = window.surface  # type: ignore[assignment]
-        page_result: Any = None
-        page_file_meta: dict[str, Any] = {}
-        if verb == "navigate":
-            parse_public_http_url(url)
-            await hands.navigate(url)
-        elif verb == "navigate_back":
-            await hands.navigate_back()
-        elif verb == "click":
-            await hands.click_ref(ref, double=bool(double_click))
-        elif verb == "hover":
-            await hands.hover_ref(ref)
-        elif verb == "tabs":
-            await hands.tabs(tab_action or "list", int(index or 0))
-        elif verb == "fill_form":
-            await hands.fill_form(list(fields or []))
-        elif verb == "file_upload":
-            await hands.upload_files(ref, self._upload_payload(session, filenames, files))
-        elif verb == "page_file":
-            page_file_meta = await hands.page_file(self._upload_payload(session, filenames, files))
-        elif verb == "page_fn":
-            page_result = await hands.page_fn(fn, list(fn_args or []))
-        elif verb == "type":
-            await hands.type_ref(ref, text, submit=bool(submit), slowly=bool(slowly))
-        elif verb == "select_option":
-            await hands.select_ref(ref, [str(v) for v in (values or [])])
-        elif verb == "press_key":
-            await hands.press_key(key)
-        elif verb == "wait_for":
-            await hands.wait_for(text=text, text_gone=text_gone, seconds=float(seconds or 0))
-        loading = (
-            _loading_meta(window.surface) if verb in {"navigate", "navigate_back"} else {}
-        )
-        extra: dict[str, Any] = {}
-        timeout = asyncio.timeout(LOADING_SNAPSHOT_TIMEOUT_S if loading else None)
-        try:
-            async with timeout:
-                snapshot = await hands.snapshot()
-        except TimeoutError:
-            if not timeout.expired():
-                raise
-            logger.info("Chromium snapshot timed out while loading", exc_info=True)
-            loading["note"] += "本次未能及时取得快照。"
-        else:
-            full, delta = window.refs.update(snapshot, page=getattr(hands, "page_token", 0))
-            whole = verb == "snapshot" or delta is None
-            extra.update(snapshot=full if whole else delta, snapshot_mode="full" if whole else "delta")
-        await self._sync_after_navigation(session, loading)
+        # Playwright changes the current tab and refreshes aria refs on snapshot.
+        # Keep each action and its snapshot together on this teacher's desk.
+        async with session.act_lock:
+            self.require_owner(
+                session.session_id, school_id=session.school_id, membership_id=session.membership_id
+            )
+            if session.human_hold:
+                raise ToolError("sandbox.human_took_over", HUMAN_HOLD_COPY)
+            verb = (action or "").strip().lower()
+            if verb not in HANDS_ACTIONS:
+                raise ToolError("tool.invalid_arguments", f"未知动作 {verb or '(空)'}")
+            session.ai_acted_at = time.time()
+            window = self._hands(session)
+            hands: BrowserHands = window.surface  # type: ignore[assignment]
+            try:
+                page_result: Any = None
+                page_file_meta: dict[str, Any] = {}
+                if verb == "navigate":
+                    parse_public_http_url(url)
+                    await hands.navigate(url)
+                elif verb == "navigate_back":
+                    await hands.navigate_back()
+                elif verb == "click":
+                    await hands.click_ref(ref, double=bool(double_click))
+                elif verb == "hover":
+                    await hands.hover_ref(ref)
+                elif verb == "tabs":
+                    await hands.tabs(tab_action or "list", int(index or 0))
+                elif verb == "fill_form":
+                    await hands.fill_form(list(fields or []))
+                elif verb == "file_upload":
+                    await hands.upload_files(ref, self._upload_payload(session, filenames, files))
+                elif verb == "page_file":
+                    page_file_meta = await hands.page_file(self._upload_payload(session, filenames, files))
+                elif verb == "page_fn":
+                    page_result = await hands.page_fn(fn, list(fn_args or []))
+                elif verb == "type":
+                    await hands.type_ref(ref, text, submit=bool(submit), slowly=bool(slowly))
+                elif verb == "select_option":
+                    await hands.select_ref(ref, [str(v) for v in (values or [])])
+                elif verb == "press_key":
+                    await hands.press_key(key)
+                elif verb == "wait_for":
+                    await hands.wait_for(text=text, text_gone=text_gone, seconds=float(seconds or 0))
+                loading = (
+                    _loading_meta(window.surface) if verb in {"navigate", "navigate_back"} else {}
+                )
+                extra: dict[str, Any] = {}
+                timeout = asyncio.timeout(LOADING_SNAPSHOT_TIMEOUT_S if loading else None)
+                try:
+                    async with timeout:
+                        snapshot = await hands.snapshot()
+                except TimeoutError:
+                    if not timeout.expired():
+                        raise
+                    logger.info("Chromium snapshot timed out while loading", exc_info=True)
+                    loading["note"] += "本次未能及时取得快照。"
+                else:
+                    full, delta = window.refs.update(snapshot, page=getattr(hands, "page_token", 0))
+                    whole = verb == "snapshot" or delta is None
+                    extra.update(snapshot=full if whole else delta, snapshot_mode="full" if whole else "delta")
+                await self._sync_after_navigation(session, loading)
 
-        message = HANDS_COPY.get(verb, APPLIED_COPY)
-        timeout = asyncio.timeout(LOADING_METADATA_TIMEOUT_S if loading else None)
-        try:
-            async with timeout:
-                await self._save_login(session)
-                dialogs = hands.take_dialogs()
-                if dialogs:
-                    message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)
-                    extra["dialogs"] = dialogs
-                tabs = await hands.tabs("list", 0)
-        except TimeoutError:
-            if not timeout.expired():
-                raise
-            logger.info("Chromium metadata sync timed out while loading", exc_info=True)
-            loading["note"] += "本次未能及时更新登录状态或标签页。"
-        else:
-            if len(tabs) > 1 or verb == "tabs":
-                # A new tab opened (or the AI asked): it is already the current page.
-                extra["tabs"] = tabs
-        if page_file_meta:
-            extra.update(page_file_meta)
-        if verb == "page_fn":
-            extra["page_result"] = page_result
-        return self._public_meta(
-            session,
-            action=verb,
-            message=message,
-            **loading,
-            **extra,
-        )
+                message = HANDS_COPY.get(verb, APPLIED_COPY)
+                timeout = asyncio.timeout(LOADING_METADATA_TIMEOUT_S if loading else None)
+                try:
+                    async with timeout:
+                        await self._save_login(session)
+                        dialogs = hands.take_dialogs()
+                        if dialogs:
+                            message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)
+                            extra["dialogs"] = dialogs
+                        tabs = await hands.tabs("list", 0)
+                except TimeoutError:
+                    if not timeout.expired():
+                        raise
+                    logger.info("Chromium metadata sync timed out while loading", exc_info=True)
+                    loading["note"] += "本次未能及时更新登录状态或标签页。"
+                else:
+                    if len(tabs) > 1 or verb == "tabs":
+                        # A new tab opened (or the AI asked): it is already the current page.
+                        extra["tabs"] = tabs
+                if page_file_meta:
+                    extra.update(page_file_meta)
+                if verb == "page_fn":
+                    extra["page_result"] = page_result
+                return self._public_meta(
+                    session,
+                    action=verb,
+                    message=message,
+                    **loading,
+                    **extra,
+                )
+            finally:
+                session.last_used = time.time()
 
     def _upload_payload(
         self,

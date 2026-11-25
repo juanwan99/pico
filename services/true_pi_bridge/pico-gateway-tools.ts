@@ -453,7 +453,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_open",
-    "Open a PUBLIC page in the isolated sandbox browser (the teacher can also act in it directly). Denies intranet/metadata/18765.",
+    "Open a PUBLIC page in the isolated sandbox browser (the teacher can also act in it directly). For HTML generated in this run, use sandbox_preview_inspect. Denies intranet/metadata/18765.",
     Type.Object(
       {
         url: Type.String(),
@@ -561,7 +561,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_file_upload",
-    "Attach files to the file input (or the upload button) with the given ref: filenames from the teacher's sandbox disk and/or artifact_ids from the Pico ledger (e.g. a document you just generated). Max 10 files, 25 MB. Rules: see sandbox_browser_snapshot.",
+    "Attach files to the file input (or upload button) with the given ref. Use filenames for this run's artifacts (title, outputs/<name>, or /workspace/outputs/<name>; newest matching title wins) or files on the teacher's sandbox disk. You can also specify Pico ledger artifact_ids. Max 10 files, 25 MB. Rules: see sandbox_browser_snapshot.",
     Type.Object(
       {
         ref: Type.String(),

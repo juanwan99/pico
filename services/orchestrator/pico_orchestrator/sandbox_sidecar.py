@@ -34,19 +34,35 @@ def _headers() -> dict[str, str]:
 
 
 def _raise_detail(resp: httpx.Response) -> None:
-    code = "sandbox.unavailable"
-    message = "隔离沙箱侧车不可用（不是 LibreChat 进程）。请稍后重试。"
+    code = f"http.{resp.status_code}"
+    message = f"隔离沙箱返回 HTTP {resp.status_code}"
     try:
         body = resp.json()
-        detail = body.get("detail") if isinstance(body, dict) else None
-        if isinstance(detail, dict):
-            code = str(detail.get("code") or code)
-            message = str(detail.get("message") or message)
-        elif isinstance(detail, str) and detail.strip():
-            message = detail.strip()
-    except Exception:  # noqa: BLE001 — sidecar error body is optional JSON
-        message = f"隔离沙箱返回 HTTP {resp.status_code}"
+    except ValueError as exc:
+        raise ToolError(code, message) from exc
+    detail = body.get("detail") if isinstance(body, dict) else None
+    if isinstance(detail, dict):
+        code = str(detail.get("code") or code)
+        message = str(detail.get("message") or message)
+    elif isinstance(detail, str) and detail.strip():
+        message = detail.strip()
+    elif resp.status_code == 422 and isinstance(detail, list):
+        # FastAPI includes the rejected input in each error. Keep the reason and
+        # field path only, since the input can contain text or entire form bodies.
+        code = "tool.invalid_arguments"
+        fields = "；".join(
+            f"{'.'.join(map(str, item['loc']))} {item['msg']}" for item in detail
+        )
+        message = f"隔离沙箱参数不合法：{fields}"
     raise ToolError(code, message)
+
+
+def _transport_error(exc: httpx.RequestError) -> ToolError:
+    if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
+        return ToolError("sandbox.unavailable", "隔离沙箱侧车未运行或无法连接。")
+    if isinstance(exc, httpx.TimeoutException):
+        return ToolError("sandbox.timeout", "等待隔离沙箱侧车响应超时。")
+    return ToolError("sandbox.communication_failed", "与隔离沙箱侧车通信失败。")
 
 
 async def _embedded_call(
@@ -207,11 +223,8 @@ async def sidecar_json(
                 params=params,
                 headers=_headers(),
             )
-    except httpx.HTTPError as exc:
-        raise ToolError(
-            "sandbox.unavailable",
-            "隔离沙箱侧车未运行。浏览器画面不在 LibreChat / pico-api 进程内。",
-        ) from exc
+    except httpx.RequestError as exc:
+        raise _transport_error(exc) from exc
     if resp.status_code >= 400:
         _raise_detail(resp)
     if path.endswith("/png"):
@@ -239,9 +252,9 @@ async def sidecar_stream(path: str, *, params: dict[str, Any]) -> AsyncIterator[
     try:
         req = client.build_request("GET", base.rstrip("/") + path, params=params, headers=_headers())
         resp = await client.send(req, stream=True)
-    except httpx.HTTPError as exc:
+    except httpx.RequestError as exc:
         await client.aclose()
-        raise ToolError("sandbox.unavailable", "隔离沙箱侧车未运行。") from exc
+        raise _transport_error(exc) from exc
     if resp.status_code >= 400:
         await resp.aread()
         await client.aclose()
