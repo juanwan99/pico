@@ -87,6 +87,18 @@ def test_unpriced_model_locks() -> None:
     assert exc.value.code == "channel.unpriced"
 
 
+@pytest.mark.parametrize(("model", "price"), [("gpt-6.2-sol", 2), ("gpt-6.1-terra", 1)])
+def test_seed_card_uu_codex_models_are_priced(
+    monkeypatch: pytest.MonkeyPatch, model: str, price: int
+) -> None:
+    monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
+    monkeypatch.delenv("PICO_CHANNEL_RATES_PATH", raising=False)
+    reset_rate_card()
+    rate = require_rate(kind="llm", model=model)
+    assert rate.input_yuan_per_million == price
+    assert rate.output_yuan_per_million == price
+
+
 def test_seed_card_thousand_input_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PICO_CHANNEL_RATES", raising=False)
     reset_rate_card()
