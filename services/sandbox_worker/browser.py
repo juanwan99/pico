@@ -901,8 +901,9 @@ class PlaywrightPage:
 
     async def screenshot_png(self) -> bytes:
         async with self._viewport_lock:
-            viewport = self._viewport
             cdp = await self._page_metrics(self._page)
+            layout = (await cdp.send("Page.getLayoutMetrics"))["cssLayoutViewport"]
+            viewport = (layout["clientWidth"], layout["clientHeight"])
             # A window snapshot reads the current compositor surface. A surface
             # screenshot with emulation or a clip temporarily resizes the live view.
             screenshot = await cdp.send("Page.captureScreenshot", {"fromSurface": False})

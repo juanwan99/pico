@@ -289,6 +289,52 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
 
 
 @pytest.mark.asyncio
+async def test_real_chromium_failed_tab_fit_keeps_png_click_coordinates(
+    tmp_path, monkeypatch, chromium,
+) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    context = await chromium.new_context(
+        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+    )
+    page = await context.new_page()
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
+    try:
+        await surface.set_viewport(720, 700, 1.5)
+        fit = AsyncMock(side_effect=RuntimeError("tab fit failed"))
+        monkeypatch.setattr(surface, "_fit_page", fit)
+        tab = await context.new_page()
+        await tab.set_content(
+            "<button style='position:absolute;left:930px;top:580px;width:60px;height:40px;"
+            "background:red;border:0' onclick='this.dataset.hit=1'></button>"
+        )
+        assert await tab.evaluate("[innerWidth, innerHeight, devicePixelRatio]") == [1280, 800, 1]
+
+        monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
+        runtime = SandboxRuntime()
+        win = SandboxWindow("win_browser", "browser", surface)
+        sess = SandboxSession(
+            "sbox_fit", "school-a", "member-a", "_norun", "ws", tab.url, "", "", b"",
+            time.time(), windows=[win], focused_id=win.window_id,
+        )
+        runtime._sessions[sess.session_id] = sess
+        async with aclosing(runtime.stream(sess)) as stream:
+            assert await asyncio.wait_for(anext(stream), 2) == {
+                "poll": True, "window_id": win.window_id,
+            }
+            fit.assert_awaited_once_with(tab)
+            assert (await runtime.pane_meta(sess))["mime"] == "image/png"
+            x, y = 960, 600
+            with Image.open(io.BytesIO(sess.screenshot_png)) as png:
+                assert png.size == (1280, 800)
+                assert png.getpixel((x, y)) == (255, 0, 0)
+            await runtime.apply_input(sess, click_x=x, click_y=y)
+            assert await tab.get_attribute("button", "data-hit") == "1"
+    finally:
+        await surface.close()
+
+
+@pytest.mark.asyncio
 async def test_real_chromium_png_does_not_change_live_frame_coordinates(tmp_path, chromium) -> None:
     from sandbox_worker.browser import PlaywrightPage
 
