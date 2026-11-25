@@ -27,6 +27,9 @@ const HEIGHT = 1080;
 const SCROLL_MS = 8000;
 const WINDOW = { width: 2000, height: 1210 };
 const CROP = [24, 380, 2706, 240];
+const MAX_ATTEMPTS = 3;
+
+class FixtureUnavailable extends Error {}
 
 function watchPane({ image, fullscreen }) {
   const now = () => performance.timeOrigin + performance.now();
@@ -143,14 +146,19 @@ function watchPane({ image, fullscreen }) {
 export async function measurePane(page, maximize, { out, getReference, run }) {
   const img = page.locator(IMAGE);
   const wait = { polling: 25, timeout: 15000 };
-  await page.waitForFunction(
-    () =>
-      window.sandboxLatency.frames.some(
-        (f) => f.ready && f.width === 720 && f.height === 700 && f.natural[0] === 1080,
-      ),
-    null,
-    { ...wait, timeout: 60000 },
-  );
+  try {
+    await page.waitForFunction(
+      () =>
+        window.sandboxLatency.frames.some(
+          (f) => f.ready && f.width === 720 && f.height === 700 && f.natural[0] === 1080,
+        ),
+      null,
+      { ...wait, timeout: 60000 },
+    );
+  } catch (error) {
+    if (error.name !== 'TimeoutError') throw error;
+    throw new FixtureUnavailable('Sandbox test page did not render within 60 s.', { cause: error });
+  }
   await img.click({ position: { x: 30, y: 24 } });
   await page.waitForFunction(
     () =>
@@ -338,11 +346,88 @@ async function withCleanup(run, cleanup) {
   }
 }
 
-async function requireEmptyDesk(sessions, headers) {
+async function hasOpenDesk(sessions, headers) {
   const current = await fetch(`${sessions}/current`, { headers });
-  if (current.ok) throw new Error('The test teacher already has an open sandbox desk.');
-  if (current.status !== 404 || (await current.json()).detail?.code !== 'sandbox.session_not_found') {
-    throw new Error(`sandbox preflight HTTP ${current.status}`);
+  if (current.ok) return true;
+  if (current.status === 404 && (await current.json()).detail?.code === 'sandbox.session_not_found') {
+    return false;
+  }
+  throw new Error(`sandbox current HTTP ${current.status}`);
+}
+
+async function requireEmptyDesk(sessions, headers) {
+  if (await hasOpenDesk(sessions, headers)) {
+    throw new Error('The test teacher already has an open sandbox desk.');
+  }
+}
+
+async function closeDesks(sessions, headers, ids) {
+  for (const id of ids) {
+    const closed = await fetch(`${sessions}/${id}`, { method: 'DELETE', headers });
+    if (!closed.ok) throw new Error(`sandbox cleanup HTTP ${closed.status}`);
+  }
+  if (await hasOpenDesk(sessions, headers)) {
+    throw new Error('A sandbox desk remains open after round cleanup.');
+  }
+}
+
+export async function collectChatDesks(page, base, headers, ids) {
+  // The public `current` route returns the alias as its session_id. Use the
+  // same sandbox.session events that mount the pane to get the concrete IDs.
+  await page.getByTestId('task-stop-button').waitFor({ state: 'detached', timeout: 60000 });
+  const conversationId = new URL(page.url()).pathname.split('/').at(-1);
+  if (conversationId === 'new') return;
+  async function read(route) {
+    const response = await fetch(`${base}/api/pico/v1${route}`, { headers });
+    if (!response.ok) throw new Error(`sandbox ledger HTTP ${response.status} (${route})`);
+    return response.json();
+  }
+  const { tasks } = await read(`/tasks?conversation_id=${encodeURIComponent(conversationId)}`);
+  for (const task of tasks) {
+    const { runs } = await read(`/tasks/${task.id}/runs`);
+    for (const run of runs) {
+      const { events } = await read(`/runs/${run.id}/events`);
+      for (const { type, payload } of events) {
+        if (type === 'sandbox.session') ids.add(payload.session_id);
+      }
+    }
+  }
+}
+
+export async function measureRound({
+  sessions, headers, fixtureUrl, prepare, measure, collectDesks, onRetry,
+}) {
+  for (let attempt = 1; ; attempt++) {
+    await requireEmptyDesk(sessions, headers);
+    await prepare();
+    const ids = new Set();
+    let cleaned = false;
+    try {
+      return await withCleanup(async () => {
+        const response = await fetch(sessions, {
+          method: 'POST',
+          headers: { ...headers, 'content-type': 'application/json' },
+          body: JSON.stringify({ url: fixtureUrl }),
+        });
+        if (response.status === 400 && (await response.json()).detail?.code === 'sandbox.fetch_failed') {
+          throw new FixtureUnavailable('sandbox open HTTP 400 (sandbox.fetch_failed)');
+        }
+        if (!response.ok) throw new Error(`sandbox open HTTP ${response.status}`);
+        const { session_id: id } = await response.json();
+        ids.add(id);
+        return await measure();
+      }, async () => {
+        await withCleanup(async () => {
+          if (ids.size) await collectDesks(ids);
+        }, () => closeDesks(sessions, headers, ids));
+        cleaned = true;
+      });
+    } catch (error) {
+      if (!cleaned || !(error instanceof FixtureUnavailable) || attempt === MAX_ATTEMPTS) {
+        throw error;
+      }
+      onRetry(attempt, error);
+    }
   }
 }
 
@@ -437,66 +522,71 @@ async function main() {
       image: IMAGE,
       fullscreen: FULLSCREEN,
     });
-    const runs = [];
-    for (let run = 1; run <= 3; run++) {
-      await goNewChat(page, base);
-      await requireEmptyDesk(sessions, headers);
-      await page.addStyleTag({
-        content: `
-        ${STAGE} { flex: none !important; width: 720px !important; height: 700px !important }
-        [data-expanded="true"] ${STAGE} {
-          width: ${WIDTH}px !important; height: ${HEIGHT}px !important
-        }
-      `,
-      });
-      // Own the desk before the chat mounts the pane. The pane can then attach
-      // to the same desk even if it requests the fixture during a remount.
-      const response = await fetch(sessions, {
-        method: 'POST',
-        headers: { ...headers, 'content-type': 'application/json' },
-        body: JSON.stringify({ url: fixtureUrl }),
-      });
-      if (!response.ok)
-        throw new Error(`sandbox open HTTP ${response.status}`);
-      const { session_id: id } = await response.json();
-      const url = `${sessions}/${id}`;
-      await withCleanup(async () => {
-        await sendPrompt(page, `打开 ${fixtureUrl}`);
-        const result = await measurePane(
-          page,
-          () => page.locator(FULLSCREEN).click(),
-          { out, getReference: local ? () => reference : undefined, run },
-        );
-        runs.push(result);
+    const report = {
+      tip,
+      limited: args.limit,
+      referencePixels: local ? 'native' : undefined,
+      fixtureUrl,
+      runs: [],
+      retries: [],
+      medianFps: null,
+      pass: false,
+    };
+    await withCleanup(async () => {
+      for (let run = 1; run <= 3; run++) {
+        report.retries.push(0);
+        const result = await measureRound({
+          sessions,
+          headers,
+          fixtureUrl,
+          prepare: async () => {
+            await goNewChat(page, base);
+            await page.addStyleTag({
+              content: `
+                ${STAGE} { flex: none !important; width: 720px !important; height: 700px !important }
+                [data-expanded="true"] ${STAGE} {
+                  width: ${WIDTH}px !important; height: ${HEIGHT}px !important
+                }
+              `,
+            });
+          },
+          measure: async () => {
+            // A snapshot publishes the existing desk to the pane. A chat URL
+            // would also trigger the frontend's own open request.
+            await sendPrompt(
+              page,
+              '请调用一次 sandbox_browser_snapshot，把我当前沙箱桌的网页显示在右侧供我操作。只读这张已有的桌，保持页面原样，然后结束任务。',
+            );
+            return await measurePane(
+              page,
+              () => page.locator(FULLSCREEN).click(),
+              { out, getReference: local ? () => reference : undefined, run },
+            );
+          },
+          collectDesks: (ids) => collectChatDesks(page, base, headers, ids),
+          onRetry: (retry, error) => {
+            report.retries[run - 1] = retry;
+            console.warn(`Round ${run}, retry ${retry}: ${error.message}`);
+          },
+        });
+        report.runs.push(result);
         console.log(
           JSON.stringify({
             run,
+            retries: report.retries[run - 1],
             clickMs: result.click.ms,
             maxMs: result.max.ms,
             fps: result.scroll.fps,
             smallTextRms: result.max.rms,
           }),
         );
-      }, async () => {
-        const closed = await fetch(url, { method: 'DELETE', headers });
-        if (!closed.ok)
-          throw new Error(`sandbox cleanup HTTP ${closed.status}`);
-      });
-    }
-    const medianFps = runs.map((r) => r.scroll.fps).sort((a, b) => a - b)[1];
-    const pass =
-      medianFps >= 2 &&
-      runs.every((r) => r.click.ms < 1000 && r.max.ms < 1000 && (!local || r.max.rms <= 5));
-    writeJson(path.join(out, 'report.json'), {
-      tip,
-      limited: args.limit,
-      referencePixels: local ? 'native' : undefined,
-      fixtureUrl,
-      runs,
-      medianFps,
-      pass,
-    });
-    if (!pass) process.exitCode = 1;
+      }
+      report.medianFps = report.runs.map((r) => r.scroll.fps).sort((a, b) => a - b)[1];
+      report.pass =
+        report.medianFps >= 2 &&
+        report.runs.every((r) => r.click.ms < 1000 && r.max.ms < 1000 && (!local || r.max.rms <= 5));
+      if (!report.pass) process.exitCode = 1;
+    }, () => writeJson(path.join(out, 'report.json'), report));
   }, async () => {
     link?.close();
     await browser?.close();
