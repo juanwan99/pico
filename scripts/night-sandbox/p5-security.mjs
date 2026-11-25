@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * P5 teacher: metadata deny, cross-account 403, 9th desk refused, idle reclaim ps.
+ * P5 teacher: metadata deny, cross-account 403, 11th desk refused, idle reclaim ps.
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -150,32 +150,31 @@ async function main() {
 
     const psBeforeFill = sandboxPs();
     fs.writeFileSync(path.join(args.out, 'S14-ps-before.txt'), psBeforeFill);
-    for (let i = 0; i < 8; i++) {
+    // The teacher from S13 already holds one of the ten desks.
+    for (let i = 0; i < 9; i++) {
       const raw = ecs(
         `curl -sS -m 40 -X POST http://127.0.0.1:18767/v1/internal/sessions/open -H 'content-type: application/json' -d '{"school_id":"cap","membership_id":"cap-${i}","url":"https://example.com/"}'`,
       );
       fillers.push(raw);
+      if (!JSON.parse(raw).session_id) {
+        throw new Error(`S14: desk ${i + 2} did not open: ${raw.slice(0, 220)}`);
+      }
     }
-    const ninth = ecs(
-      `curl -sS -m 20 -X POST http://127.0.0.1:18767/v1/internal/sessions/open -H 'content-type: application/json' -d '{"school_id":"cap","membership_id":"cap-ninth","url":"https://example.com/"}'`,
+    const eleventh = ecs(
+      `curl -sS -m 20 -X POST http://127.0.0.1:18767/v1/internal/sessions/open -H 'content-type: application/json' -d '{"school_id":"cap","membership_id":"cap-eleventh","url":"https://example.com/"}'`,
     );
-    fs.writeFileSync(path.join(args.out, 'S14-ninth.json'), `${ninth}\n`);
-    await goNewChat(page, args.base);
-    await sendPrompt(page, '打开 https://example.org');
-    await page.waitForTimeout(2500);
-    const s14 = await shot(page, path.join(args.out, 'S14-ninth-refused.png'));
+    fs.writeFileSync(path.join(args.out, 'S14-eleventh.json'), `${eleventh}\n`);
     const free = ecs('free -h');
     fs.writeFileSync(path.join(args.out, 'S14-free.txt'), free);
-    if (!/quota|已满|最多 8/.test(ninth)) {
-      throw new Error(`S14: ninth desk not refused: ${ninth.slice(0, 220)}`);
+    if (JSON.parse(eleventh).detail?.code !== 'sandbox.quota') {
+      throw new Error(`S14: eleventh desk not refused: ${eleventh.slice(0, 220)}`);
     }
     report.s14 = 'Y';
-    report.s14_bytes = s14.size;
 
     const psBefore = sandboxPs();
     fs.writeFileSync(path.join(args.out, 'S15-ps-before.txt'), psBefore);
     const beforeN = Number((psBefore.match(/COUNT=(\d+)/) || [0, '0'])[1]);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < fillers.length; i++) {
       try {
         const sid = JSON.parse(fillers[i] || '{}').session_id;
         if (!sid) continue;

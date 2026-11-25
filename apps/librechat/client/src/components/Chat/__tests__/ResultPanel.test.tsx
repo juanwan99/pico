@@ -587,6 +587,29 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(screen.queryByTitle('browser-preview')).not.toBeInTheDocument();
   });
 
+  it('shows the sandbox quota message returned by the API', async () => {
+    const message = '沙箱已满（最多 10 路），请关掉一路再开。';
+    mockOpenBrowser.mockRejectedValueOnce(new Error(message));
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          run={run()}
+          runStatusLabel="已完成"
+          messages={[
+            {
+              messageId: 'u1',
+              conversationId: 'c1',
+              parentMessageId: null,
+              text: '打开 https://example.com',
+              isCreatedByUser: true,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(message);
+  });
+
   it('S1b: 打开浏览器 resolves a default page and opens Chromium', async () => {
     mockOpenBrowser.mockResolvedValue({
       session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',

@@ -32,9 +32,6 @@ const STREAM_RETRY_MS = 5000;
 const SCROLL_FLUSH_MS = 120;
 /** A press that travels this far is a drag, not a click. */
 const DRAG_START_PX = 4;
-/** Fit the pane (#1224): the page lays out at the stage size once resizing settles. */
-const FIT_SETTLE_MS = 300;
-const FIT_MIN_DELTA_PX = 8;
 const PANE_KEYS = new Set([
   'Enter',
   'Tab',
@@ -111,7 +108,9 @@ export default function SandboxWebPane({
   const [files, setFiles] = useState<Array<{ name: string }>>([]);
   const [focusedKind, setFocusedKind] = useState(kind || 'browser');
   const isOffice = Boolean(focusedKind && focusedKind !== 'browser');
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [image, setImage] = useState<{ src: string; width?: number; height?: number } | null>(
+    null,
+  );
   const [pageUrl, setPageUrl] = useState(initialUrl || '');
   const [pageTitle, setPageTitle] = useState(initialTitle || '');
   const [status, setStatus] = useState('打开中');
@@ -133,11 +132,20 @@ export default function SandboxWebPane({
   const liveRef = useRef(live);
   liveRef.current = live;
   const streamingRef = useRef(false);
-  const scrollRef = useRef({ dy: 0, timer: 0 });
+  const scrollRef = useRef({ dy: 0, timer: 0, running: false });
   const dragRef = useRef<PaneDrag | null>(null);
   const dragEndedRef = useRef(false);
   const stageRef = useRef<HTMLDivElement>(null);
-  const fitRef = useRef({ w: 0, h: 0 });
+  const fitRef = useRef({ sessionId: '', w: 0, h: 0, dpr: 1 });
+
+  const inOrder = useCallback(<T,>(send: () => T | Promise<T>) => {
+    const next = inputChainRef.current.then(send);
+    inputChainRef.current = next.catch(() => undefined);
+    return next;
+  }, []);
+
+  const postInOrder = (body: Parameters<typeof postPicoSandboxInput>[1]) =>
+    inOrder(() => postPicoSandboxInput(sessionId, body));
 
   const applyMeta = useCallback((meta: {
     url?: string;
@@ -180,12 +188,15 @@ export default function SandboxWebPane({
 
   const refreshShot = useCallback(async () => {
     const blob = await getPicoSandboxScreenshot(sessionId);
+    if (streamingRef.current) {
+      return;
+    }
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
     }
     const next = URL.createObjectURL(blob);
     objectUrlRef.current = next;
-    setImageUrl(next);
+    setImage({ src: next });
   }, [sessionId]);
 
   const refreshMeta = useCallback(async () => {
@@ -255,10 +266,21 @@ export default function SandboxWebPane({
       try {
         await streamPicoSandbox(
           sessionId,
-          (event) => {
+          async (event) => {
             if (event.jpeg) {
+              const src = `data:image/jpeg;base64,${event.jpeg}`;
+              const decoded = new Image();
+              decoded.src = src;
+              await decoded.decode();
+              if (abort.signal.aborted) {
+                return;
+              }
+              if (!streamingRef.current) {
+                setStatus('请在此画面操作');
+                setError(null);
+              }
               streamingRef.current = true;
-              setImageUrl(`data:image/jpeg;base64,${event.jpeg}`);
+              setImage({ src, width: event.width, height: event.height });
               setLive('live');
             } else if (event.poll) {
               streamingRef.current = false;
@@ -269,8 +291,11 @@ export default function SandboxWebPane({
       } catch {
         /* fall back to polling below */
       }
+      if (abort.signal.aborted) {
+        return;
+      }
       streamingRef.current = false;
-      if (!abort.signal.aborted && liveRef.current !== 'dead') {
+      if (liveRef.current !== 'dead') {
         retry = window.setTimeout(() => void run(), STREAM_RETRY_MS);
       }
     };
@@ -290,38 +315,38 @@ export default function SandboxWebPane({
     if (!stage || !fitsPane || typeof ResizeObserver === 'undefined') {
       return;
     }
-    let timer = 0;
     const send = () => {
       const w = Math.floor(stage.clientWidth);
       const h = Math.floor(stage.clientHeight);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const last = fitRef.current;
       if (w <= 0 || h <= 0) {
         return;
       }
-      if (Math.abs(w - last.w) < FIT_MIN_DELTA_PX && Math.abs(h - last.h) < FIT_MIN_DELTA_PX) {
+      if (last.sessionId === sessionId && w === last.w && h === last.h && dpr === last.dpr) {
         return;
       }
-      fitRef.current = { w, h };
-      void postPicoSandboxInput(sessionId, { viewport_width: w, viewport_height: h }).catch(() => {
-        fitRef.current = last;
+      const next = { sessionId, w, h, dpr };
+      fitRef.current = next;
+      void inOrder(() => {
+        if (fitRef.current === next) {
+          return postPicoSandboxInput(sessionId, {
+            viewport_width: w,
+            viewport_height: h,
+            device_pixel_ratio: dpr,
+          });
+        }
+      }).catch(() => {
+        if (fitRef.current === next) {
+          fitRef.current = last;
+        }
+        setError('画面尺寸未送出，请重试');
       });
     };
-    const observer = new ResizeObserver(() => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(send, FIT_SETTLE_MS);
-    });
+    const observer = new ResizeObserver(send);
     observer.observe(stage);
-    return () => {
-      observer.disconnect();
-      window.clearTimeout(timer);
-    };
-  }, [fitsPane, sessionId]);
-
-  const postInOrder = (body: { click_x?: number; click_y?: number; text?: string; key?: string }) => {
-    const next = inputChainRef.current.then(() => postPicoSandboxInput(sessionId, body));
-    inputChainRef.current = next.catch(() => undefined);
-    return next;
-  };
+    return () => observer.disconnect();
+  }, [fitsPane, inOrder, sessionId]);
 
   const sendInput = async (body: { click_x?: number; click_y?: number; text?: string; key?: string }) => {
     setBusy(true);
@@ -352,8 +377,8 @@ export default function SandboxWebPane({
     if (!img || !rect || rect.width <= 0 || rect.height <= 0) {
       return null;
     }
-    const nw = img.naturalWidth || VIEWPORT_W;
-    const nh = img.naturalHeight || VIEWPORT_H;
+    const nw = image?.width || img.naturalWidth || VIEWPORT_W;
+    const nh = image?.height || img.naturalHeight || VIEWPORT_H;
     return {
       x: Math.round((clientX - rect.left) * (nw / rect.width)),
       y: Math.round((clientY - rect.top) * (nh / rect.height)),
@@ -392,15 +417,15 @@ export default function SandboxWebPane({
       for (;;) {
         if (!d.downSent) {
           d.downSent = true;
-          await postPicoSandboxInput(sessionId, { drag: 'down', click_x: d.from.x, click_y: d.from.y });
+          await postInOrder({ drag: 'down', click_x: d.from.x, click_y: d.from.y });
         } else if (d.next) {
           const at = d.next;
           d.next = null;
-          await postPicoSandboxInput(sessionId, { drag: 'move', click_x: at.x, click_y: at.y });
+          await postInOrder({ drag: 'move', click_x: at.x, click_y: at.y });
         } else if (d.end && !d.upSent) {
           d.upSent = true;
           applyMeta(
-            await postPicoSandboxInput(sessionId, { drag: 'up', click_x: d.end.x, click_y: d.end.y }),
+            await postInOrder({ drag: 'up', click_x: d.end.x, click_y: d.end.y }),
           );
           setStatus('已送进隔离浏览器');
         } else {
@@ -452,6 +477,7 @@ export default function SandboxWebPane({
       }
       d.started = true;
       setError(null);
+      flushTyped();
     }
     d.next = toPage(ev.clientX, ev.clientY);
     void pumpDrag(d);
@@ -468,6 +494,28 @@ export default function SandboxWebPane({
     void pumpDrag(d);
   };
 
+  const pumpScroll = async () => {
+    const pending = scrollRef.current;
+    pending.running = true;
+    try {
+      while (Math.round(pending.dy)) {
+        flushTyped();
+        await inOrder(() => {
+          const dy = Math.round(pending.dy);
+          pending.dy = 0;
+          if (dy) {
+            return postPicoSandboxInput(sessionId, { scroll_dy: dy });
+          }
+        });
+      }
+    } catch {
+      pending.dy = 0;
+      setError('滚动未送出，请重试');
+    } finally {
+      pending.running = false;
+    }
+  };
+
   const onViewportWheel = (ev: React.WheelEvent<HTMLImageElement>) => {
     // Ctrl/⌘ + wheel zooms the pane; a zoomed-in pane scrolls itself.
     if (ev.ctrlKey || ev.metaKey || zoom > 1 || live !== 'live') {
@@ -475,16 +523,12 @@ export default function SandboxWebPane({
     }
     const pending = scrollRef.current;
     pending.dy += ev.deltaY;
-    if (pending.timer) {
+    if (pending.timer || pending.running) {
       return;
     }
     pending.timer = window.setTimeout(() => {
-      const dy = Math.round(pending.dy);
-      pending.dy = 0;
       pending.timer = 0;
-      if (dy) {
-        void postPicoSandboxInput(sessionId, { scroll_dy: dy }).catch(() => undefined);
-      }
+      void pumpScroll();
     }, SCROLL_FLUSH_MS);
   };
 
@@ -555,6 +599,9 @@ export default function SandboxWebPane({
         kind: next.kind,
       });
       applyMeta(meta);
+      if (next.kind !== 'browser') {
+        streamingRef.current = false;
+      }
       await refreshShot();
       setLive('live');
     } catch (err) {
@@ -789,10 +836,10 @@ export default function SandboxWebPane({
               ))}
             </div>
           ) : null}
-          {imageUrl ? (
+          {image ? (
             <img
               ref={imgRef}
-              src={imageUrl}
+              src={image.src}
               alt="隔离浏览器画面"
               width={VIEWPORT_W}
               onClick={(ev) => void onViewportClick(ev)}
@@ -803,7 +850,11 @@ export default function SandboxWebPane({
               onDragStart={(ev) => ev.preventDefault()}
               draggable={false}
               onWheel={onViewportWheel}
-              style={{ width: `${Math.round(zoom * 100)}%` }}
+              style={{
+                width: image.width
+                  ? `min(${Math.round(zoom * 100)}%, ${image.width * zoom}px)`
+                  : `${Math.round(zoom * 100)}%`,
+              }}
               className="mx-auto block h-auto max-w-none cursor-default bg-white"
               data-testid="sandbox-web-viewport"
             />

@@ -506,16 +506,24 @@ export async function getPicoSandboxScreenshot(sessionId: string): Promise<Blob>
   return res.blob();
 }
 
-export type PicoSandboxFrame = { jpeg?: string; poll?: boolean; ping?: boolean; window_id?: string };
+export type PicoSandboxFrame = {
+  jpeg?: string;
+  width?: number;
+  height?: number;
+  frame_id?: string;
+  poll?: boolean;
+  ping?: boolean;
+  window_id?: string;
+};
 
 /** Live pane (#1215): SSE of JPEG frames pushed when the page repaints. Resolves when it ends. */
 export async function streamPicoSandbox(
   sessionId: string,
-  onEvent: (event: PicoSandboxFrame) => void,
+  onEvent: (event: PicoSandboxFrame) => void | Promise<void>,
   signal: AbortSignal,
 ): Promise<void> {
   const res = await fetch(
-    `/api/pico/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/stream`,
+    `/api/pico/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/stream?ack=1`,
     {
       credentials: 'include',
       headers: { ...authHeaders(), Accept: 'text/event-stream' },
@@ -528,14 +536,29 @@ export async function streamPicoSandbox(
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = '';
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) {
-      return;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) {
+        return;
+      }
+      const { events, rest } = splitSseEvents<PicoSandboxFrame>(buf + value);
+      buf = rest;
+      for (const event of events) {
+        await onEvent(event);
+        if (event.frame_id && !signal.aborted) {
+          void postPicoSandboxInput(sessionId, { frame_ack: event.frame_id }, signal).catch(
+            (err) => {
+              if (!signal.aborted) {
+                console.warn('Sandbox frame acknowledgement failed', err);
+              }
+            },
+          );
+        }
+      }
     }
-    const { events, rest } = splitSseEvents<PicoSandboxFrame>(buf + value);
-    buf = rest;
-    events.forEach(onEvent);
+  } finally {
+    await reader.cancel();
   }
 }
 
@@ -599,8 +622,11 @@ export async function postPicoSandboxInput(
     key?: string;
     viewport_width?: number;
     viewport_height?: number;
+    device_pixel_ratio?: number;
     drag?: 'down' | 'move' | 'up';
+    frame_ack?: string;
   },
+  signal?: AbortSignal,
 ) {
   return picoFetch<PicoSandboxSessionMeta>(
     `/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/input`,
@@ -608,6 +634,7 @@ export async function postPicoSandboxInput(
       method: 'POST',
       body: JSON.stringify(body),
       headers: { Accept: 'application/json' },
+      signal,
     },
   );
 }

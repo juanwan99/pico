@@ -11,20 +11,25 @@ import asyncio
 import base64
 import difflib
 import html
+import io
 import json
 import logging
+import math
 import os
 import re
 import shutil
 import tempfile
 import time
 from collections.abc import Awaitable, Callable, Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
+from anyio import CancelScope
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.web_guard import parse_public_http_url
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +41,7 @@ VIEWPORT_HEIGHT = 800
 # 1280x800 picture shrunk into it. Upstream = Playwright set_viewport_size.
 VIEWPORT_MIN = (360, 300)
 VIEWPORT_MAX = (1920, 1200)
+MAX_DEVICE_SCALE = 2
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 GOTO_TIMEOUT_MS = 45_000
 PAGE_LOADING_NOTE = "页面还在加载，可稍后再取快照 / 截图。"
@@ -45,7 +51,7 @@ SNAPSHOT_MAX_CHARS = 30_000
 SECRET_MASK = "••••"
 WAIT_MAX_S = 30.0
 # Live pane (#1215): Chromium pushes a JPEG on each repaint (CDP screencast).
-SCREENCAST_QUALITY = 70
+SCREENCAST_QUALITY = 75
 SCROLL_MAX_PX = 2000
 # Tabs (#1217): a link that opens a new tab becomes the current page, like
 # Playwright MCP. Bounded so a popup storm cannot eat the sidecar.
@@ -230,6 +236,8 @@ CHROMIUM_ARGS = (
     "--no-first-run",
     "--password-store=basic",
     "--hide-scrollbars",
+    # Give the compositor enough backing pixels for the highest pane DPR.
+    f"--force-device-scale-factor={MAX_DEVICE_SCALE}",
 )
 
 
@@ -250,6 +258,13 @@ class BrowserPage(Protocol):
     async def type_text(self, text: str, *, password: bool) -> None: ...
 
     async def close(self) -> None: ...
+
+
+@dataclass
+class ScreencastFrame:
+    jpeg: str
+    width: int
+    height: int
 
 
 class BrowserHands(Protocol):
@@ -604,9 +619,13 @@ class PlaywrightPage:
         self._page = page
         self._profile_dir = profile_dir
         self.loading_note = ""
-        # Bumps whenever the current tab changes; the live pane re-attaches (#1217).
+        # The live pane reattaches when the tab or its capture dimensions change.
         self.page_token = 0
         self._viewport = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+        self._device_scale = 1.0
+        self._viewport_lock = asyncio.Lock()
+        self._viewport_task: asyncio.Task[None] | None = None
+        self._metrics: dict[Any, Any] = {}
         self._dialogs: list[str] = []
         self._rate_limit: tuple[float, str] | None = None
         # Values the AI typed into boxes; masked on box lines in snapshots (pico#1320).
@@ -634,21 +653,61 @@ class PlaywrightPage:
         if page is not self._page:
             self._page = page
             self.page_token += 1
-            if page.viewport_size != self._size_dict():
-                asyncio.ensure_future(page.set_viewport_size(self._size_dict()))
+            if page.viewport_size != self._size_dict() or self._device_scale != 1 or page in self._metrics:
+                self._viewport_task = asyncio.create_task(self._fit_page(page))
+            else:
+                self._viewport_task = None
 
     def _size_dict(self) -> dict[str, int]:
         return {"width": self._viewport[0], "height": self._viewport[1]}
 
-    async def set_viewport(self, width: int, height: int) -> tuple[int, int]:
+    async def _fit_page(self, page: Any) -> None:
+        try:
+            async with self._viewport_lock:
+                if not page.is_closed():
+                    await self._apply_metrics(page, self._viewport, self._device_scale)
+        except Exception:
+            if page.is_closed():
+                logger.debug("tab closed during viewport update", exc_info=True)
+            else:
+                logger.warning("sandbox tab viewport update failed", exc_info=True)
+        finally:
+            if self._viewport_task is asyncio.current_task():
+                self._viewport_task = None
+
+    async def _apply_metrics(self, page: Any, viewport: tuple[int, int], scale: float) -> None:
+        size = {"width": viewport[0], "height": viewport[1]}
+        if page.viewport_size != size:
+            await page.set_viewport_size(size)
+        cdp = self._metrics.get(page)
+        if scale != 1 or cdp is not None:
+            if cdp is None:
+                cdp = self._metrics[page] = await self._context.new_cdp_session(page)
+            await cdp.send(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    **size,
+                    "mobile": False,
+                    "deviceScaleFactor": scale,
+                },
+            )
+
+    async def set_viewport(
+        self, width: int, height: int, device_scale: float = 1.0
+    ) -> tuple[int, int]:
         """The teacher's pane size; new tabs follow it too."""
         size = (
             max(VIEWPORT_MIN[0], min(VIEWPORT_MAX[0], int(width))),
             max(VIEWPORT_MIN[1], min(VIEWPORT_MAX[1], int(height))),
         )
-        if size != self._viewport:
-            self._viewport = size
-            await self._page.set_viewport_size(self._size_dict())
+        scale = min(device_scale, MAX_DEVICE_SCALE)
+        async with self._viewport_lock:
+            if size != self._viewport or scale != self._device_scale:
+                # Retire the old cast before Chromium repaints at intermediate sizes.
+                self.page_token += 1
+                await self._apply_metrics(self._page, size, scale)
+                self._viewport = size
+                self._device_scale = scale
         return size
 
     def _on_new_page(self, page: Any) -> None:
@@ -660,6 +719,7 @@ class PlaywrightPage:
         self._use(page)
 
     def _on_close(self, page: Any) -> None:
+        self._metrics.pop(page, None)
         if page is self._page:
             rest = self._open_pages()
             if rest:
@@ -784,24 +844,40 @@ class PlaywrightPage:
         return {"has_text_input": False, "has_password_input": False}
 
     async def screenshot_png(self) -> bytes:
-        raw = await self._page.screenshot(type="png", full_page=False)
+        async with self._viewport_lock:
+            page = self._page
+            cdp = self._metrics.get(page)
+            if cdp is None:
+                raw = await page.screenshot(type="png", full_page=False, scale="css")
+            else:
+                # Capture on the session that owns the DPR override, in CSS pixels as before.
+                viewport = (await cdp.send("Page.getLayoutMetrics"))["cssVisualViewport"]
+                screenshot = await cdp.send(
+                    "Page.captureScreenshot",
+                    {
+                        "format": "png",
+                        "clip": {
+                            "x": viewport["pageX"],
+                            "y": viewport["pageY"],
+                            "width": viewport["clientWidth"],
+                            "height": viewport["clientHeight"],
+                            "scale": 1 / self._device_scale,
+                        },
+                    },
+                )
+                raw = base64.b64decode(screenshot["data"])
         png = bytes(raw)
         if not png.startswith(PNG_MAGIC):
             raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能截取 viewport")
         return png
 
-    async def click(self, x: int, y: int) -> None:
-        before = str(self._page.url or "")
+    async def click(self, x: int, y: int, *, settle: bool = True) -> None:
+        before = self.url
         await self._page.mouse.click(float(x), float(y))
-        for _ in range(25):
-            if str(self._page.url or "") != before:
-                try:
-                    await self._page.wait_for_load_state("domcontentloaded", timeout=5_000)
-                except Exception:
-                    logger.debug("navigation load wait failed", exc_info=True)
-                break
-            await asyncio.sleep(0.1)
-        assert_http_public_or_internal(self.url)
+        if settle:
+            await self._settle(before)
+        else:
+            assert_http_public_or_internal(self.url)
 
     async def type_text(self, text: str, *, password: bool) -> None:
         # Never log `text`. Password keystrokes go to the focused DOM node only.
@@ -1242,59 +1318,98 @@ class PlaywrightPage:
         step = max(-SCROLL_MAX_PX, min(SCROLL_MAX_PX, int(dy)))
         await self._page.mouse.wheel(0, float(step))
 
-    async def drag(self, phase: str, x: int, y: int) -> None:
+    async def drag(self, phase: str, x: int, y: int, *, settle: bool = True) -> None:
         """Teacher drags on the pane (#1236): press, move, release — e.g. a slider check."""
         await self._page.mouse.move(float(x), float(y))
         if phase == "down":
             await self._page.mouse.down()
         elif phase == "up":
             await self._page.mouse.up()
-            await self._settle(self.url)
+            if settle:
+                await self._settle(self.url)
+            else:
+                assert_http_public_or_internal(self.url)
 
-    async def press_human_key(self, key: str) -> None:
+    async def press_human_key(self, key: str, *, settle: bool = True) -> None:
         """Teacher presses Enter / Tab / arrows on the pane (#1215)."""
         if key not in HUMAN_KEYS:
             raise ToolError("tool.invalid_arguments", "画面上只支持 Enter / Tab / 退格 / 方向键 / 全选等按键")
         before = self.url
         await self._page.keyboard.press(key)
-        await self._settle(before)
+        if settle:
+            await self._settle(before)
+        else:
+            assert_http_public_or_internal(self.url)
 
-    async def screencast(self, push: Callable[[str], None]) -> Callable[[], Awaitable[None]]:
+    async def screencast(
+        self, push: Callable[[ScreencastFrame], None]
+    ) -> Callable[[], Awaitable[None]]:
         """Chromium pushes a base64 JPEG each time the page repaints (#1215).
 
         Upstream CDP ``Page.startScreencast`` — the same thing Steel / browserless
         live view use. A still page sends nothing. Returns ``stop``.
         """
-        cdp = await self._context.new_cdp_session(self._page)
+        from playwright.async_api import Error
 
-        async def ack(frame_session: Any) -> None:
+        task = self._viewport_task
+        if task is not None:
+            await asyncio.shield(task)
+        async with self._viewport_lock:
+            width, height = self._viewport
+            scale = self._device_scale
+            cdp = await self._context.new_cdp_session(self._page)
+        max_width = math.ceil(width * scale)
+        max_height = math.ceil(height * scale)
+        active = True
+
+        async def on_frame(event: dict[str, Any]) -> None:
+            if not active:
+                return
             try:
-                await cdp.send("Page.screencastFrameAck", {"sessionId": frame_session})
-            except Exception:
-                logger.debug("screencast ack failed", exc_info=True)
-
-        def on_frame(event: dict[str, Any]) -> None:
-            push(str(event.get("data") or ""))
-            asyncio.ensure_future(ack(event.get("sessionId")))
-
-        cdp.on("Page.screencastFrame", on_frame)
-        await cdp.send(
-            "Page.startScreencast",
-            {
-                "format": "jpeg",
-                "quality": SCREENCAST_QUALITY,
-                "maxWidth": VIEWPORT_MAX[0],
-                "maxHeight": VIEWPORT_MAX[1],
-            },
-        )
+                await cdp.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
+            except Error:
+                if active:
+                    raise
+                logger.debug("screencast stopped while acknowledging a frame", exc_info=True)
+            if not active:
+                return
+            meta = event["metadata"]
+            css_width, css_height = round(meta["deviceWidth"]), round(meta["deviceHeight"])
+            # Chromium can pair a queued bitmap with the current view's metadata on resize.
+            # Check the JPEG header before using those coordinates for teacher input.
+            density = min(MAX_DEVICE_SCALE, max_width / css_width, max_height / css_height)
+            jpeg = event["data"]
+            with Image.open(io.BytesIO(base64.b64decode(jpeg))) as img:
+                if (
+                    abs(img.width - css_width * density) > 1
+                    or abs(img.height - css_height * density) > 1
+                ):
+                    return
+            push(ScreencastFrame(jpeg, css_width, css_height))
 
         async def stop() -> None:
+            nonlocal active
+            active = False
             try:
-                await cdp.send("Page.stopScreencast")
-                await cdp.detach()
+                with CancelScope(shield=True):
+                    await cdp.detach()
             except Exception:
                 logger.debug("screencast stop failed", exc_info=True)
 
+        cdp.on("Page.screencastFrame", on_frame)
+        try:
+            await cdp.send(
+                "Page.startScreencast",
+                {
+                    "format": "jpeg",
+                    "quality": SCREENCAST_QUALITY,
+                    "maxWidth": max_width,
+                    "maxHeight": max_height,
+                },
+            )
+        except BaseException:
+            await stop()
+            raise
         return stop
 
     async def save_login(self, path: Path) -> None:
