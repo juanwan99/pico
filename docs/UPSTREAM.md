@@ -27,15 +27,15 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
   - Pi 自己的重试已关（`PI_RETRY_MAX = 0`）。流到一半断了，由 Pico 同会话续跑处理，续跑也从备用池扣。
 - **换模型最多一次**：主模型加一个备用（`brain_candidates(...)[:2]`）。直连、Pi、阅卷三条路都会换；429（如 Vertex 共享配额）、安全拦截、超时不换。
 - **按发出去的模型选线**：gpt-* / grok-* 走 Responses，Gemini 走 chat/completions。直连、Pi、阅卷三条路都看这一跳实际发的模型，不看主脑。阅卷原来看主脑，把 gpt-5.6-sol 发到 chat/completions，New API 回 400（pico#1288）。
-- **主脑、档位、转写档**（edu-core#3522，业主 10-22「deepseek当主力」「gemini 只做阅卷时的OCR」）：
-  - 主脑 = `DEEPSEEK_MODEL`，现网是 `deepseek-flash`（DeepSeek 官方，New API 渠道 8）。
-  - pico-fast / pico-deep 都发主脑自己的名字（`product_backend_model`）。不能退回 `deepseek-v4-flash` / `deepseek-reasoner`：渠道 4 把这两个名字映射到 Gemini，主脑就悄悄变回 Gemini 了。deep 档要换别的模型，设 `PICO_BRAIN_DEEP_MODEL`。
-  - `pico-ocr` 是阅卷手写转写档，后端是 `PICO_OCR_MODEL`（现网 `gemini-3.8-flash`），没设就跟 pico-fast 一样。只有 edu 阅卷的两处转写点名这一档：主观题转写、填空转写。读印刷卷、拆题、判分都走主脑。
+- **聊天主脑、读卷和转写**：
+  - 主脑 = `DEEPSEEK_MODEL`，现网快档 11-14 起 `gemini-3.8-flash`（edu-core#5603），11-24 起 `gpt-6.2-sol`（edu-core#6410）。`pico-fast` 和 `pico-deep` 默认都用这个模型，`PICO_BRAIN_DEEP_MODEL` 可单独配置深档。
+  - `/v1/exam/answer-extract` 用 `PICO_EXAM_READ_MODEL`，空值跟随 `pico-fast`。edu-core#6319 发版时在 `/opt/pico/.env` 配 `PICO_EXAM_READ_MODEL=deepseek-flash`（DeepSeek 官方，New API 渠道 8）。渠道 4 的旧别名 `deepseek-v4-flash` / `deepseek-reasoner` 映射到 Gemini。带图由 `vision_model_for_images` 选可读图的模型，用量按实际回答的模型记。
+  - `pico-ocr` 是阅卷手写转写档，后端是 `PICO_OCR_MODEL`（现网 11-24 起 `gpt-6.1-terra`，edu-core#6410），没设就跟 pico-fast 一样。只有 edu 阅卷的两处转写点名这一档：主观题转写、填空转写。
   - 这一档不进 `/v1/models`。线上白名单只要有 pico-fast / pico-deep，就放行 pico-ocr。
   - 计价按 `PICO_OCR_MODEL` 那一行算（`channel_rates._lane_backend`）。
-  - 备用顺序看 `PICO_BRAIN_FALLBACKS`。现网是 `gemini-3.8-flash,deepseek-flash,grok-4.6,gpt-5.6-sol`，排在第一位的主模型自动去重：
-    - 主脑档：deepseek-flash → gemini
-    - 转写档：gemini → deepseek-flash
+  - 备用顺序看 `PICO_BRAIN_FALLBACKS`。现网 11-25 是 `gpt-6.1-terra,deepseek-flash,gpt-5.6-sol`，排在第一位的主模型自动去重：
+    - 聊天快档：gpt-6.2-sol → gpt-6.1-terra；转写档：gpt-6.1-terra → deepseek-flash
+    - 读卷：deepseek-flash → gpt-6.1-terra
   - 换脑用 `brain-switch.py --ocr <model>`：先预检转写模型能不能读图，切完后检里多一项 pico-ocr 读图。pico-api 起不来也自动回滚。
 - **阅卷单列**（pico#1379，业主 11-02「阅卷需要单列，至于用哪个模型 我需要灵活可方便切换」）：带 `ai:exam-grading` 的票（edu AI 阅卷的转写和评分）整次请求都在阅卷范围里（`grading_models.enter_grading`）。
   - 上游 key 换成 `PICO_GRADING_API_KEY`（New API 令牌 `pico-grading`，分组 `grading`）。哪些渠道接阅卷、谁主谁备，在 New API 这个分组里配（UU 优先级高、米醋备）。没设就用正式 key，和以前一样。

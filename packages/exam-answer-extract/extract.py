@@ -1017,7 +1017,7 @@ async def model_complete(
     usage_out: dict[str, Any] | None = None,
     model_out: dict[str, Any] | None = None,
 ) -> str:
-    """One completion against the product brain. Images switch to the vision entry."""
+    """One exam completion. Images still use the vision model selector."""
     from pico_orchestrator import provider as P
     from pico_orchestrator.vision import vision_model_for_images
 
@@ -1029,7 +1029,7 @@ async def model_complete(
     if thinking:
         # 推理的 token 也算在输出上限里：不另给，一页三道遗传大题推满 16k 就把答案截掉了（edu-core#3164）
         max_tokens += think_tokens()
-    mid = P.product_backend_model(deep=False)
+    mid = P.exam_read_model()
     if _has_images(messages):
         mid = vision_model_for_images(mid)
     # Same New API, next model when the brain's channel or key is dead — the

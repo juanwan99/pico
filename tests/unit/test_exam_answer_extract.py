@@ -2062,7 +2062,10 @@ async def test_text_solve_that_ran_out_thinking_reads_again_without():
 
 
 @pytest.mark.asyncio
-async def test_exam_read_body_on_the_wire_to_new_api(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize("read_model", [None, "deepseek-flash"])
+async def test_exam_read_body_on_the_wire_to_new_api(
+    monkeypatch: pytest.MonkeyPatch, read_model: str | None
+):
     """edu-core#3508: the exact JSON New API gets. New API drops reasoning_effort for gemini-3 and
     forwards only extra_body.google.thinking_config. Google's own OpenAI-compatible endpoint refuses
     both at once, and Gemini 2.5 has no thinking_level: a brain that skips New API or a 2.5 model
@@ -2076,12 +2079,16 @@ async def test_exam_read_body_on_the_wire_to_new_api(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:3000/v1")
     monkeypatch.setenv("PICO_MODEL_PROVIDER", "deepseek")
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    if read_model is None:
+        monkeypatch.delenv("PICO_EXAM_READ_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("PICO_EXAM_READ_MODEL", read_model)
     bodies: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         bodies.append(json.loads(request.content))
         return httpx.Response(200, json={
-            "id": "x", "object": "chat.completion", "created": 0, "model": "gemini-3.8-flash",
+            "id": "x", "object": "chat.completion", "created": 0, "model": bodies[-1]["model"],
             "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "[]"}}],
             "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
         })
@@ -2095,11 +2102,20 @@ async def test_exam_read_body_on_the_wire_to_new_api(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(P, "call_once", call_once)
 
-    cfg = P.resolve_provider()
+    cfg = P.resolve_provider_for_model("pico-fast")
+    assert cfg is not None
+    assert P.resolve_model_id("pico-fast", cfg) == "gemini-3.8-flash"
     for thinking, level in ((False, "low"), (True, "high")):
-        await ex._complete_once(P, cfg, "gemini-3.8-flash", [{"role": "user", "content": "x"}], [0],
-                                budget=3, max_tokens=16000, thinking=thinking, usage_out={})
+        model_out: dict = {}
+        await ex.model_complete(
+            [{"role": "user", "content": "x"}], thinking=thinking, model_out=model_out
+        )
         body = bodies[-1]
-        assert body["reasoning_effort"] == level
-        assert body["extra_body"] == {"google": {"thinking_config": {"thinking_level": level}}}
-        assert "thinking" not in body and "google" not in body
+        assert body["model"] == model_out["model"] == (read_model or "gemini-3.8-flash")
+        if read_model is None:
+            assert body["reasoning_effort"] == level
+            assert body["extra_body"] == {"google": {"thinking_config": {"thinking_level": level}}}
+            assert "thinking" not in body and "google" not in body
+        else:
+            assert body["thinking"] == {"type": "enabled" if thinking else "disabled"}
+            assert "reasoning_effort" not in body and "extra_body" not in body

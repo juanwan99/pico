@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Throwaway Pico stack for the ruler (pico#1323). Same images as prod, source
-# mounted from <src>, own sqlite, own pi-runner + gVisor boxes. Touches no live
+# Throwaway Pico stack for the ruler (pico#1323). Same images as prod, services/ and
+# packages/ mounted from <src> (edu-core#6319: packages/ was the image's, so an
+# exam-answer-extract change ran live code), own sqlite, own pi-runner + gVisor boxes. Touches no live
 # container, no host firewall rule, no live meili.
 #
 #   bash scripts/pico-ruler-stack.sh up   <name> <src> [idx]   # src: dir or git:<ref> (archived from /opt/pico)
@@ -81,11 +82,11 @@ fetch_src() {
     local ref="${src#git:}"
     git -C "$LIVE_REPO" cat-file -e "$ref^{commit}" 2>/dev/null \
       || { echo "ref $ref not in $LIVE_REPO (fetch it first)" >&2; exit 2; }
-    git -C "$LIVE_REPO" archive "$ref" services testdata | tar -x -C "$D/src"
+    git -C "$LIVE_REPO" archive "$ref" services packages testdata | tar -x -C "$D/src"
     git -C "$LIVE_REPO" rev-parse "$ref" > "$D/src/REVISION"
   else
     [[ -d "$src/services" ]] || { echo "$src has no services/" >&2; exit 2; }
-    cp -a "$src/services" "$D/src/"
+    cp -a "$src/services" "$src/packages" "$D/src/"
     git -C "$src" rev-parse HEAD > "$D/src/REVISION" 2>/dev/null || echo "dir:$src" > "$D/src/REVISION"
   fi
 }
@@ -201,7 +202,7 @@ up() {
     -e MEILI_MASTER_KEY= -e PICO_SANDBOX_DISK=/var/lib/pico/teacher-disks -e PICO_GIT_SHA="ruler-$name" \
     -v "$D/data:/app/data" -v "$D/disks:/var/lib/pico/teacher-disks" -v "$D/office-sock:/run/pico-office" \
     -v "$s/api:/app/services/api:ro" -v "$s/orchestrator:/app/services/orchestrator:ro" \
-    -v "$s/true_pi_bridge:/app/services/true_pi_bridge:ro" \
+    -v "$s/true_pi_bridge:/app/services/true_pi_bridge:ro" -v "$D/src/packages:/app/packages:ro" \
     pico-api:v13 uvicorn app.main:app --app-dir services/api --host 127.0.0.1 --port "$API" >/dev/null
 
   for _ in $(seq 1 60); do
