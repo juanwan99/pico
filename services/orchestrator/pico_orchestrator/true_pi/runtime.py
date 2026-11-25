@@ -23,6 +23,7 @@ from pico_orchestrator.gateway import ArtifactStore, Principal
 from pico_orchestrator.pi_runtime import count_write_tool_successes
 from pico_orchestrator.provider import resolve_provider
 from pico_orchestrator.run_types import EventEmitter, RunCaps, RunResult
+from pico_orchestrator.sandbox_s1 import with_io_timeout
 from pico_orchestrator.sandbox_upload_files import _RunArtifactStore
 from pico_orchestrator.tools_builtin import build_default_gateway
 from pico_orchestrator.true_pi import steer as teacher_steer
@@ -1692,7 +1693,10 @@ async def _self_check_now(
         return []
     had = any(not os.path.basename(p).startswith(".") for p in (before or {}))
     artifact_titles = (
-        await cast(_RunArtifactStore, artifact_store).list_run_titles(principal, run_id=rid)
+        await with_io_timeout(
+            cast(_RunArtifactStore, artifact_store).list_run_titles(principal, run_id=rid),
+            what="list current run artifact titles",
+        )
         if artifact_store is not None
         else {}
     )

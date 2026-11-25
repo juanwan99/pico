@@ -10,17 +10,19 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
-from pico_orchestrator import upstream
-from pico_orchestrator.gateway import ArtifactStore
+from pico_orchestrator import sandbox_s1, upstream
+from pico_orchestrator.gateway import ArtifactStore, ToolError
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import FakeTransport
-from pico_orchestrator.true_pi.runtime import run_true_pi_agent
+from pico_orchestrator.true_pi.events import EventMapState
+from pico_orchestrator.true_pi.runtime import _self_check_now, run_true_pi_agent
 from pico_orchestrator.true_pi.self_check import (
     _BOX_SCRIPT,
     answer_claims_files,
@@ -57,6 +59,16 @@ def test_named_screenshot_in_ledger_is_not_missing() -> None:
         _report(),
         had_files_before=False,
         artifact_titles={"demoqa-form-submitted.png"},
+    ) == []
+
+
+def test_unquoted_screenshot_in_ledger_satisfies_delivery_claim() -> None:
+    text = "截图已生成，文件名为 demoqa-form-submitted.png"
+    assert self_check_facts(text, _report(), had_files_before=False) == [
+        "回答说交了文件，但这一轮 outputs 里没有新文件，也没有改过的文件。"
+    ]
+    assert self_check_facts(
+        text, _report(), had_files_before=False, artifact_titles={"demoqa-form-submitted.png"}
     ) == []
 
 
@@ -132,11 +144,22 @@ def test_counts_against_the_files() -> None:
     assert self_check_facts("已导出 4 页 PDF。", pdf, had_files_before=False) == ["卷.pdf 有 3 页，回答说 4 页。"]
     three = _report([{"name": f"{i}.docx", "ext": ".docx", "chars": 300} for i in range(3)])
     assert self_check_facts("5 份家长通知已生成。", three, had_files_before=False) == [
-        "这一轮 outputs 里有 3 个新文件，回答说 5 份。"
+        "这一轮有 3 个新文件，回答说 5 份。"
     ]
     # Five notices in one document is a choice, not a miss.
     one = _report([{"name": "通知.docx", "ext": ".docx", "chars": 900}])
     assert self_check_facts("5 份家长通知已生成，在一个文档里。", one, had_files_before=False) == []
+
+
+def test_copy_count_combines_outputs_and_named_ledger_files_by_title() -> None:
+    report = _report([{"name": name, "ext": ".png"} for name in ("a.png", "b.png")])
+    facts = self_check_facts(
+        "已交付 4 份文件，见 `a.png`、`c.png`。",
+        report,
+        had_files_before=False,
+        artifact_titles={"a.png", "c.png", "unmentioned.png"},
+    )
+    assert facts == ["这一轮有 3 个新文件，回答说 4 份。"]
 
 
 def test_prompt_is_facts_only_and_failure_fits_user_errors() -> None:
@@ -291,6 +314,23 @@ async def test_current_run_ledger_screenshot_needs_no_extra_round(monkeypatch) -
     assert result.status == "succeeded"
     assert not [p for k, p in events if k == "run.resume"]
     assert len([c for c in transport.sent if c.get("type") == "bash"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_current_run_title_lookup_propagates_io_timeout(monkeypatch) -> None:
+    monkeypatch.setattr(sandbox_s1, "IO_TIMEOUT_S", 0)
+    client = SimpleNamespace(bash=AsyncMock(return_value={"output": json.dumps(_report())}))
+    store = SimpleNamespace(list_run_titles=AsyncMock(return_value={}))
+    principal = _Principal()
+
+    with pytest.raises(ToolError, match="list current run artifact titles timed out") as exc:
+        await _self_check_now(
+            client, EventMapState(final_parts=[_CLAIM]), None, "r1", "",
+            artifact_store=store, principal=principal,
+        )
+
+    assert exc.value.code == "workspace.timeout"
+    store.list_run_titles.assert_called_once_with(principal, run_id="r1")
 
 
 @pytest.mark.asyncio
