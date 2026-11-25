@@ -51,12 +51,13 @@ ANCHORS: dict[str, tuple[str, ...]] = {
     ),
     "read_office_skill": (
         "python-docx / openpyxl / python-pptx",
+        "this turn",
         "edit in place",
     ),
     "generate_html_document": ("pico-artifact:", "No CDN", "ok is not finished"),
     "verify_html_document": ("http(s)",),
-    "generate_image": ("image_artifact_ids", "pico-artifact:<id>", "base64"),
-    "generate_diagram": ("Sibling of generate_image", "veto", "image_artifact_ids"),
+    "generate_image": ("read_office_skill", "pico-artifact:<id>", "base64"),
+    "generate_diagram": ("Sibling of generate_image", "veto", "read_office_skill"),
     "kb_search": ("honest_miss", "school materials", "Never invent"),
     "web_search": ("未检索",),
     "web_fetch": ("intranet",),
@@ -184,6 +185,9 @@ def test_load_bearing_phrases_on_both_surfaces() -> None:
             if py_desc is not None and phrase not in py_desc:
                 missing.append(f"PY {name}: {phrase!r}")
     assert not missing, "\n".join(missing)
+    for name in ("read_office_skill", "generate_image", "generate_diagram"):
+        assert "sandbox_office_lib" not in ts_reg[name][0]
+        assert "sandbox_office_lib" not in gw.tools[name].description
 
 
 def test_unregistered_names_absent_from_model_facing_text() -> None:

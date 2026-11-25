@@ -115,7 +115,7 @@ def test_observe_pptx_no_hint_when_embedded() -> None:
     assert "hint" not in seen["outline"]
 
 
-def test_pi_surface_names_image_artifact_ids() -> None:
+def test_pi_surface_defers_picture_insertion_to_office_skill() -> None:
     ts = (ROOT / "services" / "true_pi_bridge" / "pico-gateway-tools.ts").read_text(
         encoding="utf-8"
     )
@@ -126,9 +126,9 @@ def test_pi_surface_names_image_artifact_ids() -> None:
     assert "Pictures: generate_image first when needed" not in ts
     img = ts[ts.find("Create one png/jpg") : ts.find("Create one png/jpg") + 500]
     assert "SiliconFlow" not in img
-    assert "image_artifact_ids" in img
+    assert "read_office_skill" in img
     # pico#1320: system.md no longer spells out image_artifact_ids / IMAGE_PATHS —
-    # that craft detail lives on sandbox_office_lib / generate_image (above, ts).
+    # that craft detail lives in the gateway's office skill response.
 
 
 @dataclass

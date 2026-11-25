@@ -337,7 +337,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_image",
-    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, pass the returned artifact id as image_artifact_ids on sandbox_office_lib. To place it inside HTML, set img src to pico-artifact:<id>. Do not paste base64. Do not also hand it to the teacher as a separate download when it is already inside the file. Never invent pixels on failure.",
+    "Create one png/jpg via the configured HTTPS image API. To place it inside Word/PPT, follow the picture steps from read_office_skill. To place it inside HTML, set img src to pico-artifact:<id>. Do not paste base64. Do not also hand it to the teacher as a separate download when it is already inside the file. Never invent pixels on failure.",
     Type.Object(
       {
         prompt: Type.String(),
@@ -349,7 +349,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "generate_diagram",
-    "Draw one structure diagram (flowchart, sequence, org) from mermaid source into a PNG Artifact. Sibling of generate_image — they do not veto each other. kind=d2 is not wired. Never invent a diagram on failure. To place it in Word/PPT, pass the artifact id as image_artifact_ids on sandbox_office_lib. Do not also hand it to the teacher as a separate download when it is already inside the file.",
+    "Draw one structure diagram (flowchart, sequence, org) from mermaid source into a PNG Artifact. Sibling of generate_image — they do not veto each other. kind=d2 is not wired. Never invent a diagram on failure. To place it in Word/PPT, follow the picture steps from read_office_skill. Do not also hand it to the teacher as a separate download when it is already inside the file.",
     Type.Object(
       {
         source: Type.String(),
@@ -426,7 +426,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "read_office_skill",
-    "On-demand office craft (docx / xlsx / pptx). SYSTEM only lists name+when. This returns the full python-docx / openpyxl / python-pptx craft. Not LibreChat Skills. After reading, write with sandbox_office_lib (kind matches id). Change an existing file with artifact_id and load_doc / load_book / load_deck, then edit in place (keep other pages/cells/styles). The office write path is sandbox_office_lib only.",
+    "On-demand office craft (docx / xlsx / pptx) for python-docx / openpyxl / python-pptx. Follow the tool and file path at the start of the returned craft for this turn. For existing files, edit in place (keep other pages/cells/styles).",
     Type.Object(
       {
         id: Type.String(),

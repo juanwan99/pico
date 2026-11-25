@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import sys
+from functools import partial
+from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from zipfile import ZipFile
 
+import httpx
 import pytest
+from docx import Document
+from PIL import Image
+from pptx import Presentation
+from pptx.util import Inches
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from pi_runner.app import Runner, build_control_app
+from pi_runner.policy import RunnerSettings, WorkspaceKey
 from pico_orchestrator.capability_loading import (
     CORE_VISIBLE_TOOLS,
     office_skill_visible,
@@ -128,6 +140,78 @@ async def test_read_office_skill_returns_body(sid, library, run_id, monkeypatch)
         assert out["body"].count("sandbox_office_lib") == 1
         assert "`artifact_id`" in out["body"]
         assert "`output_path = OUTPUT_PATH`" in out["body"]
+        assert "`image_artifact_ids`" in out["body"]
+        assert "`IMAGE_PATHS`" in out["body"]
+
+
+@pytest.mark.parametrize(
+    ("sid", "tool", "args", "kind"),
+    [
+        ("docx", "generate_image", {"prompt": "一张插图"}, "jpg"),
+        ("pptx", "generate_diagram", {"source": "flowchart TD\nA-->B"}, "png"),
+    ],
+)
+async def test_box_office_skill_embeds_a_generated_picture(sid, tool, args, kind, tmp_path, monkeypatch):
+    key = runner.WorkspaceKey.for_run(
+        school_id="school-a", membership_id="member-a", conversation_id="c", run_id="box-run"
+    )
+    entry = runner.ProxyEntry("box-run", "", "", "", "", "", workspace_key=key)
+    monkeypatch.setitem(runner._REGISTRY, entry.run_id, entry)
+    settings = RunnerSettings(token="runner-test", workspace_root=tmp_path)
+    control = Runner(settings)
+    control_key = WorkspaceKey(**key.as_dict())
+    ws = control.prepare_workspace(control_key, with_memory=False)
+    control.sessions[entry.run_id] = SimpleNamespace(key=control_key)
+    transport = httpx.ASGITransport(app=build_control_app(control))
+    monkeypatch.setattr(runner, "httpx", SimpleNamespace(
+        AsyncClient=partial(httpx.AsyncClient, transport=transport), HTTPError=httpx.HTTPError
+    ))
+    monkeypatch.setenv(runner.RUNNER_URL_ENV, "http://runner.test")
+    monkeypatch.setenv(runner.RUNNER_TOKEN_ENV, settings.token)
+
+    picture = BytesIO()
+    Image.new("RGB", (2, 2), "white").save(picture, format={"jpg": "JPEG", "png": "PNG"}[kind])
+    raw = picture.getvalue()
+    monkeypatch.setattr(
+        "pico_orchestrator.tools_builtin.generate_image_with_usage",
+        AsyncMock(return_value=(raw, kind, None)),
+    )
+    monkeypatch.setattr(
+        "pico_orchestrator.tools_builtin.render_diagram_bytes",
+        AsyncMock(return_value=(raw, "", {})),
+    )
+    store = SimpleNamespace(
+        _run_id=entry.run_id,
+        write=AsyncMock(return_value={"artifact_id": "picture-id"}),
+    )
+    gw = build_default_gateway(store)
+    principal = P()
+    skill = await gw.invoke(principal, "read_office_skill", {"id": sid})
+    result = await gw.invoke(principal, tool, args)
+    assert f"`{tool}`" in skill["body"]
+    assert "`workspace_path`" in skill["body"] and "add_picture" in skill["body"]
+    assert "read_office_skill" in result["user_message"]
+    path = result["workspace_path"]
+    assert path == f"/workspace/work/generated/picture-id.{kind}"
+    assert str(Path(path).parent) + "/" in skill["body"]
+    local_path = str(ws / Path(path).relative_to("/workspace"))
+    assert not list((ws / "outputs").iterdir())
+    assert store.write.await_args.kwargs["content"] == raw
+
+    output_path = ws / "outputs" / f"illustrated.{sid}"
+    if sid == "docx":
+        doc = Document()
+        doc.add_picture(local_path)
+        doc.save(output_path)
+    else:
+        deck = Presentation()
+        slide = deck.slides.add_slide(deck.slide_layouts[6])
+        slide.shapes.add_picture(local_path, Inches(1), Inches(1))
+        deck.save(output_path)
+    with ZipFile(output_path) as package:
+        pictures = [name for name in package.namelist() if "/media/" in name]
+        assert len(pictures) == 1
+        assert package.read(pictures[0]) == raw
 
 
 async def test_read_office_skill_rejects_unknown_id() -> None:

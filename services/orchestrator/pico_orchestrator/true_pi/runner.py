@@ -28,7 +28,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from pico_orchestrator import upstream
+from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.true_pi.client import (
     PI_AGENT_HOME_ENV,
     PI_MODELS_JSON,
@@ -339,14 +342,11 @@ class RunnerTransport(SubprocessTransport):
     async def upload_attachments(self) -> None:
         if not self.runner.attachments:
             return
-        import httpx
 
-        base = f"{runner_url()}/v1/ws/{self.runner.key.path()}/file"
         async with httpx.AsyncClient(timeout=120.0) as client:
             for name, data in self.runner.attachments:
-                safe = _safe_name(name)
-                resp = await client.put(
-                    base, params={"path": f"attachments/{safe}"}, content=data, headers=self._headers()
+                resp = await _put_workspace_file(
+                    client, self.runner.key, f"attachments/{_safe_name(name)}", data
                 )
                 if resp.status_code >= 400:
                     raise TruePiClientError(f"attachment upload failed ({resp.status_code})")
@@ -539,6 +539,41 @@ def _safe_name(name: str) -> str:
     base = os.path.basename(str(name or "").replace("\\", "/")).strip() or "file"
     cleaned = "".join(ch for ch in base if ch not in '\x00/:*?"<>|').strip(". ")
     return (cleaned or "file")[:180]
+
+
+async def _put_workspace_file(
+    client: httpx.AsyncClient, key: WorkspaceKey, path: str, data: bytes,
+    *, run_id: str | None = None,
+) -> httpx.Response:
+    params = {"path": path}
+    if run_id is not None:
+        params["run_id"] = run_id
+    return await client.put(
+        f"{runner_url()}/v1/ws/{key.path()}/file",
+        params=params,
+        content=data,
+        headers={"x-pico-runner-token": runner_token()},
+    )
+
+
+async def attach_generated_image_path(
+    run_id: str | None, result: dict[str, Any], kind: str, data: bytes,
+) -> None:
+    """Make the ledger image available to Python in the current box."""
+    entry = proxy_entry(run_id)
+    if entry is None:
+        return
+    path = f"work/generated/{result['artifact_id']}.{kind}"
+    try:
+        if entry.workspace_key is None:
+            raise TruePiClientError("missing workspace key")
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await _put_workspace_file(client, entry.workspace_key, path, data, run_id=entry.run_id)
+            resp.raise_for_status()
+    except (httpx.HTTPError, TruePiClientError) as exc:
+        logger.warning("generated image staging failed run_id=%s: %s", entry.run_id, exc)
+        raise ToolError("workspace.upload_failed", "图片已生成，但无法放入本轮工作区。") from exc
+    result["workspace_path"] = f"{WS_ROOT}/{path}"
 
 
 # --- outputs → Pico ledger -----------------------------------------------------
