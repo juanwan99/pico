@@ -27,6 +27,8 @@ if ! [[ "$SAMPLES" =~ ^[0-9]+$ ]] || [[ "$SAMPLES" -lt 1 ]]; then
   exit 2
 fi
 
+CURL_ERR="$(mktemp "$OUT_DIR/curl.XXXXXX")"
+trap 'rm -f "$CURL_ERR"' EXIT
 echo "ts_utc,path,http_code,time_total_s,err" >"$CSV"
 ok_login=0
 ok_health=0
@@ -37,18 +39,16 @@ codes_health=()
 
 sample_one() {
   local path="$1"
-  local out code t err
+  local out code t err rc=0
   err=""
-  # shellcheck disable=SC2034
-  out="$(curl -sS -o /dev/null -w '%{http_code} %{time_total}' --max-time 12 "${BASE_URL}${path}" 2>/tmp/pico-502-curl.err || true)"
-  if [[ -s /tmp/pico-502-curl.err ]]; then
-    err="$(tr '\n' ' ' </tmp/pico-502-curl.err | head -c 80)"
+  out="$(curl -sS -o /dev/null -w '%{http_code} %{time_total}' --max-time 12 "${BASE_URL}${path}" 2>"$CURL_ERR")" || rc=$?
+  if [[ -s "$CURL_ERR" ]]; then
+    err="$(head -c 80 "$CURL_ERR" | tr '\n' ' ')"
   fi
   code="$(echo "$out" | awk '{print $1}')"
   t="$(echo "$out" | awk '{print $2}')"
-  if [[ -z "$code" ]]; then
+  if [[ "$rc" -ne 0 ]]; then
     code="000"
-    t="0"
   fi
   printf '%s,%s,%s,%s,%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$path" "$code" "$t" "$err" >>"$CSV"
   echo "$code"
@@ -93,3 +93,7 @@ done
     echo "verdict=HAS_NON_2XX"
   fi
 } | tee "$SUMMARY"
+
+if (( ok_login == 0 && ok_health == 0 )); then
+  exit 1
+fi

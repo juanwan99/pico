@@ -146,17 +146,30 @@ cmd_run() {
   nonempty "$dir/mongo.archive.gz"
 
   log "pico.db"
-  docker exec "$API" python3 -c '
+  # Use the compose image directly so an API container replacement can't interrupt the copy.
+  # The WAL volume must allow SQLite to create its shared-memory file.
+  docker run --rm -i --pull=never --network none --entrypoint python3 \
+    --mount type=volume,source=pico_pico_data,target=/data \
+    --mount "type=bind,source=$dir,target=/backup" pico-api:v13 - <<'PY' || fail "pico.db backup"
+import os
 import sqlite3
-src = sqlite3.connect("file:/app/data/pico.db?mode=ro", uri=True)
-dst = sqlite3.connect("/tmp/pico-backup.db")
-src.backup(dst)
-ok = dst.execute("pragma quick_check").fetchone()[0]
-dst.close()
-raise SystemExit(0 if ok == "ok" else "quick_check: " + ok)
-' || fail "pico.db backup"
-  docker exec "$API" cat /tmp/pico-backup.db | gzip -1 >"$dir/pico.db.gz" || fail "pico.db copy"
-  docker exec "$API" rm -f /tmp/pico-backup.db || true
+from contextlib import closing
+
+os.umask(0o077)
+snapshot = "/backup/pico.db"
+with (
+    closing(sqlite3.connect("file:/data/pico.db?mode=ro", uri=True)) as source,
+    closing(sqlite3.connect(snapshot)) as target,
+):
+    source.backup(target)
+    check = target.execute("PRAGMA quick_check").fetchone()[0]
+    if check != "ok":
+        raise SystemExit(f"pico.db quick_check: {check}")
+
+owner = os.stat("/backup")
+os.chown(snapshot, owner.st_uid, owner.st_gid)
+PY
+  gzip -1 "$dir/pico.db" || fail "pico.db gzip"
   nonempty "$dir/pico.db.gz"
 
   log "pico-data / teacher-disks / librechat files"

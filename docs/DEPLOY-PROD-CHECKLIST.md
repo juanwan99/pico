@@ -31,6 +31,7 @@
 - [ ] 超过 RPM/并发上限返回 429
 - [ ] 开放注册关闭；未显式开启时不会播种固定密码账号
 - [ ] GitHub PR 回写 `## DEPLOYED`（SHA、健康检查、清单结果；不得含密钥）
+- [ ] 从公网跑 `bash tests/acceptance/reliability-live.sh`，核首屏静态包边缘缓存命中、登录页和 tip 3 秒内返回（[准备与口径](./RELIABILITY-AUDIT.md#边缘缓存配置和发版验收)）
 - [ ] **交付类变更**：公网登录 UI 结果区可按**文件名**下载打开（见 `docs/ACCEPT-HUMAN-DELIVERY-SURFACE.md`）；**禁止**仅 API 冒烟代替 UI 下载 PASS
 
 任何一项无法满足：停止部署，并在 PR 评论写 `## BLOCKED` 和原因。

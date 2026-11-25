@@ -30,7 +30,7 @@ FREEZE: docs/TRUTH-FREEZE.md v3.1
 
 ## Do not
 
-- Create extra **handoff / wave / status diary** Markdown. 现况入口 = [`STATE-NOW.md`](./STATE-NOW.md) + [#634 冻结令](https://github.com/juanwan99/pico/issues/634)。`HANDOFF-NEW-WINDOW-2026-08-23.md` **SUPERSEDED**。#573 已关。
+- Create extra **handoff / wave / status diary** Markdown. 现况入口 = [`STATE-NOW.md`](./STATE-NOW.md) + [#634 冻结令](https://github.com/juanwan99/pico/issues/634)。#573 已关。
 - Treat anything under `docs/archive/` as current.
 - Treat **#121 harness / multi-runtime** drafts as accepted architecture.
 - Treat `DAY-TASK-*` / #310 / #627 / #628 / **#646** as current dispatch.
@@ -55,7 +55,6 @@ FREEZE: docs/TRUTH-FREEZE.md v3.1
 | 0 | **[TOOLING-CATALOG.md](./TOOLING-CATALOG.md)** | 工具唯一 ID 表 |
 | — | **[ADR-OFFICE-DOC-PIPELINE.md](./ADR-OFFICE-DOC-PIPELINE.md)** | 办公文档选型 · **spec 不是天花板**（v1.4 压过 8-26「spec 是真源」）· 不当在飞 |
 | — | [MEMORY-RESET.md](./MEMORY-RESET.md) | 考古错误记忆 · 不当经验真源 |
-| — | [HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md) | **SUPERSEDED** · 不当现况 |
 | — | [TASK-CARD-STANDARD.md](./TASK-CARD-STANDARD.md) | 卡面冻结 · 禁改形状 |
 | — | [templates/dispatch-slip.md](./templates/dispatch-slip.md) | 派发条 |
 | — | [ONEFLOW.md](./ONEFLOW.md) | 仓内适配 · 形状冻结 |
@@ -69,11 +68,9 @@ FREEZE: docs/TRUTH-FREEZE.md v3.1
 | Path | Note |
 |------|------|
 | [SPRINT-3DAY-PUSH.md](./SPRINT-3DAY-PUSH.md) | COMPLETED |
-| [DAY-TASK-2026-07-30-SKILL-UX.md](./DAY-TASK-2026-07-30-SKILL-UX.md) | completed |
 | [DAY-TASK-P0-PI-CUTOVER.md](./DAY-TASK-P0-PI-CUTOVER.md) | **不当现况** |
 | [EXECUTION-QUEUE.md](./EXECUTION-QUEUE.md) | SUPERSEDED |
 | [CORRECTED-GOALS.md](./CORRECTED-GOALS.md) | 考古快照 · 文中 Kimi 优先句已废 · **勿当当前目标** |
-| [HANDOFF-NEW-WINDOW-2026-08-23.md](./HANDOFF-NEW-WINDOW-2026-08-23.md) | SUPERSEDED |
 | [archive/](./archive/) | Retired |
 
 ## Hygiene rule

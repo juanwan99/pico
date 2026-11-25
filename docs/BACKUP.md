@@ -7,7 +7,7 @@
 | 文件 | 内容 | 怎么导 |
 |--|--|--|
 | `mongo.archive.gz` | LibreChat 对话 | `mongodump --archive --gzip` |
-| `pico.db.gz` | 任务、账本（pico_data 里的 sqlite） | sqlite 在线 backup，上传前 `quick_check` |
+| `pico.db.gz` | 任务、账本（pico_data 里的 sqlite） | 一次性 API 镜像容器用 Python `sqlite3` 在线备份，上传前 `quick_check` |
 | `pico-data.tgz` | pico_data 其余（会话、记忆）；不含 `*.bak*` 临时副本 | tar |
 | `teacher-disks.tgz` | 老师盘 | tar |
 | `librechat-files.tgz` | LibreChat 上传和图片 | tar |
@@ -18,6 +18,7 @@
 - 大于 128 MB 的文件切成 `名字.part-000…` 分段上传：代理会在单个上传约 10 分钟后断开，分段后断了只重传那一段。`SHA256SUMS` 记的是整文件，演练时先拼回再校验。
 - 三个 tar 打的都是在用的目录：tar 读到一半有文件变了会退出 1，这时包是完整的，记一行日志照常往下走；退出 2 及以上才算失败（pico#1313）。包好不好由 sha256 和每周演练把关。
 - 上传后用 `rclone check --size-only` 对一遍远端，对上了再传 `COMPLETE`；本地临时目录随即删掉（不占盘）。
+- 日备定时器以 `ops` 运行，通过 Docker 从本地 `pico-api:v13` 镜像启动一次性容器，API 重建期间也可以拷库（#1419）。容器挂载 `pico_pico_data` 卷以便 SQLite 创建 WAL 的 `-shm`，源库以 `mode=ro` 打开。校验通过后，容器将快照交给本轮备份目录的属主，再由宿主压缩。
 - 超时 6 小时（`TimeoutStartSec=6h`）：11-01 那次 2.14 GB 和 edu-core 备份抢代理，用了 2 小时 50 分（pico#1376）。被 systemd 杀掉时 EXIT 里的清理跑不到，所以每次开跑先（持锁）删掉上次留下的时间戳目录。
 - 失败：写 `~/logs/pico-backup-status.json`（state=FAIL），并用 `~/scripts/edu-backup-alert.py` 发信。日志 `~/logs/pico-backup.log`。
 - 没跑起来（定时器停了、机器宕了）不会写 FAIL：`pico-backup-watch.timer` 每小时看一次，上次成功超过 26 小时就发信（12 小时内只发一封）。
