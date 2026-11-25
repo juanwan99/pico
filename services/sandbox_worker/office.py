@@ -63,13 +63,6 @@ def soffice_bin() -> str:
     )
 
 
-def _next_display() -> str:
-    # 91–189 keeps us off the host :0 / CI :99 when those exist.
-    base = int(os.environ.get("PICO_SANDBOX_DISPLAY_BASE") or "91")
-    slot = int.from_bytes(os.urandom(2), "big") % 90
-    return f":{base + slot}"
-
-
 class OfficeDesktop:
     """One Xvfb + one soffice process. Screenshot is the desktop root."""
 
@@ -182,11 +175,13 @@ class OfficeDesktop:
         shutil.rmtree(self.doc_path.parent, ignore_errors=True)
 
 
-async def _spawn(cmd: list[str], *, env: dict[str, str]) -> asyncio.subprocess.Process:
+async def _spawn(
+    cmd: list[str], *, env: dict[str, str], stdout: int = asyncio.subprocess.DEVNULL
+) -> asyncio.subprocess.Process:
     return await asyncio.create_subprocess_exec(
         *cmd,
         env=env,
-        stdout=asyncio.subprocess.DEVNULL,
+        stdout=stdout,
         stderr=asyncio.subprocess.DEVNULL,
         start_new_session=True,
     )
@@ -318,7 +313,6 @@ async def open_office(*, kind: str, filename: str, document: bytes) -> OfficeDes
     resolved = resolve_kind(filename, kind)
     flag = KIND_FLAGS[resolved]
     safe_name = Path(filename or "document.docx").name or "document.docx"
-    display = _next_display()
     _DOC_ROOT.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="sbox_doc_", dir=str(_DOC_ROOT)))
     doc_path = work / safe_name
@@ -328,40 +322,55 @@ async def open_office(*, kind: str, filename: str, document: bytes) -> OfficeDes
     profile.mkdir(parents=True, exist_ok=True)
     env = {
         **os.environ,
-        "DISPLAY": display,
         "HOME": str(work),
         "LANG": os.environ.get("LANG") or "C.UTF-8",
         "SAL_USE_VCLPLUGIN": "gen",
     }
-    xvfb_proc = await _spawn(
-        [xvfb, display, "-screen", "0", f"{DESKTOP_W}x{DESKTOP_H}x24", "-ac", "-nolisten", "tcp"],
-        env=env,
-    )
-    await asyncio.sleep(0.25)
-    if xvfb_proc.returncode is not None:
-        shutil.rmtree(work, ignore_errors=True)
-        raise ToolError("sandbox.office_unavailable", "沙箱桌面未能启动")
-    office_proc = await _spawn(
-        [
-            soffice,
-            f"-env:UserInstallation=file://{profile}",
-            "--nologo",
-            "--norestore",
-            "--nolockcheck",
-            "--nofirststartwizard",
-            flag,
-            str(doc_path),
-        ],
-        env=env,
-    )
+    xvfb_proc = office_proc = None
     try:
+        # Xvfb reports its display on stdout once it is ready for connections.
+        xvfb_proc = await _spawn(
+            [
+                xvfb,
+                "-displayfd",
+                "1",
+                "-screen",
+                "0",
+                f"{DESKTOP_W}x{DESKTOP_H}x24",
+                "-ac",
+                "-nolisten",
+                "tcp",
+            ],
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+        )
+        assert xvfb_proc.stdout is not None
+        try:
+            report = await asyncio.wait_for(xvfb_proc.stdout.readuntil(b"\n"), timeout=8)
+        except (TimeoutError, asyncio.IncompleteReadError) as exc:
+            raise ToolError("sandbox.office_unavailable", "沙箱桌面未能启动") from exc
+        display = f":{report[:-1].decode('ascii')}"
+        office_proc = await _spawn(
+            [
+                soffice,
+                f"-env:UserInstallation=file://{profile}",
+                "--nologo",
+                "--norestore",
+                "--nolockcheck",
+                "--nofirststartwizard",
+                flag,
+                str(doc_path),
+            ],
+            env={**env, "DISPLAY": display},
+        )
         await _wait_visible(display)
         if office_proc.returncode is not None:
             raise ToolError("sandbox.office_unavailable", "LibreOffice 未能打开该文档")
-    except Exception:
+    except (Exception, asyncio.CancelledError):
         for proc in (office_proc, xvfb_proc):
-            if proc.returncode is None:
+            if proc is not None and proc.returncode is None:
                 proc.kill()
+                await proc.wait()
         shutil.rmtree(work, ignore_errors=True)
         raise
     return OfficeDesktop(
