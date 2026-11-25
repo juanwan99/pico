@@ -177,7 +177,8 @@ def test_loading_navigation_leaves_room_under_sidecar_timeout() -> None:
     assert 0 < runtime_mod.LOADING_SCREENSHOT_TIMEOUT_S <= 10
     assert 0 < runtime_mod.LOADING_SNAPSHOT_TIMEOUT_S <= 10
     assert (
-        browser_mod.GOTO_TIMEOUT_MS / 1000
+        runtime_mod.ACT_LOCK_TIMEOUT_S
+        + browser_mod.GOTO_TIMEOUT_MS / 1000
         + runtime_mod.LOADING_SNAPSHOT_TIMEOUT_S
         + runtime_mod.LOADING_SCREENSHOT_TIMEOUT_S
         + runtime_mod.LOADING_METADATA_TIMEOUT_S
@@ -336,16 +337,18 @@ FORM = """<form id=f>
 <label><input type=radio name=size value=l> 大</label>
 <label>年级 <select name=grade><option value=g1>一年级</option><option value=g2>二年级</option></select></label>
 <label>备注 <textarea name=note></textarea></label>
+<label>日期 <input type=date name=date></label>
 <div role=checkbox aria-checked=false tabindex=0 aria-label=提醒
   onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked') !== 'true')">提醒</div>
 <label>附件 <input type=file name=att multiple></label>
 <button type=button id=pick onclick="att2.click()">上传材料</button>
+<button type=button disabled>不可点击</button>
 <input type=file id=att2 style="display:none">
 </form>"""
 
 
 @pytest.mark.asyncio
-async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path) -> None:
+async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path, caplog) -> None:
     """#1219: one call fills text / checkbox / radio / select / aria checkbox.
     pico#1320: a password the teacher gave goes in like any other value — it is
     no longer skipped and named back; fill_form returns None. Files go into a
@@ -390,6 +393,31 @@ async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path) -> None
             "who": "张三", "pw": "hunter2", "agree": "on", "size": "l",
             "grade": "g2", "note": "第二行", "remind": "true",
         }
+        name = _ref(snap, "textbox", "姓名")
+        await surface.fill_form([{"ref": name, "value": "5"}])
+        await surface.type_ref(name, "a", submit=False)
+        date = _ref(snap, "textbox", "日期")
+        bad_date = "2026/11/24"
+        with pytest.raises(ToolError) as exc:
+            await surface.fill_form(
+                [{"ref": _ref(snap, "textbox", "姓名"), "value": "李四"},
+                 {"ref": date, "value": bad_date}]
+            )
+        assert exc.value.code == "sandbox.action_failed"
+        assert "第 2 格" in exc.value.message and "前面 1 格已填" in exc.value.message
+        assert "Malformed value" in exc.value.message and "YYYY-MM-DD" in exc.value.message
+        assert bad_date not in exc.value.message
+        assert await page.locator("[name=who]").input_value() == "李四"
+        with pytest.raises(ToolError, match="Malformed value.*YYYY-MM-DD"):
+            await surface.type_ref(date, bad_date, submit=False)
+        with pytest.raises(ToolError, match=r"Element is not a <select> element"):
+            await surface.select_ref(date, ["private-option"])
+        with pytest.raises(ToolError, match="element is not enabled"):
+            await surface.click_ref(_ref(snap, "button", "不可点击"))
+        assert f"Timeout {browser_mod.SECRET_MASK}000ms" in caplog.text
+        assert f"C{browser_mod.SECRET_MASK}ll log:" in caplog.text
+        assert bad_date not in caplog.text and "hunter2" not in caplog.text
+        assert "private-option" not in caplog.text
         with pytest.raises(ToolError):
             await surface.fill_form([])
 

@@ -206,6 +206,7 @@ class ProxyEntry:
     session: str = ""
     # Concurrent model calls one box may hold open through the proxy.
     slots: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(4))
+    workspace_key: WorkspaceKey | None = None
 
 
 _REGISTRY: dict[str, ProxyEntry] = {}
@@ -366,6 +367,7 @@ class RunnerTransport(SubprocessTransport):
                 model=self.model,
                 member=self.runner.key.member,
                 session=upstream.SESSION_PREFIX + self.runner.key.conv,
+                workspace_key=self.runner.key,
             )
         )
         try:
@@ -542,11 +544,11 @@ def _safe_name(name: str) -> str:
 # --- outputs → Pico ledger -----------------------------------------------------
 
 
-async def list_outputs(key: WorkspaceKey) -> dict[str, dict[str, Any]]:
+async def list_outputs(key: WorkspaceKey, *, allow_busy: bool = False) -> dict[str, dict[str, Any]]:
     """{path: {sha256, mtime, size}} of regular files under outputs/.
 
-    The runner refuses (409) while a box is still running on the workspace;
-    the box of this turn is being stopped, so wait briefly for it.
+    Run snapshots and landing wait for an idle workspace. Upload suggestions
+    can list the active box while it runs.
     """
     import httpx
 
@@ -554,15 +556,20 @@ async def list_outputs(key: WorkspaceKey) -> dict[str, dict[str, Any]]:
         for attempt in range(40):
             resp = await client.get(
                 f"{runner_url()}/v1/ws/{key.path()}/outputs",
+                params={"idle_only": True} if not allow_busy else None,
                 headers={"x-pico-runner-token": runner_token()},
             )
-            if resp.status_code != 409:
+            if resp.status_code != 409 or allow_busy:
                 break
             await asyncio.sleep(0.5 if attempt < 10 else 2.0)
     if resp.status_code != 200:
         raise TruePiClientError(f"runner outputs failed ({resp.status_code})")
     rows = resp.json().get("files") or []
     return {str(r["path"]): r for r in rows if r.get("path")}
+
+
+class RunnerOutputNotFound(TruePiClientError):
+    """The requested file is absent from this workspace."""
 
 
 async def fetch_output(key: WorkspaceKey, path: str) -> bytes:
@@ -574,6 +581,8 @@ async def fetch_output(key: WorkspaceKey, path: str) -> bytes:
             params={"path": path},
             headers={"x-pico-runner-token": runner_token()},
         )
+    if resp.status_code == 404:
+        raise RunnerOutputNotFound("runner file failed (404)")
     if resp.status_code != 200:
         raise TruePiClientError(f"runner file failed ({resp.status_code})")
     return resp.content

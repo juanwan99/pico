@@ -363,3 +363,19 @@ class LedgerArtifactStore:
                 self._artifact_dict(artifact, content=False)
                 for artifact in result.scalars().all()
             ]
+
+    async def list_run_titles(self, principal: Principal, *, run_id: str) -> dict[str, str]:
+        statement = (
+            self._owned_artifacts(principal)
+            .with_only_columns(
+                ArtifactRow.id, ArtifactRow.title, ArtifactRow.run_id, ArtifactRow.created_at
+            )
+            .where(ArtifactRow.run_id == run_id)
+            .order_by(ArtifactRow.created_at.desc())
+        )
+        titles: dict[str, str] = {}
+        async with self._factory() as session:
+            for artifact_id, title, _, _ in await session.execute(statement):
+                if title:
+                    titles.setdefault(title, artifact_id)
+        return titles
