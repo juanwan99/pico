@@ -1861,14 +1861,14 @@ async def get_artifact_content(
 
     # Fail-closed: never serve renamed text as legitimate Office packages.
     if ext in {".docx", ".pptx"}:
-        from pico_orchestrator.artifact_types import is_valid_ooxml_package
+        from pico_orchestrator.artifact_types import is_valid_ooxml_package, office_write_hint
 
         if not is_valid_ooxml_package(raw, ext):
             raise HTTPException(
                 status_code=415,
                 detail=(
                     f"产物不是合法的 {ext} OOXML 包（禁止改后缀文本冒充）。"
-                    "请使用 sandbox_office_lib 重新生成。"
+                    + office_write_hint(ext.removeprefix("."), run_id=artifact.run_id)
                 ),
             )
     # HTML claimed but looks like a ZIP/binary package without text markup → reject as html

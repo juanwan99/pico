@@ -50,7 +50,6 @@ ANCHORS: dict[str, tuple[str, ...]] = {
         "edit in place",
     ),
     "read_office_skill": (
-        "sandbox_office_lib",
         "python-docx / openpyxl / python-pptx",
         "edit in place",
     ),

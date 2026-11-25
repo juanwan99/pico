@@ -1,9 +1,7 @@
 # Excel craft (openpyxl)
 
 Use when the teacher asked for a real `.xlsx`. This is craft, not a scene workflow.
-Execute only in `sandbox_office_lib` with `kind=xlsx`.
-To change a file the teacher already has, pass `artifact_id` and start with `wb = load_book()` (or `load_workbook(INPUT_PATH)`).
-The script runs in an isolated container with full Python: `csv`, `pandas`, `statistics`, `datetime` are all available; `INPUT_PATH` may be a CSV or another sheet. Empty `Workbook(); save_book(wb)` fails.
+Use `csv`, `pandas`, `statistics`, or `datetime` when working with source data. A blank `Workbook()` is an empty shell.
 A whole draft dumped in A1 is not a spreadsheet.
 
 ## Run
@@ -48,17 +46,19 @@ detail["B2"] = 12
 detail["A3"] = "乙"
 detail["B3"] = 8
 
-save_book(wb)
+wb.save(output_path)
 ```
 
-## Edit existing (artifact_id set — do this, do not rebuild)
+## Edit existing
 
 ```python
-wb = load_book()  # or load_workbook(INPUT_PATH)
+from openpyxl import load_workbook
+
+wb = load_workbook(input_path)
 ws = wb.active
 ws["B2"] = 95          # named cell only
 # Other sheets, columns, formulas, charts, column widths stay.
-save_book(wb)
+wb.save(output_path)
 ```
 
 Do not `wb = Workbook()` then retype the grid. That drops formulas, charts, and number formats.
@@ -71,9 +71,7 @@ Do not `wb = Workbook()` then retype the grid. That drops formulas, charts, and 
 - Multi-sheet: `wb.create_sheet("名")`. Cross-sheet refs like `=明细!B2` are allowed.
 - Column widths: `ws.column_dimensions["A"].width = …`.
 - Dates: real date objects or ISO text the teacher gave — do not invent.
-- Change existing sheets with `artifact_id` + `load_book()`. Edit the named cell (`ws["B2"]`). Do not rebuild a blank `Workbook()` and paste values.
-- Same title replaces the file the teacher opens.
-- After save, read observation. Cells that should be numbers must not be decoration.
+- Edit the named cell (`ws["B2"]`) to preserve other sheets, formulas, and styles.
 
 ## Check
 

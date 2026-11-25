@@ -22,8 +22,10 @@ from pico_orchestrator.office.skill_docs import (
     normalize_office_skill_id,
 )
 from pico_orchestrator.tools_builtin import build_default_gateway
+from pico_orchestrator.true_pi import runner
 from pico_orchestrator.true_pi.config import ALLOWED_GATEWAY_TOOLS
 from pico_orchestrator.true_pi.runtime import pico_system_text
+from pico_orchestrator.usage_hook import bind_usage_context, reset_usage_context
 from pico_orchestrator.workbench_progress import (
     workbench_tool_result_line,
     workbench_tool_step_line,
@@ -33,6 +35,7 @@ from pico_orchestrator.workbench_progress import (
 def test_read_office_skill_is_core_not_bash() -> None:
     gw = build_default_gateway()
     assert "read_office_skill" in gw.tools
+    assert "sandbox_office_lib" not in gw.tools["read_office_skill"].description
     assert "read_office_skill" in ALLOWED_GATEWAY_TOOLS
     assert "read_office_skill" in CORE_VISIBLE_TOOLS
     assert "bash" not in ALLOWED_GATEWAY_TOOLS
@@ -54,26 +57,27 @@ def test_system_catalog_is_one_line_not_craft_body() -> None:
     assert "pi install" not in body
     assert "```bash" not in body
     assert "host bash" not in body.lower()
+    assert "sandbox_office_lib" not in runner.WORKSPACE_SYSTEM
 
 
-def test_office_skill_bodies_have_craft_without_shell() -> None:
+def test_office_skill_bodies_have_shared_craft() -> None:
     expected = {
-        "docx": ("add_heading", "Table Grid", "section.header", "load_doc()", "p.runs"),
-        "xlsx": ("=SUM(", "create_sheet", "number_format", "load_book()", 'ws["B2"]'),
-        "pptx": ("MSO_SHAPE", "RGBColor", "slide_layouts[6]", "load_deck()", "prs.slides[1]"),
+        "docx": ("add_heading", "Table Grid", "section.header", "Document(input_path)", "p.runs"),
+        "xlsx": ("=SUM(", "create_sheet", "number_format", "load_workbook(input_path)", 'ws["B2"]'),
+        "pptx": (
+            "MSO_SHAPE", "RGBColor", "slide_layouts[6]", "Presentation(input_path)", "prs.slides[1]"
+        ),
     }
     for sid in OFFICE_SKILL_IDS:
         text = load_office_skill_body(sid)
-        assert "sandbox_office_lib" in text
+        assert "sandbox_office_lib" not in text
         assert "pi install" not in text
         assert "```bash" not in text
         # v2 (#959): the box is a full Python; the craft must not pretend otherwise
         assert "Do not import os" not in text
         assert "Do not use a shell" not in text
-        assert "isolated container" in text
         assert "Fast path remains" not in text
-        assert "artifact_id" in text
-        assert "load_" in text
+        assert ".save(output_path)" in text
         for needle in expected[sid]:
             assert needle in text, (sid, needle)
 
@@ -86,21 +90,48 @@ def test_normalize_office_skill_aliases() -> None:
     assert normalize_office_skill_id("nope") is None
 
 
-@pytest.mark.asyncio
-async def test_read_office_skill_returns_body() -> None:
+class P:
+    def __init__(self) -> None:
+        self.school_id = "school-a"
+        self.membership_id = "member-a"
+        self.scopes = ["ai:run"]
+
+
+@pytest.mark.parametrize(
+    ("sid", "library"), [("docx", "python-docx"), ("xlsx", "openpyxl"), ("pptx", "python-pptx")]
+)
+@pytest.mark.parametrize("run_id", ["box-run", "gateway-run"])
+async def test_read_office_skill_returns_body(sid, library, run_id, monkeypatch) -> None:
     gw = build_default_gateway()
-
-    class P:
-        def __init__(self) -> None:
-            self.school_id = "school-a"
-            self.membership_id = "member-a"
-            self.scopes = ["ai:run"]
-
-    out = await gw.invoke(P(), "read_office_skill", {"id": "docx"})
+    entry = runner.ProxyEntry("box-run", "llm-token", "", "", "", "tool-token")
+    monkeypatch.setitem(runner._REGISTRY, entry.run_id, entry)
+    principal = P()
+    token = bind_usage_context(
+        school_id=principal.school_id, membership_id=principal.membership_id, run_id=run_id
+    )
+    try:
+        out = await gw.invoke(principal, "read_office_skill", {"id": sid})
+    finally:
+        reset_usage_context(token)
     assert out["ok"] is True
-    assert out["id"] == "docx"
-    assert "add_heading" in out["body"]
-    assert out["execute_with"] == "sandbox_office_lib"
+    assert out["id"] == sid
+    assert out["body"].endswith(load_office_skill_body(sid))
+    assert library in out["body"]
+    if run_id == "box-run":
+        assert out["execute_with"] == "bash"
+        assert "sandbox_office_lib" not in str(out)
+        assert f"outputs/<name>.{sid}" in out["body"]
+        assert "`bash`" in out["body"]
+    else:
+        assert out["execute_with"] == "sandbox_office_lib"
+        assert f"`sandbox_office_lib` with `kind={sid}`" in out["body"]
+        assert out["body"].count("sandbox_office_lib") == 1
+        assert "`artifact_id`" in out["body"]
+        assert "`output_path = OUTPUT_PATH`" in out["body"]
+
+
+async def test_read_office_skill_rejects_unknown_id() -> None:
+    gw = build_default_gateway()
     with pytest.raises(ToolError) as ei:
         await gw.invoke(P(), "read_office_skill", {"id": "bash"})
     assert ei.value.code == "office_skill.unknown"

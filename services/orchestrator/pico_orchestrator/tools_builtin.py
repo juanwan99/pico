@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from pico_orchestrator.artifact_types import (
+    OFFICE_PYTHON_LIBRARIES,
     is_valid_ooxml_package,
     reject_fake_protected_write_message,
     title_protected_extension,
@@ -426,6 +427,8 @@ def _suffix_kind(name: str) -> str | None:
 
 def _make_read_office_skill(store: ArtifactStore):
     async def read_office_skill(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
+        from pico_orchestrator.true_pi.runner import proxy_entry
+
         raw_id = args.get("id") or args.get("skill") or args.get("kind")
         token = str(raw_id).strip() if raw_id is not None else ""
         sid = normalize_office_skill_id(token) or _suffix_kind(token)
@@ -443,12 +446,31 @@ def _make_read_office_skill(store: ArtifactStore):
                 "To read a file's content use workspace_read_file(artifact_id=...).",
             )
         body = load_office_skill_body(sid)
+        library = OFFICE_PYTHON_LIBRARIES[sid]
+        if proxy_entry(current_run_id(principal, store)) is not None:
+            execute_with = "bash"
+            execution = (
+                f"Run Python with {library} using `bash` in `/workspace`. "
+                f"Set `output_path` to `outputs/<name>.{sid}`. "
+                "For an existing file or source data, set `input_path` to its path in "
+                "`attachments/` or `outputs/`. Use workspace paths for pictures."
+            )
+        else:
+            execute_with = "sandbox_office_lib"
+            execution = (
+                f"Run Python with {library} via `{execute_with}` with `kind={sid}`. "
+                "Pass the output filename as `title` and set `output_path = OUTPUT_PATH`. "
+                "For an existing file or source data, pass `artifact_id` and set "
+                "`input_path = INPUT_PATH`. "
+                "For generated pictures, pass `image_artifact_ids` and use `IMAGE_PATHS`. "
+                "After saving, check the returned `observation`."
+            )
         return {
             "ok": True,
             "id": sid,
-            "body": body,
+            "body": f"{execution}\n\n{body}",
             "via": "read_office_skill",
-            "execute_with": "sandbox_office_lib",
+            "execute_with": execute_with,
         }
 
     return read_office_skill
@@ -832,7 +854,9 @@ def _workspace_handlers(
         if protected:
             raise ToolError(
                 "tool.invalid_arguments",
-                reject_fake_protected_write_message(protected),
+                reject_fake_protected_write_message(
+                    protected, run_id=current_run_id(principal, store)
+                ),
             )
         content = _required_text(args, "content", maximum=_MAX_ARTIFACT_CONTENT)
         assert_content_caps(content)
@@ -1245,7 +1269,7 @@ def _workspace_handlers(
                 raw = render_spec(spec, images=await _load_spec_images(principal, spec))
             else:
                 body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
-                require_docx_body(body)
+                require_docx_body(body, run_id=current_run_id(principal, store))
                 raw = build_docx_document(title=title, marker=marker, body=body)
         except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
@@ -1286,7 +1310,7 @@ def _workspace_handlers(
                 raw = render_spec(spec, images=await _load_spec_images(principal, spec))
             else:
                 body = _optional_text(args, "body", maximum=_MAX_DOC_BODY)
-                require_pptx_body(body)
+                require_pptx_body(body, run_id=current_run_id(principal, store))
                 raw = build_pptx_document(title=title, marker=marker, body=body)
         except (ValueError, TypeError) as exc:
             raise ToolError("tool.invalid_arguments", str(exc)) from exc
@@ -2913,12 +2937,8 @@ def build_default_gateway(
             description=(
                 "On-demand office craft (docx / xlsx / pptx). Catalog is one line "
                 "in SYSTEM; this tool returns the full python-docx / openpyxl / "
-                "python-pptx craft. Not LibreChat Skills. Not a second "
-                "store. After reading, write with sandbox_office_lib (kind matches "
-                "id). To change an existing file pass artifact_id and load_doc / "
-                "load_book / load_deck, then edit in place (keep other "
-                "pages/cells/styles). Do not start a blank Document/Workbook/"
-                "Presentation when artifact_id is set. "
+                "python-pptx craft and how to run it this turn. "
+                "To change an existing file, edit in place (keep other pages/cells/styles). "
                 "Args: id=docx|xlsx|pptx"
             ),
             handler=_make_read_office_skill(store),

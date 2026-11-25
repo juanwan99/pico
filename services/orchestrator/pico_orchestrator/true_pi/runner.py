@@ -57,7 +57,7 @@ WS_BRIDGE = "/opt/pico/true_pi_bridge"
 
 WORKSPACE_SYSTEM = """## Workspace
 
-You have an isolated Linux workspace at `/workspace` with read / write / edit / bash. Python (python-docx, openpyxl, python-pptx, pandas, matplotlib), LibreOffice (`soffice`), `pip install` and the internet work; when a skill says `sandbox_office_lib`, you may run the same code here.
+You have an isolated Linux workspace at `/workspace` with read / write / edit / bash. Python (python-docx, openpyxl, python-pptx, pandas, matplotlib), LibreOffice (`soffice`), `pip install` and the internet work.
 - Files the teacher attached in this conversation are in `/workspace/attachments/`.
 - Files for the teacher go in `/workspace/outputs/`; only those are delivered. Scratch files go elsewhere (e.g. `/workspace/work/`).
 - Keep each tool call under about 150 lines: nothing reaches the teacher until a call's arguments are complete. For a long document, write the content as several data files, then run a short build script.
@@ -220,8 +220,8 @@ def unregister_proxy(run_id: str) -> None:
     _REGISTRY.pop(run_id, None)
 
 
-def proxy_entry(run_id: str) -> ProxyEntry | None:
-    return _REGISTRY.get(run_id)
+def proxy_entry(run_id: str | None) -> ProxyEntry | None:
+    return _REGISTRY.get(run_id) if run_id is not None else None
 
 
 # --- transport ---------------------------------------------------------------

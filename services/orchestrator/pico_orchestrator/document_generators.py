@@ -15,17 +15,14 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
+from pico_orchestrator.artifact_types import office_write_hint
+from pico_orchestrator.usage_hook import current_usage_bind
+
 # Empty-shell floor only. Do not invent 套话, and do not demand a page quota.
 MIN_DOCX_BODY_CHARS = 20
 MIN_PPTX_SLIDES = 1
-DOCX_BODY_TOO_SHORT = (
-    "Word 正文是空的。请写入实际内容再调用 sandbox_office_lib，"
-    "系统不会垫字。"
-)
-PPTX_SLIDES_TOO_FEW = (
-    "PPT 没有可渲染的页。请写入至少一页再调用 sandbox_office_lib，"
-    "系统不会垫页。"
-)
+DOCX_BODY_TOO_SHORT = "Word 正文是空的。请写入实际内容，系统不会垫字。"
+PPTX_SLIDES_TOO_FEW = "PPT 没有可渲染的页。请写入至少一页，系统不会垫页。"
 # Interactive HTML must run with no network (school offline / CSP). Do not
 # allowlist jsdelivr. Do not vendor Three.js. Body over DOC_BODY_MAX fails
 # closed — never silent-slice a draft (#829).
@@ -163,34 +160,36 @@ def office_shell_reason(raw: bytes, ext: str) -> str | None:
         suffix = f".{suffix}" if suffix else ""
     if suffix == ".docx":
         text = docx_visible_text(raw)
-        if _visible_len(text) < MIN_DOCX_BODY_CHARS:
-            return (
-                "Word 打开后几乎是空壳。"
-                "请用 sandbox_office_lib 写入实际正文后再交。"
-            )
-        return None
-    if suffix == ".pptx":
+        if _visible_len(text) >= MIN_DOCX_BODY_CHARS:
+            return None
+        reason = "Word 打开后几乎是空壳。请写入实际正文后再交。"
+    elif suffix == ".pptx":
         titles = pptx_slide_titles(raw)
         titled = sum(1 for t in titles if (t or "").strip())
-        if len(titles) < MIN_PPTX_SLIDES or titled < MIN_PPTX_SLIDES:
-            return (
-                "PPT 打开后没有可看的页。"
-                "请用 sandbox_office_lib 写出至少一页后再交。"
-            )
+        if len(titles) >= MIN_PPTX_SLIDES and titled >= MIN_PPTX_SLIDES:
+            return None
+        reason = "PPT 打开后没有可看的页。请写出至少一页后再交。"
+    else:
         return None
-    return None
+
+    # The delivery gate runs after the workspace closes. Only a tool call
+    # has a bound run here whose available execution path can be named.
+    bind = current_usage_bind()
+    if bind is not None:
+        reason += office_write_hint(suffix.removeprefix("."), run_id=bind.run_id)
+    return reason
 
 
-def require_docx_body(body: str | None) -> None:
+def require_docx_body(body: str | None, *, run_id: str | None = None) -> None:
     """Fail closed when the caller did not pass enough 题面正文. No padding."""
     if _visible_len(body or "") < MIN_DOCX_BODY_CHARS:
-        raise ValueError(DOCX_BODY_TOO_SHORT)
+        raise ValueError(DOCX_BODY_TOO_SHORT + office_write_hint("docx", run_id=run_id))
 
 
-def require_pptx_body(body: str | None) -> None:
+def require_pptx_body(body: str | None, *, run_id: str | None = None) -> None:
     """Fail closed when the caller did not pass any slide block. No padding."""
     if len(_split_blocks(body or "")) < MIN_PPTX_SLIDES:
-        raise ValueError(PPTX_SLIDES_TOO_FEW)
+        raise ValueError(PPTX_SLIDES_TOO_FEW + office_write_hint("pptx", run_id=run_id))
 
 
 def _docx_body_paragraphs(body: str | None) -> list[str]:

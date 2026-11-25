@@ -7,6 +7,7 @@ import zipfile
 
 # Extensions that MUST only come from dedicated generators (or valid bytes).
 PROTECTED_EXTENSIONS = frozenset({".html", ".htm", ".docx", ".pptx", ".xlsx"})
+OFFICE_PYTHON_LIBRARIES = {"docx": "python-docx", "xlsx": "openpyxl", "pptx": "python-pptx"}
 
 
 def title_protected_extension(title: str) -> str | None:
@@ -75,8 +76,18 @@ def zip_with_utf8_flag(raw: bytes) -> bytes:
     return out.getvalue()
 
 
-def reject_fake_protected_write_message(ext: str) -> str:
-    return (
-        f"禁止用 workspace_write_file 写入 {ext}（改后缀文本不算真文件）。"
-        "请使用 generate_html_document 写网页，或 sandbox_office_lib 写 Word/Excel/PPT。"
+def office_write_hint(kind: str, *, run_id: str | None) -> str:
+    from pico_orchestrator.true_pi.runner import proxy_entry
+
+    if proxy_entry(run_id) is not None:
+        return f"请用 bash 运行 {OFFICE_PYTHON_LIBRARIES[kind]} 写到 outputs/<文件名>.{kind}。"
+    return f"请使用 sandbox_office_lib（kind={kind}）写出文件。"
+
+
+def reject_fake_protected_write_message(ext: str, *, run_id: str | None) -> str:
+    hint = (
+        "请使用 generate_html_document 写网页。"
+        if ext in {".html", ".htm"}
+        else office_write_hint(ext.removeprefix("."), run_id=run_id)
     )
+    return f"禁止用 workspace_write_file 写入 {ext}（改后缀文本不算真文件）。{hint}"

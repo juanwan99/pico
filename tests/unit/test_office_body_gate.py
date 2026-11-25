@@ -130,6 +130,7 @@ async def test_delivery_gate_rejects_thin_docx_shell(tmp_path, monkeypatch) -> N
         assert run is not None
         assert run.status == "failed"
         assert run.error and "空壳" in run.error
+        assert "sandbox_office_lib" not in run.error
         failed = [
             e
             for e in (
