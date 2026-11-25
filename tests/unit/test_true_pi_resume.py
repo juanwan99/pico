@@ -8,6 +8,7 @@ Pico re-prompts the same process to carry on instead of failing.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
+from pico_orchestrator import upstream
 from pico_orchestrator.run_types import RunCaps
 from pico_orchestrator.true_pi.client import (
     PI_RETRY_MAX,
@@ -78,11 +80,11 @@ def _error_after_work_with_trailing_settle() -> list[dict[str, Any]]:
     return [*_error_after_work(), {"type": "agent_settled"}]
 
 
-def _error_before_work() -> list[dict[str, Any]]:
+def _error_before_work(msg: str) -> list[dict[str, Any]]:
     return [
         {"type": "agent_start"},
         {"type": "turn_start"},
-        {"type": "message_end", "message": _error_turn()},
+        {"type": "message_end", "message": _error_turn(msg)},
         {"type": "agent_end", "willRetry": False, "messages": []},
     ]
 
@@ -140,10 +142,34 @@ async def test_error_after_output_resumes_same_session_and_succeeds() -> None:
 
 
 @pytest.mark.asyncio
+async def test_relay_400_resumes_immediately_and_charges_spare() -> None:
+    reason = "400 try again later"
+    upstream.note_upstream_error("resume-t", 400, reason)
+    relay = upstream.run_state("resume-t")
+    spare_before = relay.spare
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(
+        scripted=_error_after_work(reason), scripted_after_prompt=[_finish()], assistant_text=""
+    )
+
+    result = await _run(transport, events)
+
+    assert result.status == "succeeded", result.error
+    assert len(_prompts(transport)) == 2
+    resume, = [p for k, p in events if k == "run.resume"]
+    assert resume["reason"] == reason and "wait_seconds" not in resume
+    assert "正在重试" in resume["text"]
+    assert relay.spare == spare_before - 1
+
+
+@pytest.mark.asyncio
 async def test_error_before_any_output_does_not_resume() -> None:
     """Pre-output failures stay with brain-HA failover (another model, fresh start)."""
+    upstream.note_upstream_error("resume-t", 500, "Database error")
     events: list[tuple[str, dict[str, Any]]] = []
-    transport = FakeTransport(scripted=_error_before_work(), scripted_after_prompt=[_finish()])
+    transport = FakeTransport(
+        scripted=_error_before_work("500 Database error"), scripted_after_prompt=[_finish()]
+    )
     result = await _run(transport, events)
     assert result.status == "failed"
     assert len(_prompts(transport)) == 1
@@ -183,6 +209,7 @@ async def test_resume_off_keeps_old_fail_on_first_error(monkeypatch: pytest.Monk
 @pytest.mark.asyncio
 async def test_runner_limit_error_is_not_resumed() -> None:
     """The box is being killed (runner.limit): nothing to prompt."""
+    upstream.note_upstream_error("resume-t", 500, "Database error")
     events: list[tuple[str, dict[str, Any]]] = []
     transport = FakeTransport(
         scripted=_error_after_work("workspace over 2048MB", runnerCode="runner.limit"),
@@ -195,6 +222,9 @@ async def test_runner_limit_error_is_not_resumed() -> None:
 
 @pytest.mark.asyncio
 async def test_usage_limit_is_not_resumed() -> None:
+    upstream.note_upstream_error(
+        "resume-t", 429, "The usage limit has been reached", retry_after_s=20
+    )
     events: list[tuple[str, dict[str, Any]]] = []
     transport = FakeTransport(
         scripted=_error_after_work("The usage limit has been reached"),
@@ -203,8 +233,84 @@ async def test_usage_limit_is_not_resumed() -> None:
     result = await _run(transport, events)
     assert result.status == "failed"
     assert len(_prompts(transport)) == 1
+    assert not any(k == "run.resume" for k, _ in events)
     fail = [p for k, p in events if k == "run.error"]
     assert fail[-1]["code"] == "model.usage_limit"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", sorted(upstream.DEAD_STATUS))
+async def test_dead_relay_key_is_not_resumed(status: int) -> None:
+    # A bare relay response can reach Pi without identifying why the key failed.
+    upstream.note_upstream_error("resume-t", status, "", retry_after_s=20)
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(scripted=_error_after_work(f"{status} status code (no body)"))
+    result = await _run(transport, events)
+    assert result.status == "failed"
+    assert len(_prompts(transport)) == 1
+    assert not any(k == "run.resume" for k, _ in events)
+
+
+@pytest.mark.asyncio
+async def test_cancellation_wakes_a_waiting_resume() -> None:
+    from pico_orchestrator.true_pi.runtime import _FailoverGate
+
+    upstream.note_upstream_error("cancel-resume", 500, "Database error")
+    scripted = _error_before_work("500 Database error")
+    # Pi recorded text without a streaming delta, so the failover gate is still holding events.
+    scripted.insert(2, _finish()[2])
+    transport = FakeTransport(scripted=scripted)
+    waiting = asyncio.Event()
+    cancelled = asyncio.Event()
+    statuses = []
+
+    async def emit(kind, payload):
+        if kind == "run.resume":
+            assert payload["wait_seconds"] == 20
+            waiting.set()
+        if kind == "run.status":
+            statuses.append(payload["status"])
+
+    async def is_cancelled():
+        return cancelled.is_set()
+
+    gate = _FailoverGate(emit, "")
+    task = asyncio.create_task(
+        run_true_pi_agent(
+            prompt="做一份长报告",
+            principal=Principal(),
+            emit=gate.emit,
+            is_cancelled=is_cancelled,
+            transport=transport,
+            run_id="cancel-resume",
+        )
+    )
+    try:
+        await asyncio.wait_for(waiting.wait(), timeout=1)
+        cancelled.set()
+        result = await asyncio.wait_for(task, timeout=1)
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.wait({task})
+    assert result.status == "cancelled"
+    assert statuses == ["running", "cancelled"]
+    assert len(_prompts(transport)) == 1
+
+
+@pytest.mark.asyncio
+async def test_personal_endpoint_outage_is_not_resumed() -> None:
+    from pico_orchestrator.provider import ProviderConfig, personal_provider_scope
+
+    upstream.note_upstream_error("resume-t", 500, "temporary failure")
+    events: list[tuple[str, dict[str, Any]]] = []
+    transport = FakeTransport(scripted=_error_after_work("500 temporary failure"))
+    provider = ProviderConfig("personal", "sk-test", "https://teacher.example/v1", "custom")
+    with personal_provider_scope(provider):
+        result = await _run(transport, events)
+    assert result.status == "failed"
+    assert len(_prompts(transport)) == 1
+    assert not any(k == "run.resume" for k, _ in events)
 
 
 def test_pi_settings_carry_retry_knobs() -> None:
@@ -266,8 +372,6 @@ async def test_resume_with_no_new_turn_is_not_a_success() -> None:
             transport=transport,
             run_id="resume-t2",
         )
-
-    import asyncio
 
     task = asyncio.create_task(run_it())
     await asyncio.sleep(0.3)
@@ -404,6 +508,7 @@ async def _run_toolless(transport: FakeTransport, events: list[tuple[str, dict[s
 @pytest.mark.asyncio
 async def test_toolless_run_is_not_resumed() -> None:
     """#1195: allowed_tools=[] is one answer; a cut stream fails, no 36 resends."""
+    upstream.note_upstream_error("toolless-t", 500, "Database error")
     events: list[tuple[str, dict[str, Any]]] = []
     transport = FakeTransport(
         scripted=_error_after_work(), scripted_after_prompt=[_finish()], assistant_text=""
