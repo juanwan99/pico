@@ -384,7 +384,7 @@ if [ "$meili_ready" -ne 1 ]; then
   exit 9
 fi
 echo "[pico] meili health ok"
-# pico-api owns the background rebuild. Gate only on its enqueue acknowledgment.
+# pico-api owns the background rebuild. Check acceptance and the existing index.
 REINDEX_URL="http://127.0.0.1:18765/v1/kb/reindex-all"
 if [ "${PICO_KB_REINDEX_FORCE:-0}" = "1" ]; then
   REINDEX_URL+="?force=1"
@@ -410,6 +410,36 @@ if not isinstance(body, dict) or body.get("ok") is not True or body.get("queued"
     raise SystemExit(10)
 print("[pico] kb reindex queued mode=%s" % body.get("mode"))
 ' "$REINDEX_OUT"; then
+  exit 10
+fi
+# A2 live miss: HTTP 200 + indexed>0 while Meili tasks all failed → 0 docs.
+MEILI_KEY=""
+if [ -f .env ]; then
+  MEILI_KEY="$(grep '^MEILI_MASTER_KEY=' .env | head -1 | cut -d= -f2- || true)"
+fi
+STATS_FILE="$(mktemp)"
+STATS_CODE="$(curl -sS -o "$STATS_FILE" -w "%{http_code}" --max-time 8 \
+  ${MEILI_KEY:+-H "Authorization: Bearer ${MEILI_KEY}"} \
+  http://127.0.0.1:7700/indexes/pico_materials/stats)" || STATS_CODE=000
+STATS_OUT="$(cat "$STATS_FILE")"
+rm -f "$STATS_FILE"
+if ! python3 -c '
+import json, sys
+stats_raw, stats_code = sys.argv[1:]
+if stats_code != "200":
+    print(f"[pico] FATAL: meili stats http={stats_code}", file=sys.stderr)
+    raise SystemExit(10)
+try:
+    stats = json.loads(stats_raw)
+except json.JSONDecodeError as exc:
+    print(f"[pico] FATAL: meili stats not JSON: {exc}", file=sys.stderr)
+    raise SystemExit(10)
+docs = int(stats.get("numberOfDocuments") or 0)
+print(f"[pico] meili docs={docs}")
+if docs < 1:
+    print("[pico] FATAL: Meili has 0 documents", file=sys.stderr)
+    raise SystemExit(10)
+' "$STATS_OUT" "$STATS_CODE"; then
   exit 10
 fi
 if command -v ss >/dev/null 2>&1; then

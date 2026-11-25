@@ -150,9 +150,11 @@ def test_artifact_ids_ignores_incomplete_artifacts():
 
 
 class _Art:
-    def __init__(self, aid: str, title: str, origin: str = "upload") -> None:
+    def __init__(
+        self, aid: str, title: str, origin: str = "upload", *, kind: str = "material"
+    ) -> None:
         self.id = aid
-        self.kind = "material"
+        self.kind = kind
         self.title = title
         self.origin = origin
         self.content_encoding = "utf8"
@@ -186,11 +188,17 @@ def _fake_session_factory(rows, body_reads):
 
         async def execute(self, stmt):
             if stmt.column_descriptions[0]["expr"] is ArtifactRow:
+                # Even deferred inline data can be read by SQLite when the SELECT
+                # projects later fields. Assert the actual compiled projection.
+                projection = str(stmt.compile()).split("\nFROM ", 1)[0].removeprefix("SELECT ")
+                assert {col.split(" AS ", 1)[0] for col in projection.split(", ")} == {
+                    "artifacts.id", "artifacts.task_id", "artifacts.kind", "artifacts.title",
+                    "tasks.id", "tasks.school_id", "tasks.membership_id", "tasks.title",
+                }
                 return _Result(rows)
             ids = set(stmt.compile().params["id_1"])
             body_reads.update(ids)
-            return _Result([(artifact.id, artifact.inline) for artifact, _ in rows
-                            if artifact.id in ids])
+            return _Result([artifact for artifact, _ in rows if artifact.id in ids])
 
     return lambda: _Session
 
@@ -241,6 +249,35 @@ def test_rebuild_force_rechunks_everything(monkeypatch: pytest.MonkeyPatch) -> N
     assert out["mode"] == "full"
     assert out["indexed"] == 2 and out["unchanged"] == 0
     assert sorted(chunked) == ["new", "old"]
+
+
+async def test_rebuild_upload_uses_kb_text_and_skips_excerpt(monkeypatch: pytest.MonkeyPatch):
+    from app import kb_rebuild
+
+    title = "上传.docx"
+    original = _Art("original", title, kind="edu_office")
+    original.content_encoding = "base64"
+    original.inline = "ZmlsZQ=="
+    excerpt = _Art("excerpt", title, kind="edu_excerpt")
+    kb_text = _Art("kb-text", title, kind="kb_text")
+    kb_text.inline = "上传正文"
+    binary_text = _Art("binary-text", title, kind="kb_text")
+    binary_text.content_encoding = "base64"
+    rows = [(artifact, _Task()) for artifact in (original, excerpt, kb_text, binary_text)]
+    _, _, body_reads, index = _wire_rebuild(monkeypatch, rows, {"kb-text", "binary-text"})
+    chunk = {"artifact_id": original.id}
+
+    def material_chunk_docs(_task, *, artifact_id, content, stored_text, **_):
+        assert artifact_id == original.id
+        assert content == b"file"
+        assert stored_text == kb_text.inline
+        return [chunk]
+
+    monkeypatch.setattr(kb_rebuild, "material_chunk_docs", material_chunk_docs)
+    out = await kb_rebuild.rebuild_materials()
+    assert out["indexed"] == 1 and out["unchanged"] == 2 and out["skipped"] == 1
+    assert body_reads == {"original", "kb-text", "binary-text"}
+    index.upsert_rebuild_batch.assert_awaited_once_with([chunk])
 
 
 def test_rebuild_stops_when_index_unreadable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -331,8 +368,14 @@ async def test_reindex_all_force_ack_and_health_while_meili_is_busy(
             assert health.status_code == 200 and health.json()["ok"] is True
             assert health.json()["meili_reachable"] is True
             assert time.monotonic() - started_at < 1
-            assert (await client.post("/v1/kb/reindex-all")).status_code == 409
-            assert not app.state.kb_reindex_task.done()
+            running = app.state.kb_reindex_task
+            incremental = await client.post("/v1/kb/reindex-all")
+            assert incremental.status_code == 202
+            assert incremental.json() == {
+                "ok": True, "queued": True, "mode": "incremental", "already_running": True
+            }
+            assert (await client.post("/v1/kb/reindex-all?force=1")).status_code == 409
+            assert app.state.kb_reindex_task is running and not running.done()
         finally:
             release.set()
             await app.state.kb_reindex_task
@@ -346,18 +389,43 @@ async def test_rebuild_caps_batch_size_and_stops_on_failed_task(monkeypatch: pyt
         kb_rebuild, "material_chunk_docs",
         lambda *_args, **_kwargs: [{"seq": seq} for seq in range(2 * size + 1)],
     )
-    pace = AsyncMock()
-    monkeypatch.setattr(kb_rebuild._Pace, "before", pace)
     index.upsert_rebuild_batch.side_effect = [None, RuntimeError("meili task canceled")]
 
     with pytest.raises(RuntimeError, match="task canceled"):
         await kb_rebuild.rebuild_materials()
-    assert [call.args[0] for call in pace.await_args_list] == [size, size]
     batches = [call.args[0] for call in index.upsert_rebuild_batch.await_args_list]
     assert [[doc["seq"] for doc in batch] for batch in batches] == [
         list(range(2 * size, size, -1)),
         list(range(size, 0, -1)),
     ]
+
+
+async def test_rebuild_paces_by_chunk_count_and_meili_busy_time(monkeypatch: pytest.MonkeyPatch):
+    from app import kb_rebuild
+
+    now = 0.0
+    starts = []
+    durations = iter([5, 1, 0])
+
+    async def sleep(delay):
+        nonlocal now
+        now += delay
+
+    async def upsert(_docs):
+        starts.append(now)
+        await sleep(next(durations))
+
+    monkeypatch.setattr(kb_rebuild, "time", SimpleNamespace(monotonic=lambda: now))
+    monkeypatch.setattr(kb_rebuild, "asyncio", SimpleNamespace(sleep=sleep))
+    index = SimpleNamespace(upsert_rebuild_batch=upsert)
+    pace = kb_rebuild._Pace(per_min=600)
+    docs = [{}] * 20
+    await pace.push(index, docs)
+    await sleep(1)  # Chunking between batches counts towards the idle interval.
+    await pace.push(index, docs)
+    await pace.push(index, docs)
+
+    assert starts == [0, 10, 13]
 
 
 def test_rebuild_leaves_pico_drafts_out(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -376,5 +444,5 @@ def test_rebuild_leaves_pico_drafts_out(monkeypatch: pytest.MonkeyPatch) -> None
 
     out = asyncio.run(kb_rebuild.rebuild_materials(None, force=True))
     assert sorted(chunked) == ["legacy-up", "up"]
-    assert body_reads == {"legacy-up", "up"}
+    assert body_reads == {"legacy-up", "up", "draft", "legacy-draft"}
     assert out["skipped"] == 2

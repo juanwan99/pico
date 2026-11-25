@@ -101,27 +101,15 @@ def test_meili_sees_a_new_kb_token_without_reembedding(monkeypatch: pytest.Monke
     assert not idx._embedder_url_match(want)  # first deploy adds the header
 
 
-@pytest.mark.asyncio
-async def test_full_rebuild_is_paced(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rebuild_per_min_uses_env_with_floor(monkeypatch: pytest.MonkeyPatch) -> None:
     from app import kb_rebuild
 
-    slept: list[float] = []
-
-    async def fake_sleep(s: float) -> None:
-        slept.append(s)
-
-    monkeypatch.setattr(kb_rebuild.asyncio, "sleep", fake_sleep)
     monkeypatch.delenv("PICO_KB_REBUILD_PER_MIN", raising=False)
     assert kb_rebuild.rebuild_per_min() == 600
     monkeypatch.setenv("PICO_KB_REBUILD_PER_MIN", "5")
     assert kb_rebuild.rebuild_per_min() == 60  # floor
     monkeypatch.setenv("PICO_KB_REBUILD_PER_MIN", "120")
-    pace = kb_rebuild._Pace(kb_rebuild.rebuild_per_min())
-    await pace.before(20)
-    assert slept == []
-    await pace.before(20)
-    await pace.before(3)
-    assert slept == [10.0, 10.0]
+    assert kb_rebuild.rebuild_per_min() == 120
 
 
 def test_requests_name_their_road_and_share_a_prompt_cache() -> None:

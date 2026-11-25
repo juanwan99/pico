@@ -78,10 +78,9 @@ Pico 发给 New API 的每一个请求都走 `services/orchestrator/pico_orchest
   - 所以嵌入**不改批量**，保持一条一发。日常量很小（10-15 那 6 小时 97 次，峰值 4 次/分）。
   - 真要整库重灌那天，用「先把现有向量标 `regenerate:false` 钉住，再改批量格式」的办法，单开卡做。本机验过这样重嵌 0 条。
 - **换 token**：Meili 读回来的 `apiKey` 是打码的，看不出换没换。所以嵌入配置带一个请求头 `X-Pico-Key`（token 的 sha256 前 8 位），`ensure()` 看到它变了就只 PATCH apiKey 和这个头。本机用真 `ensure()` 验过：重嵌 0 条，之后新文档用新 token。
-- **整库重建限速**：`rebuild_materials` 每分钟最多写 `PICO_KB_REBUILD_PER_MIN`（默认 600）个分块。每个分块就是 Meili 打一次嵌入。
-  - 09-16 整库入库时 ch5 峰值约 2100 次/分，0 报错；现在 7.2 万块约 2 小时。
-  - 第一分钟的量直接放行，所以发版时的增量入库不会多等。
-  - `PICO_KB_REINDEX_FORCE=1` 的整库重建在后台跑，日志在 `~/logs/pico-kb-reindex-force.log`，不再因为 600 s 超时让发版失败。
+- **知识库重建限速**：pico-api 在后台跑发版增量重建。设置 `PICO_KB_REINDEX_FORCE=1` 可发起整库重建。发版门确认入队 HTTP 202 和 `pico_materials` 至少有 1 个文档，然后照常跑冒烟。
+  - 每批最多 20 个分块。等 Meili 完成上一批后，再留出空闲时间，取分块数 × 60 ÷ `PICO_KB_REBUILD_PER_MIN`（默认 600）与上一批实际耗时中的较大值。重建批次占用 Meili 的时间最多为忙闲周期的一半。
+  - 完成、失败和取消结果由 `log_rebuild_result` 记在 pico-api 日志。
 
 ## 看数
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
+from datetime import datetime
 from typing import Any
 
 from pico_orchestrator.meili_kb import MeiliIndex, is_lab_school, is_material, material_chunk_docs
@@ -29,27 +31,36 @@ def rebuild_per_min() -> int:
 
 
 class _Pace:
-    """Leave a write-free interval after each batch, sized by its chunk count."""
+    """Leave Meili idle for at least the previous batch's write time."""
 
     def __init__(self, per_min: int) -> None:
         self.per_min = per_min
-        self.delay = 0.0
+        self.next_push_at = time.monotonic()
 
-    async def before(self, n: int) -> None:
-        if self.delay > 0:
-            await asyncio.sleep(self.delay)
-        self.delay = n * 60.0 / self.per_min
+    async def push(self, index: MeiliIndex, docs: list[dict[str, Any]]) -> None:
+        wait = self.next_push_at - time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        started_at = time.monotonic()
+        await index.upsert_rebuild_batch(docs)
+        completed_at = time.monotonic()
+        self.next_push_at = completed_at + max(
+            len(docs) * 60.0 / self.per_min, completed_at - started_at
+        )
 
 
 def _chunk_artifact(
     artifact: ArtifactRow,
     task: TaskRow,
+    *,
     inline: str | None,
+    content_encoding: str | None,
+    created_at: datetime | None,
     stored_text: str | None,
 ) -> list[dict[str, Any]]:
     content = (
-        decode_artifact_payload(inline, artifact.content_encoding)
-        if artifact.content_encoding == "base64"
+        decode_artifact_payload(inline, content_encoding)
+        if content_encoding == "base64"
         else inline or ""
     )
     return material_chunk_docs(
@@ -58,7 +69,7 @@ def _chunk_artifact(
         title=artifact.title,
         kind=artifact.kind,
         content=content,
-        created_at=artifact.created_at.isoformat() if artifact.created_at else None,
+        created_at=created_at.isoformat() if created_at else None,
         stored_text=stored_text,
     )
 
@@ -79,17 +90,16 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
     known = set() if force else await asyncio.to_thread(idx.artifact_ids)
 
     factory = session_factory()
+    # In SQLite, reading even one column after inline can traverse its overflow pages.
     stmt = (
         select(ArtifactRow, TaskRow)
         .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
         .options(
             load_only(
                 ArtifactRow.id,
-                ArtifactRow.title,
+                ArtifactRow.task_id,
                 ArtifactRow.kind,
-                ArtifactRow.origin,
-                ArtifactRow.content_encoding,
-                ArtifactRow.created_at,
+                ArtifactRow.title,
                 raiseload=True,
             ),
             load_only(TaskRow.id, TaskRow.title, TaskRow.school_id, TaskRow.membership_id),
@@ -105,7 +115,7 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
 
     stored_by_task_title: dict[tuple[str, str], list[str]] = {}
     for artifact, task in rows:
-        if artifact.kind == "kb_text" and (artifact.content_encoding or "utf8") == "utf8":
+        if artifact.kind == "kb_text":
             stored_by_task_title.setdefault((task.id, artifact.title), []).append(artifact.id)
 
     pace = _Pace(rebuild_per_min())
@@ -117,7 +127,7 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
         if (
             is_lab_school(str(task.school_id or ""))
             or not is_material(kind=artifact.kind, title=artifact.title)
-            or not is_teacher_material(artifact.origin, task.title)
+            or artifact.kind == "edu_excerpt"
         ):
             skipped += 1
             continue
@@ -129,21 +139,36 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
         stored_ids = stored_by_task_title.get((task.id, artifact.title), [])
         async with factory() as session:
             result = await session.execute(
-                select(ArtifactRow.id, ArtifactRow.inline).where(
-                    ArtifactRow.id.in_([artifact.id, *stored_ids])
-                )
+                select(
+                    ArtifactRow.id,
+                    ArtifactRow.origin,
+                    ArtifactRow.content_encoding,
+                    ArtifactRow.created_at,
+                    ArtifactRow.inline,
+                ).where(ArtifactRow.id.in_([artifact.id, *stored_ids]))
             )
-            payloads = dict(result.all())
-        if artifact.id not in payloads:
-            # A teacher may delete the artifact after the metadata scan.
+            payloads = {row.id: row for row in result.all()}
+        payload = payloads.get(artifact.id)
+        if payload is None or not is_teacher_material(payload.origin, task.title):
             skipped += 1
             continue
         stored_text = None
         for aid in stored_ids:
-            if body := (payloads.get(aid) or "").strip():
+            stored = payloads.get(aid)
+            if (
+                stored is not None
+                and (stored.content_encoding or "utf8") == "utf8"
+                and (body := (stored.inline or "").strip())
+            ):
                 stored_text = body
         docs = await asyncio.to_thread(
-            _chunk_artifact, artifact, task, payloads[artifact.id], stored_text
+            _chunk_artifact,
+            artifact,
+            task,
+            inline=payload.inline,
+            content_encoding=payload.content_encoding,
+            created_at=payload.created_at,
+            stored_text=stored_text,
         )
         if not docs:
             skipped += 1
@@ -154,12 +179,10 @@ async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dic
         for doc in reversed(docs):
             pending.append(doc)
             if len(pending) == _BATCH_SIZE:
-                await pace.before(len(pending))
-                await idx.upsert_rebuild_batch(pending)
+                await pace.push(idx, pending)
                 pending = []
     if pending:
-        await pace.before(len(pending))
-        await idx.upsert_rebuild_batch(pending)
+        await pace.push(idx, pending)
 
     return {
         "ok": True,

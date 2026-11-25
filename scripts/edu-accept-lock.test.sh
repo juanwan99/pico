@@ -40,7 +40,4 @@ grep -q 'edu_accept_lock_take' "$ROOT/scripts/prod-update.impl.sh" \
   && awk '/edu_accept_lock_take/{a=NR} /^inflight="\$\(inflight_runs_now\)"/{b=NR} END{exit !(a && b && a<b)}' "$ROOT/scripts/prod-update.impl.sh" \
   && echo "ok   impl takes lock before drain / recreate" || { echo "FAIL impl wiring"; fail=1; }
 
-grep -q 'force=1" >"$REINDEX_LOG" 2>&1 7>&- &' "$ROOT/scripts/prod-update.impl.sh" \
-  && echo "ok   background reindex drops fd 7" || { echo "FAIL background reindex keeps lock"; fail=1; }
-
 [ "$fail" = 0 ] && echo "edu-accept-lock: all ok" || exit 1

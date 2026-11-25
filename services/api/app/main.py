@@ -402,6 +402,8 @@ async def kb_reindex_all(request: Request, force: bool = False) -> dict:
     state = request.app.state
     running = getattr(state, "kb_reindex_task", None)
     if running is not None and not running.done():
+        if not force:
+            return {"ok": True, "queued": True, "mode": "incremental", "already_running": True}
         raise HTTPException(
             status_code=409,
             detail={"code": "kb.reindex_running", "message": "kb reindex already running"},

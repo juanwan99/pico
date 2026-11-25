@@ -71,6 +71,7 @@ def _fake_runtime(
     login_failures_before_success: int = 0,
     reindex_http: str = "202",
     reindex_body: str = '{"ok":true,"queued":true,"mode":"incremental"}',
+    meili_docs: int = 1,
     office_down: bool = False,
     leftover_volumes: tuple[str, ...] = (),
     volume_rm_fails: bool = False,
@@ -234,7 +235,10 @@ def _fake_runtime(
         + reindex_http
         + "'\n"
         "    ;;\n"
-        "  */indexes/pico_materials/stats) exit 7 ;;\n"
+        "  */indexes/pico_materials/stats)\n"
+        f"    printf '%s' '{{\"numberOfDocuments\":{meili_docs},\"isIndexing\":true}}' "
+        '>"$out_file"\n'
+        "    printf '200' ;;\n"
         + login_body
         # ---- E2E smoke gate endpoints (scripts/e2e-smoke.sh --prod) ----
         + "  */api/pico/tip)\n"
@@ -571,6 +575,28 @@ def test_prod_update_requires_enqueue_acknowledgment(tmp_path: Path) -> None:
     result = _run_prod_update(production, sha, bin_dir)
     assert result.returncode == 10
     assert "kb reindex was not queued" in result.stderr
+    assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_accepts_reindex_already_running(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(
+        tmp_path,
+        reindex_body='{"ok":true,"queued":true,"mode":"incremental","already_running":true}',
+    )
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "[pico] meili docs=1" in result.stdout
+    assert "smoke 12/12 PASS (prod)" in result.stdout
+
+
+def test_prod_update_rejects_empty_meili_index_after_enqueue(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, meili_docs=0)
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 10
+    assert "kb reindex queued mode=incremental" in result.stdout
+    assert "Meili has 0 documents" in result.stderr
     assert "[pico] done" not in result.stdout
 
 
