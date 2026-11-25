@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
+from starlette.background import BackgroundTask
 
 _ROOT = Path(__file__).resolve().parents[3]
 _ORCH = _ROOT / "services" / "orchestrator"
@@ -1053,6 +1054,7 @@ async def sandbox_session_screenshot(
 @app.get("/v1/sandbox/sessions/{session_id}/stream")
 async def sandbox_session_stream(
     session_id: str,
+    ack: bool = False,
     principal: Principal = Depends(require_scope("ai:read")),
 ) -> StreamingResponse:
     """Live pane (#1215): pass the sidecar's JPEG SSE through, same owner check."""
@@ -1065,6 +1067,7 @@ async def sandbox_session_stream(
             params={
                 "school_id": principal.school_id,
                 "membership_id": principal.membership_id,
+                "ack": ack,
             },
         )
     except ToolError as exc:
@@ -1076,6 +1079,7 @@ async def sandbox_session_stream(
         chunks,
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"},
+        background=BackgroundTask(chunks.aclose),
     )
 
 
@@ -1171,7 +1175,8 @@ async def sandbox_session_input(
 
     ctype = (request.headers.get("content-type") or "").lower()
     click_x = click_y = scroll_dy = view_w = view_h = None
-    key = drag = ""
+    device_pixel_ratio = None
+    key = drag = frame_ack = ""
     text = None
     password = False
     try:
@@ -1189,6 +1194,11 @@ async def sandbox_session_input(
             key = str(body.get("key") or "")[:32]
             if body.get("viewport_width") and body.get("viewport_height"):
                 view_w, view_h = int(body["viewport_width"]), int(body["viewport_height"])
+                if body.get("device_pixel_ratio") is not None:
+                    device_pixel_ratio = float(body["device_pixel_ratio"])
+                    if not 0 < device_pixel_ratio <= 2:
+                        raise ValueError("device_pixel_ratio")
+            frame_ack = str(body.get("frame_ack") or "")
             secret = body.get("secret") or body.get("password")
             visible = body.get("text")
             if secret:
@@ -1230,7 +1240,9 @@ async def sandbox_session_input(
                 "key": key,
                 "viewport_width": view_w,
                 "viewport_height": view_h,
+                "device_pixel_ratio": device_pixel_ratio,
                 "drag": drag,
+                "frame_ack": frame_ack,
             },
         )
     except ToolError as exc:
@@ -1238,12 +1250,15 @@ async def sandbox_session_input(
         raise HTTPException(
             status_code=status, detail={"code": exc.code, "message": exc.message}
         ) from exc
+    if frame_ack:
+        return JSONResponse(content=applied, headers={"Cache-Control": "no-store"})
     if drag in {"down", "move"}:
         return JSONResponse(content={"ok": True, "drag": drag}, headers={"Cache-Control": "no-store"})
     accept = (request.headers.get("accept") or "").lower()
     if "application/json" in ctype or "application/json" in accept:
         meta = applied if isinstance(applied, dict) else {}
-        body = _sandbox_public_meta(session_id, meta)
+        # The live input reply only carries the page fields it refreshed.
+        body = _sandbox_public_meta(session_id, meta) if meta.get("session_id") else meta
         body["clicked"] = bool(meta.get("clicked"))
         body["typed"] = bool(meta.get("typed"))
         return JSONResponse(content=body, headers={"Cache-Control": "no-store"})

@@ -100,3 +100,47 @@ key 只显示 sha256 的前 8 位。进程重启后清零（`since` 是起点）
 `tests/unit/test_upstream.py` 对直连和 Pi 两条路各测四种情形：按顺序、并发、503、换模型。每种都断言一条消息最多发几个上游请求。CI 必跑。
 
 另外还测重试的等待时间（2 s、6 s、`Retry-After`）、阅卷和托管循环及 llm-pass 的重试预算，以及切换至 Responses 模型时走正确的 API。
+
+## 沙箱实时画面（pico#1446）
+
+Playwright 1.63.0 通过 Chromium CDP 取 JPEG。Chromium 的合成器预留 DPR 2 的像素，`Emulation.setDeviceMetricsOverride` 设置每页的 CSS 尺寸和 DPR，`Page.startScreencast` 按该 DPR 限定 JPEG 尺寸。投屏跟随当前滚动位置。改尺寸会重开捕获，CSS 宽高取自帧的 CDP metadata。Chromium 在切换尺寸时偶尔会将新 metadata 配给旧位图，worker 读取 JPEG 头，尺寸不一致的帧不出流。前端按 CSS 尺寸显示并换算点击坐标。PNG 在持有 DPR 设置的 CDP 会话按当前可见区域截取，返回 CSS 尺寸。[Chromium 的投屏实现](https://chromium.googlesource.com/chromium/src/+/refs/tags/153.0.8010.12/content/browser/devtools/protocol/page_handler.cc)
+
+Chromium 的帧到达 worker 即向 CDP 确认，worker 只留最新一帧待发。新前端通过 `ack=1` 声明每路 SSE 有两帧的确认窗口。网页解码后按顺序发起确认请求，同时继续读流。确认丢失时，超过 15 秒的名额释放，有待发帧就发送最新一帧，包括页面静止前的最后一帧。未声明确认的旧前端仍连续接收。实时输入只回网址、标题、输入框标记和操作结果，登录保存按 15 秒节流。网页将滚轮增量合并，每次只挂一条滚动请求。Office、老师盘和推帧不可用时继续轮询 PNG。[CDP Page 协议](https://chromedevtools.github.io/devtools-protocol/tot/Page/) · [noVNC 的 RFB 消息](https://github.com/novnc/noVNC/blob/master/docs/rfb_notes)
+
+### JPEG 测量
+
+本地 Chromium 153.0.8010.12，DPR 1.5，使用 12 CSS px 中英文的密集表格及带彩色图表的表格。每格依次为 base64 大小 / gzip level 1 大小（KiB）/ 小字区域相对同尺寸原生 PNG 的 RGB 均方根误差，误差包括合成器缩放与 JPEG 编码。
+
+| CSS 尺寸与画面 | JPEG 70 | JPEG 75 | JPEG 80 | JPEG 85 | JPEG 90 |
+|---|---:|---:|---:|---:|---:|
+| 1280×800 表格 | 528.3 / 286.0 / 23.42 | 572.1 / 308.5 / 23.16 | 635.1 / 351.0 / 23.05 | 721.3 / 399.3 / 22.79 | 853.2 / 472.1 / 22.45 |
+| 1920×1080 带图表 | 957.6 / 589.0 / 23.42 | 1032.1 / 633.0 / 23.16 | 1142.2 / 707.3 / 23.05 | 1291.4 / 815.3 / 22.79 | 1524.6 / 963.0 / 22.45 |
+
+统一取质量 75。比 80 的 gzip 样本少 10.5–12.1%，小字区域误差增加 0.11，放大查看中英文仍可辨。LibreChat 按客户端支持压缩 SSE 并逐块刷新。[Node.js zlib 流式刷新](https://nodejs.org/api/zlib.html#flushing)
+
+### 限速浏览器复测
+
+本地用真 Chromium 加载沙箱面板，经过 LibreChat 沙箱代理、Pico API 和 worker。LibreChat 代理使用固定的本地测试身份。双向各加 97 ms，下行共享 5.5 Mbps。每类页面跑三次，DPR 1.5，最大化从 720 CSS px 到 1920×1080 CSS px。点击以新帧中按钮变色为终点，最大化以 2880×1620 JPEG 出现新布局标记为终点。滚动按约 5 秒内显示的不同帧计数。
+
+| 页面 | 点击到新帧 | 最大化到清晰帧 | 连续滚动 |
+|---|---:|---:|---:|
+| 中英文密集表格 | 中位 618 ms（536–677） | 中位 2036 ms（2020–2176） | 中位 0.77 帧/s |
+| 表格及彩色图表 | 中位 541 ms（532–544） | 中位 1951 ms（1805–2039） | 中位 0.77 帧/s |
+
+六次点击均小于 1 秒，六次最大化均超过 1 秒。最大化帧的 JPEG 分别为 840.0 KiB 和 724.8 KiB。两类页面只用 CSS 尺寸显示。真 Chromium 回归还核对了 DPR 1.5 截 PNG 后仍保持、滚动 500 px 后出帧、按画面坐标点击命中。俄勒冈链路和统筹老师实用待部署后验收。
+
+### 容量测量
+
+在本地 Linux 容器中用 cgroup v2 测量。十个老师各一个 Chromium context，每个 context 打开分属三个站点的标签，浏览器 1920×1200 CSS px、DPR 2。每个会话同时保留 Word、Excel、PPT 窗各一个，共 30 对 Xvfb + soffice。办公窗全部打开后十路浏览器各完成六次点击及取帧。第 11 个会话由现有会话额度拒绝。测量为每个 Xvfb 分配独立显示号，统计内存和 PID 容量。
+
+| 负载 | cgroup 内存 | PID 计数 |
+|---|---:|---:|
+| worker + 空闲 Chromium | 1092 MiB | 55 |
+| 1 个会话、2 个标签 | 1334 MiB（增加 242 MiB） | 89（增加 34） |
+| 1 个会话、3 个标签 | 1427 MiB（增加 335 MiB） | 100（增加 45） |
+| 10 个会话、30 个标签 | 峰值 5.46 GiB | 峰值 463 |
+| 10 个会话、30 个标签、30 个办公窗，浏览器并行操作 | 峰值 7.55 GiB | 峰值 660 |
+
+内存统计已包括文件缓存、`/tmp` 中的 profile 和共享内存。混合负载结束前采样到 `shmem` 约 1.33 GiB，其中含已解除链接的 Chromium 共享内存，`/dev/shm` 实测占用为 0。混合负载复测的 `memory.events` 中 max、oom、oom_kill 和 `pids.events` 中 max 均为 0。Compose 使用 9 GiB 和 1024 PID，运行时与 Compose 都设 10 个会话，启动中的会话先占额度。
+
+未启用 init 的对照容器在两轮压测退出后累积了 305 个僵尸进程。Compose 启用 Docker 的 init 回收孤儿进程。复测关掉十个会话后，容器剩 3 个 PID（含采样进程），僵尸进程为 0。现网十会话仍需部署后重测。[Docker Compose init](https://docs.docker.com/reference/compose-file/services/#init)

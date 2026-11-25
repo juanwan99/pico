@@ -5,6 +5,8 @@
  * {ok, git_sha, service} — no membership, canary, or secret fields.
  */
 const { Readable } = require('stream');
+const { pipeline } = require('node:stream/promises');
+const { createGzip, constants: zlib } = require('node:zlib');
 const express = require('express');
 const { logger } = require('~/config');
 const { requireJwtAuth } = require('~/server/middleware');
@@ -541,7 +543,8 @@ router.get('/v1/sandbox/sessions/:sessionId/stream', async (req, res) => {
   const abort = new AbortController();
   res.on('close', () => abort.abort());
   try {
-    const r = await fetch(`${picoBase()}/v1/sandbox/sessions/${req.params.sessionId}/stream`, {
+    const query = req.query.ack === '1' ? '?ack=1' : '';
+    const r = await fetch(`${picoBase()}/v1/sandbox/sessions/${req.params.sessionId}/stream${query}`, {
       headers: {
         Authorization: `Bearer ${picoKey()}`,
         Accept: 'text/event-stream',
@@ -556,12 +559,21 @@ router.get('/v1/sandbox/sessions/:sessionId/stream', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-store, no-transform');
     res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
+    res.vary('Accept-Encoding');
     const body = Readable.fromWeb(r.body);
-    body.on('error', () => res.end());
-    body.pipe(res);
+    const streams = [body];
+    if (req.acceptsEncodings('gzip', 'identity') === 'gzip') {
+      res.setHeader('Content-Encoding', 'gzip');
+      // Compress base64 on the wire and flush each received chunk for live delivery.
+      streams.push(createGzip({ level: zlib.Z_BEST_SPEED, flush: zlib.Z_SYNC_FLUSH }));
+    }
+    res.flushHeaders();
+    await pipeline([...streams, res]);
   } catch (err) {
-    if (abort.signal.aborted) {
+    if (
+      abort.signal.aborted &&
+      (err.name === 'AbortError' || err.code === 'ERR_STREAM_PREMATURE_CLOSE')
+    ) {
       return;
     }
     logger.error('[pico stream]', err);

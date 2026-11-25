@@ -14,6 +14,7 @@ from pico_orchestrator.sandbox_persist import (
     owner_disk_meta,
 )
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from sandbox_worker.browser import ENGINE_NAME, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 from sandbox_worker.diagram import mermaid_js_ready, render_diagram
@@ -59,7 +60,9 @@ class InputBody(BaseModel):
     key: str = Field(default="", max_length=32)
     viewport_width: int | None = Field(default=None, ge=1, le=10_000)
     viewport_height: int | None = Field(default=None, ge=1, le=10_000)
+    device_pixel_ratio: float | None = Field(default=None, gt=0, le=2)
     drag: Literal["", "down", "move", "up"] = ""
+    frame_ack: str = ""
 
 
 class FocusBody(BaseModel):
@@ -217,7 +220,7 @@ async def get_session(
         sess = RUNTIME.require_owner(
             session_id, school_id=school_id, membership_id=membership_id
         )
-        return await RUNTIME.screenshot(sess)
+        return await RUNTIME.pane_meta(sess)
     except ToolError as exc:
         raise _tool_http(exc) from exc
 
@@ -245,6 +248,7 @@ async def stream_session(
     session_id: str,
     school_id: str,
     membership_id: str,
+    ack: bool = False,
     x_pico_sandbox_token: str | None = Header(default=None),
 ) -> StreamingResponse:
     """Live pane (#1215): SSE of JPEG frames. Client disconnect stops the screencast."""
@@ -256,14 +260,13 @@ async def stream_session(
     except ToolError as exc:
         raise _tool_http(exc) from exc
 
-    async def events():
-        async for event in RUNTIME.stream(sess):
-            yield sse_event(event)
+    stream = RUNTIME.stream(sess, ack=ack)
 
     return StreamingResponse(
-        events(),
+        (sse_event(event) async for event in stream),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"},
+        background=BackgroundTask(stream.aclose),
     )
 
 
@@ -292,7 +295,9 @@ async def post_input(
             key=body.key,
             viewport_width=body.viewport_width,
             viewport_height=body.viewport_height,
+            device_pixel_ratio=body.device_pixel_ratio,
             drag=body.drag,
+            frame_ack=body.frame_ack,
         )
     except ToolError as exc:
         raise _tool_http(exc) from exc

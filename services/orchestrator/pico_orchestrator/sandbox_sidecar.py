@@ -7,10 +7,12 @@ never runs a second agent loop, and never stores cookies.
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any
 
 import httpx
+from anyio import CancelScope
 
 from pico_orchestrator.gateway import ToolError
 
@@ -162,7 +164,9 @@ async def _embedded_call(
                 key=str(body.get("key") or ""),
                 viewport_width=body.get("viewport_width"),
                 viewport_height=body.get("viewport_height"),
+                device_pixel_ratio=body.get("device_pixel_ratio"),
                 drag=str(body.get("drag") or ""),
+                frame_ack=str(body.get("frame_ack") or ""),
             )
         if method == "POST" and path.endswith("/act"):
             body = json_body or {}
@@ -199,7 +203,7 @@ async def _embedded_call(
             await RUNTIME.destroy(session_id)
             return {"ok": True, "destroyed": True, "session_id": session_id}
         if method == "GET":
-            return await RUNTIME.screenshot(sess)
+            return await RUNTIME.pane_meta(sess)
     raise ToolError("sandbox.unavailable", "隔离沙箱内部路径未知")
 
 
@@ -235,7 +239,7 @@ async def sidecar_json(
         raise ToolError("sandbox.unavailable", "隔离沙箱返回了无法解析的响应") from exc
 
 
-async def sidecar_stream(path: str, *, params: dict[str, Any]) -> AsyncIterator[bytes]:
+async def sidecar_stream(path: str, *, params: dict[str, Any]) -> AsyncGenerator[bytes, None]:
     """Open the live-pane SSE (#1215). Errors before the first byte raise ToolError."""
     base = sandbox_url()
     if base == "embedded":
@@ -247,7 +251,12 @@ async def sidecar_stream(path: str, *, params: dict[str, Any]) -> AsyncIterator[
             school_id=str(params.get("school_id") or ""),
             membership_id=str(params.get("membership_id") or ""),
         )
-        return (sse_event(event) async for event in RUNTIME.stream(sess))
+        async def events() -> AsyncGenerator[bytes, None]:
+            async with aclosing(RUNTIME.stream(sess, ack=params.get("ack", False))) as stream:
+                async for event in stream:
+                    yield sse_event(event)
+
+        return events()
     client = httpx.AsyncClient(timeout=httpx.Timeout(_TIMEOUT_S, read=None), trust_env=False)
     try:
         req = client.build_request("GET", base.rstrip("/") + path, params=params, headers=_headers())
@@ -260,12 +269,13 @@ async def sidecar_stream(path: str, *, params: dict[str, Any]) -> AsyncIterator[
         await client.aclose()
         _raise_detail(resp)
 
-    async def chunks() -> AsyncIterator[bytes]:
+    async def chunks() -> AsyncGenerator[bytes, None]:
         try:
             async for chunk in resp.aiter_raw():
                 yield chunk
         finally:
-            await resp.aclose()
-            await client.aclose()
+            with CancelScope(shield=True):
+                await resp.aclose()
+                await client.aclose()
 
     return chunks()

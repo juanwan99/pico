@@ -192,7 +192,7 @@ async def test_same_filename_new_bytes_reloads_office():
 
 
 @pytest.mark.asyncio
-async def test_ninth_desk_is_refused():
+async def test_desk_over_session_limit_is_refused(monkeypatch):
     import sandbox_worker.runtime as runtime_mod
     from pico_orchestrator.gateway import ToolError
 
@@ -205,9 +205,9 @@ async def test_ninth_desk_is_refused():
         return surface
 
     runtime = SandboxRuntime(open_browser=open_browser)
-    runtime_mod.open_files_surface = open_files  # type: ignore[attr-defined]
+    monkeypatch.setattr(runtime_mod, "open_files_surface", open_files)
 
-    for i in range(8):
+    for i in range(runtime_mod.MAX_SESSIONS):
         await runtime.open_session(
             school_id="sch",
             membership_id=f"mem-{i}",
@@ -217,7 +217,7 @@ async def test_ninth_desk_is_refused():
     with pytest.raises(ToolError) as denied:
         await runtime.open_session(
             school_id="sch",
-            membership_id="mem-8",
+            membership_id="extra-member",
             run_id="r",
             url="https://example.com/",
         )
