@@ -93,6 +93,70 @@ async def test_failed_tab_fit_falls_back_to_png(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["new-layout", "old-layout", "metrics-error"])
+async def test_screencast_checks_pending_frame_after_viewport_commit(
+    tmp_path, monkeypatch, outcome,
+) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
+    page = MagicMock()
+    context = MagicMock(pages=[page], new_cdp_session=AsyncMock(return_value=cdp))
+    surface = PlaywrightPage(context, page, tmp_path)
+    push = MagicMock()
+    stop = await surface.screencast(push)
+    on_frame = cdp.on.call_args.args[1]
+
+    async def apply_metrics(_page, viewport, _scale):
+        nonlocal latest_jpeg
+        changed_at = time.time()
+        if outcome == "new-layout":
+            layouts = [(viewport, "lime"), (viewport, "blue")]
+        else:
+            layouts = [((VIEWPORT_WIDTH, VIEWPORT_HEIGHT), "red")]
+        for session_id, (size, color) in enumerate(layouts, start=1):
+            buf = io.BytesIO()
+            with Image.new("RGB", size, color) as jpeg:
+                jpeg.save(buf, format="JPEG")
+            latest_jpeg = base64.b64encode(buf.getvalue()).decode()
+            await on_frame({
+                "data": latest_jpeg,
+                "sessionId": session_id,
+                "metadata": {
+                    "deviceWidth": size[0],
+                    "deviceHeight": size[1],
+                    "timestamp": changed_at + session_id,
+                },
+            })
+            cdp.send.assert_any_await("Page.screencastFrameAck", {"sessionId": session_id})
+            assert push.call_count == 0
+        if outcome == "metrics-error":
+            raise RuntimeError("metrics failed")
+        return changed_at
+
+    latest_jpeg = None
+    monkeypatch.setattr(surface, "_apply_metrics", apply_metrics)
+    try:
+        if outcome == "metrics-error":
+            with pytest.raises(RuntimeError, match="metrics failed"):
+                await surface.set_viewport(480, 620)
+            assert surface._resize_frames is None
+            assert surface.page_token == 0
+            push.assert_not_called()
+            return
+        assert await surface.set_viewport(480, 620) == (480, 620)
+        if outcome == "new-layout":
+            push.assert_called_once()
+            frame = push.call_args.args[0]
+            assert (frame.width, frame.height, frame.page_token) == (480, 620, 1)
+            assert frame.jpeg == latest_jpeg
+        else:
+            push.assert_not_called()
+    finally:
+        await stop()
+
+
+@pytest.mark.asyncio
 async def test_screencast_discards_stale_bitmap_with_new_viewport_metadata(
     tmp_path, monkeypatch,
 ) -> None:

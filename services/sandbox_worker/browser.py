@@ -641,6 +641,8 @@ class PlaywrightPage:
         self._viewport_changed_at = 0.0
         self._viewport_lock = asyncio.Lock()
         self._viewport_task: asyncio.Task[None] | None = None
+        # Present only during a viewport commit, with one pending event per cast.
+        self._resize_frames: dict[Callable[[dict[str, Any]], None], dict[str, Any]] | None = None
         self._metrics: dict[Any, Any] = {}
         self._screen_cdp: Any = None
         self._screen: dict[str, Any] | None = None
@@ -778,14 +780,20 @@ class PlaywrightPage:
         async with self._viewport_lock:
             if size != self._viewport or scale != self._device_scale:
                 task = self._viewport_task
-                changed_at = await self._apply_metrics(self._page, size, scale)
-                # Publish the whole viewport generation without yielding to frame callbacks.
-                self._viewport_changed_at = changed_at
-                self._viewport = size
-                self._device_scale = scale
-                self.page_token += 1
-                if self._viewport_task is task:
-                    self._viewport_task = None
+                self._resize_frames = pending_frames = {}
+                try:
+                    changed_at = await self._apply_metrics(self._page, size, scale)
+                    # Publish the whole viewport generation without yielding to frame callbacks.
+                    self._viewport_changed_at = changed_at
+                    self._viewport = size
+                    self._device_scale = scale
+                    self.page_token += 1
+                    if self._viewport_task is task:
+                        self._viewport_task = None
+                finally:
+                    self._resize_frames = None
+                for check_frame, event in pending_frames.items():
+                    check_frame(event)
         return size
 
     def _on_new_page(self, page: Any) -> None:
@@ -1427,21 +1435,20 @@ class PlaywrightPage:
         last_page_token = self.page_token
         last_frame_at = 0.0
 
-        async def on_frame(event: dict[str, Any]) -> None:
+        def check_frame(event: dict[str, Any]) -> None:
             nonlocal last_jpeg, last_page_token, last_frame_at
-            if not active:
-                return
-            try:
-                await cdp.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
-            except Error:
-                if active:
-                    raise
-                logger.debug("screencast stopped while acknowledging a frame", exc_info=True)
             if not active or self._page is not page:
                 return
             meta = event["metadata"]
             timestamp = meta.get("timestamp", 0.0)
             if timestamp < max(last_frame_at, self._viewport_changed_at):
+                return
+            resize_frames = self._resize_frames
+            if resize_frames is not None:
+                # Chromium can paint the new layout before the metrics command returns.
+                pending = resize_frames.get(check_frame)
+                if pending is None or timestamp >= pending["metadata"].get("timestamp", 0.0):
+                    resize_frames[check_frame] = event
                 return
             width, height = self._viewport
             scale = c_float(max(1.0, self._device_scale)).value
@@ -1466,9 +1473,22 @@ class PlaywrightPage:
             last_page_token, last_jpeg = self.page_token, jpeg
             push(ScreencastFrame(jpeg, width, height, time.monotonic(), self.page_token))
 
+        async def on_frame(event: dict[str, Any]) -> None:
+            if not active:
+                return
+            try:
+                await cdp.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
+            except Error:
+                if active:
+                    raise
+                logger.debug("screencast stopped while acknowledging a frame", exc_info=True)
+            check_frame(event)
+
         async def stop() -> None:
             nonlocal active
             active = False
+            if self._resize_frames is not None:
+                self._resize_frames.pop(check_frame, None)
             try:
                 with CancelScope(shield=True):
                     await cdp.detach()
