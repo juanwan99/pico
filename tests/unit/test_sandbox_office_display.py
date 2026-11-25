@@ -2,9 +2,12 @@ import asyncio
 import os
 import re
 import shutil
+import signal
+import sys
+from contextlib import suppress
 from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pico_orchestrator.document_generators import (
@@ -18,14 +21,62 @@ from sandbox_worker import office
 
 
 @pytest.mark.asyncio
+async def test_close_stops_libreoffice_launcher_child(tmp_path):
+    work = tmp_path / "document"
+    work.mkdir()
+    xvfb = await office._spawn(["sleep", "60"], env=dict(os.environ))
+    launcher = await office._spawn(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os, signal\n"
+                "if os.fork() == 0:\n"
+                "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                "    print('ready', flush=True)\n"
+                "    signal.pause()\n"
+            ),
+        ],
+        env=dict(os.environ),
+        stdout=asyncio.subprocess.PIPE,
+    )
+    desktop = office.OfficeDesktop(
+        kind="writer",
+        filename="sample.docx",
+        doc_path=work / "sample.docx",
+        display=":0",
+        xvfb=xvfb,
+        office=launcher,
+    )
+    try:
+        assert await asyncio.wait_for(launcher.stdout.readline(), timeout=3) == b"ready\n"
+        # The group leader can be gone while the child still holds stdout open.
+        async with asyncio.timeout(3):
+            while launcher.returncode is None:
+                await asyncio.sleep(0.01)
+        await desktop.close()
+        assert await asyncio.wait_for(launcher.stdout.read(), timeout=3) == b""
+        assert xvfb.returncode == -signal.SIGTERM
+        assert not work.exists()
+    finally:
+        for proc in (launcher, xvfb):
+            with suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            await proc.wait()
+
+
+@pytest.mark.asyncio
 async def test_xvfb_eof_does_not_start_libreoffice(monkeypatch, tmp_path):
     report = asyncio.StreamReader()
     report.feed_data(b"42")
     report.feed_eof()
-    spawn = AsyncMock(return_value=SimpleNamespace(stdout=report, returncode=1))
+    xvfb = SimpleNamespace(pid=123, stdout=report, returncode=1, wait=AsyncMock())
+    spawn = AsyncMock(return_value=xvfb)
+    killpg = Mock()
     monkeypatch.setattr(office, "_DOC_ROOT", tmp_path)
     monkeypatch.setattr(office.shutil, "which", lambda name: name)
     monkeypatch.setattr(office, "_spawn", spawn)
+    monkeypatch.setattr(office.os, "killpg", killpg)
 
     with pytest.raises(ToolError, match="沙箱桌面未能启动") as error:
         await office.open_office(kind="writer", filename="sample.docx", document=b"PK")
@@ -33,6 +84,8 @@ async def test_xvfb_eof_does_not_start_libreoffice(monkeypatch, tmp_path):
     assert error.value.code == "sandbox.office_unavailable"
     spawn.assert_awaited_once()
     assert spawn.await_args.args[0][1:3] == ["-displayfd", "1"]
+    killpg.assert_called_once_with(xvfb.pid, signal.SIGKILL)
+    xvfb.wait.assert_awaited_once()
     assert not list(tmp_path.iterdir())
 
 

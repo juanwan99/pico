@@ -12,6 +12,7 @@ import os
 import shutil
 import signal
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 
 from pico_orchestrator.gateway import ToolError
@@ -162,16 +163,14 @@ class OfficeDesktop:
 
     async def close(self) -> None:
         for proc in (self._office, self._xvfb):
-            if proc.returncode is not None:
-                continue
-            try:
-                proc.send_signal(signal.SIGTERM)
-                try:
-                    await asyncio.wait_for(proc.wait(), timeout=3)
-                except TimeoutError:
-                    proc.kill()
-            except ProcessLookupError:
-                pass
+            with suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGTERM)
+            with suppress(TimeoutError):
+                await asyncio.wait_for(proc.wait(), timeout=3)
+            # The launcher can exit while its children still hold the display.
+            with suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            await proc.wait()
         shutil.rmtree(self.doc_path.parent, ignore_errors=True)
 
 
@@ -278,8 +277,9 @@ async def convert_legacy_office(*, filename: str, document: bytes) -> bytes:
                 proc.communicate(), timeout=_CONVERT_TIMEOUT_S
             )
         except TimeoutError as exc:
-            if proc.returncode is None:
-                proc.kill()
+            with suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            await proc.wait()
             raise ToolError("sandbox.office_unavailable", "旧版文档转换超时") from exc
         produced = next(out_dir.glob(f"*{target}"), None)
         if proc.returncode != 0 or produced is None or not produced.is_file():
@@ -368,8 +368,9 @@ async def open_office(*, kind: str, filename: str, document: bytes) -> OfficeDes
             raise ToolError("sandbox.office_unavailable", "LibreOffice 未能打开该文档")
     except (Exception, asyncio.CancelledError):
         for proc in (office_proc, xvfb_proc):
-            if proc is not None and proc.returncode is None:
-                proc.kill()
+            if proc is not None:
+                with suppress(ProcessLookupError):
+                    os.killpg(proc.pid, signal.SIGKILL)
                 await proc.wait()
         shutil.rmtree(work, ignore_errors=True)
         raise
