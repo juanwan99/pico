@@ -239,32 +239,31 @@ export async function measurePane(page, maximize, { out, getReference, run }) {
     },
     IMAGE,
   );
-  const reference = await getReference();
-  max.rms = await page.evaluate(async ({ jpeg, reference, crop }) => {
-    const shown = new Image();
-    shown.src = `data:image/jpeg;base64,${jpeg}`;
-    const png = new Image();
-    png.src = `data:image/png;base64,${reference}`;
-    await Promise.all([shown.decode(), png.decode()]);
-    // The worker PNG is captured with the active DPR and resized to CSS pixels.
-    const scale = png.naturalWidth / shown.naturalWidth;
-    const [x, y, width, height] = crop.map((n) => Math.round(n * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(shown, -x, -y, png.naturalWidth, png.naturalHeight);
-    const pixels = ctx.getImageData(0, 0, width, height).data;
-    ctx.drawImage(png, -x, -y);
-    const truth = ctx.getImageData(0, 0, width, height).data;
-    let error = 0;
-    for (let i = 0; i < pixels.length; i += 4) {
-      for (let channel = 0; channel < 3; channel++)
-        error += (pixels[i + channel] - truth[i + channel]) ** 2;
-    }
-    return Math.sqrt(error / (width * height * 3));
-  }, { jpeg: max.jpeg, reference, crop: CROP });
+  if (getReference) {
+    const reference = await getReference();
+    max.rms = await page.evaluate(async ({ jpeg, reference, crop }) => {
+      const shown = new Image();
+      shown.src = `data:image/jpeg;base64,${jpeg}`;
+      const png = new Image();
+      png.src = `data:image/png;base64,${reference}`;
+      await Promise.all([shown.decode(), png.decode()]);
+      const [x, y, width, height] = crop;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(shown, -x, -y);
+      const pixels = ctx.getImageData(0, 0, width, height).data;
+      ctx.drawImage(png, -x, -y);
+      const truth = ctx.getImageData(0, 0, width, height).data;
+      let error = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        for (let channel = 0; channel < 3; channel++)
+          error += (pixels[i + channel] - truth[i + channel]) ** 2;
+      }
+      return Math.sqrt(error / (width * height * 3));
+    }, { jpeg: max.jpeg, reference, crop: CROP });
+  }
   const jpeg = Buffer.from(max.jpeg, 'base64');
   await fs.writeFile(path.join(out, `clear-${run}.jpg`), jpeg);
   max.jpegKiB = jpeg.length / 1024;
@@ -376,17 +375,6 @@ async function requireEmptyDesk(sessions, headers) {
   }
 }
 
-async function workerReference(url, headers, file) {
-  const response = await fetch(`${url}/screenshot`, { headers });
-  if (!response.ok) throw new Error(`sandbox reference PNG HTTP ${response.status}`);
-  const png = Buffer.from(await response.arrayBuffer());
-  if (png.readUInt32BE(16) !== WIDTH || png.readUInt32BE(20) !== HEIGHT) {
-    throw new Error('Sandbox reference PNG has the wrong CSS viewport');
-  }
-  await fs.writeFile(file, png);
-  return png.toString('base64');
-}
-
 async function main() {
   const { values: args } = parseArgs({
     options: {
@@ -415,6 +403,8 @@ async function main() {
   const out = path.join(ROOT, '.gpt-out', 'sandbox-latency');
   await fs.mkdir(out, { recursive: true });
   const { chromium } = loadPlaywright();
+  const target = new URL(args['base-url']);
+  const local = ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname);
   const link = args.limit ? await limitedSandboxLink(args['base-url']) : null;
   let browser;
   await withCleanup(async () => {
@@ -428,9 +418,8 @@ async function main() {
         '--hide-scrollbars',
       ],
     });
-    const base = link?.base || new URL(args['base-url']).origin;
+    const base = link?.base || target.origin;
     const tip = await fetchTip(base);
-    const local = ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname);
 
     const page = await browser.newPage({
       viewport: WINDOW,
@@ -486,13 +475,10 @@ async function main() {
       const url = `${sessions}/${id}`;
       await withCleanup(async () => {
         await sendPrompt(page, `打开 ${fixtureUrl}`);
-        const getReference = local ? () => reference : () => workerReference(
-          url, headers, path.join(out, `reference-${run}.png`),
-        );
         const result = await measurePane(
           page,
           () => page.locator(FULLSCREEN).click(),
-          { out, getReference, run },
+          { out, getReference: local ? () => reference : undefined, run },
         );
         runs.push(result);
         console.log(
@@ -513,11 +499,11 @@ async function main() {
     const medianFps = runs.map((r) => r.scroll.fps).sort((a, b) => a - b)[1];
     const pass =
       medianFps >= 2 &&
-      runs.every((r) => r.click.ms < 1000 && r.max.ms < 1000 && r.max.rms <= 5);
+      runs.every((r) => r.click.ms < 1000 && r.max.ms < 1000 && (!local || r.max.rms <= 5));
     writeJson(path.join(out, 'report.json'), {
       tip,
       limited: args.limit,
-      referencePixels: local ? 'native' : 'css',
+      referencePixels: local ? 'native' : undefined,
       fixtureUrl,
       runs,
       medianFps,

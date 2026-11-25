@@ -150,14 +150,14 @@ Chromium 的帧到达 worker 即向 CDP 确认，worker 只留最新一帧待发
 
 最大化 <1 s 仍未达。生产俄勒冈链路、10 个会话的混合办公负载和统筹老师试用待部署后验证。
 
-对账脚本先用 `node scripts/night-sandbox/p-sandbox-latency.mjs --print-fixture` 导出测试页，将它放在沙箱可访问的 HTTPS 地址。表格加图表的模式使用测试页参数 `?chart=1`。使用专用测试老师，身份从 `PICO_E2E_EMAIL` / `PICO_E2E_PASSWORD` 读取，测试桌会被关闭。脚本需要支持 CDP 虚拟显示器的 Chromium 153，可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指定可执行文件。
+对账脚本先用 `node scripts/night-sandbox/p-sandbox-latency.mjs --print-fixture` 导出测试页，将它放在沙箱可访问的 HTTPS 地址。表格加图表的模式使用测试页参数 `?chart=1`。使用专用测试老师，身份从 `PICO_E2E_EMAIL` / `PICO_E2E_PASSWORD` 读取，测试桌会被关闭。同一账号不要并发跑。脚本需要支持 CDP 虚拟显示器的 Chromium 153，可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指定可执行文件。
 
 ```bash
 node scripts/night-sandbox/p-sandbox-latency.mjs --base-url http://127.0.0.1:3090 --limit --fixture-url "$FIXTURE_URL"
 node scripts/night-sandbox/p-sandbox-latency.mjs --base-url https://pico.aivia.asia --fixture-url "$FIXTURE_URL"
 ```
 
-每次运行三轮，报告、清晰帧和参考 PNG 写到 `.gpt-out/sandbox-latency/`，未达阈值时命令退出 1。
+每次运行三轮，报告和清晰帧 JPEG 原图写到 `.gpt-out/sandbox-latency/`。连接本机时另存原生 DPR 参考 PNG，按原像素计算小字 RMS，门限为 5。连接现网时报告点击和最大化时延、滚动帧率，小字清晰度用保存的 JPEG 原图放大核对。未达自动测量阈值时命令退出 1。
 
 ### 容量测量
 

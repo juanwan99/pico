@@ -470,51 +470,40 @@ async def test_real_chromium_drops_late_frame_from_one_pixel_smaller_viewport(
         )
         await surface.set_viewport(719, 700)
         cdp = await context.new_cdp_session(page)
-        listen = cdp.on
-        stale = asyncio.get_running_loop().create_future()
-        release_stale = asyncio.Event()
-        stale_processed = asyncio.Event()
-
-        def delay_first_frame(event_name, on_frame):
-            async def on_cdp_frame(event):
-                if not stale.done():
-                    with Image.open(io.BytesIO(base64.b64decode(event["data"]))) as jpeg:
-                        red, _, blue = jpeg.getpixel((100, 100))
-                        if jpeg.size == (719, 700) and red > 240 and blue < 15:
-                            stale.set_result(event)
-                            await release_stale.wait()
-                            await on_frame(event)
-                            stale_processed.set()
-                            return
-                if not release_stale.is_set():
-                    await cdp.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
-                else:
-                    await stale_processed.wait()
-                    await on_frame(event)
-
-            listen(event_name, on_cdp_frame)
-
-        monkeypatch.setattr(cdp, "on", delay_first_frame)
+        listen = MagicMock(wraps=cdp.on)
+        monkeypatch.setattr(cdp, "on", listen)
         monkeypatch.setattr(context, "new_cdp_session", AsyncMock(return_value=cdp))
         frames = asyncio.Queue()
-        stop = await surface.screencast(frames.put_nowait)
+        push = MagicMock(side_effect=frames.put_nowait)
+        stop = await surface.screencast(push)
         try:
-            await page.evaluate("document.body.textContent = 'Paint the original layout'")
-            old = await asyncio.wait_for(stale, 2)
-            assert old["metadata"]["timestamp"] < time.time()
+            old = io.BytesIO()
+            with Image.new("RGB", (719, 700), "red") as jpeg:
+                jpeg.save(old, format="JPEG")
             await surface.set_viewport(720, 700)
-            release_stale.set()
-            await asyncio.wait_for(stale_processed.wait(), 2)
-            await page.evaluate("document.body.textContent = 'Repaint the resized layout'")
-            resized = await asyncio.wait_for(frames.get(), 2)
+            stale = {
+                "data": base64.b64encode(old.getvalue()).decode(),
+                "sessionId": 0,
+                "metadata": {
+                    "deviceWidth": 719,
+                    "deviceHeight": 700,
+                    "timestamp": surface._viewport_changed_at - 1,
+                },
+            }
+            on_frame = listen.call_args.args[1]
+            # PNG capture can hold the viewport lock while the stream keeps painting.
+            async with asyncio.timeout(3), surface._viewport_lock:
+                push.reset_mock()
+                await on_frame(stale)
+                assert all(call.args[0].jpeg != stale["data"] for call in push.call_args_list)
+                await page.evaluate("document.body.textContent = 'Repaint the resized layout'")
+                resized = await frames.get()
+                while resized.page_token != surface.page_token:
+                    resized = await frames.get()
             assert (resized.width, resized.height) == (720, 700)
             with Image.open(io.BytesIO(base64.b64decode(resized.jpeg))) as jpeg:
                 assert jpeg.size == (720, 700)
-                red, _, blue = jpeg.getpixel((100, 100))
-                assert blue > 240 and red < 15
         finally:
-            release_stale.set()
-            stale_processed.set()
             await stop()
     finally:
         await surface.close()

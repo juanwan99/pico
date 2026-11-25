@@ -778,7 +778,9 @@ class PlaywrightPage:
         async with self._viewport_lock:
             if size != self._viewport or scale != self._device_scale:
                 task = self._viewport_task
-                self._viewport_changed_at = await self._apply_metrics(self._page, size, scale)
+                changed_at = await self._apply_metrics(self._page, size, scale)
+                # Publish the whole viewport generation without yielding to frame callbacks.
+                self._viewport_changed_at = changed_at
                 self._viewport = size
                 self._device_scale = scale
                 self.page_token += 1
@@ -1435,13 +1437,12 @@ class PlaywrightPage:
                 if active:
                     raise
                 logger.debug("screencast stopped while acknowledging a frame", exc_info=True)
-            async with self._viewport_lock:
-                if not active or self._page is not page:
-                    return
-                meta = event["metadata"]
-                timestamp = meta.get("timestamp", 0.0)
-                if timestamp < max(last_frame_at, self._viewport_changed_at):
-                    return
+            if not active or self._page is not page:
+                return
+            meta = event["metadata"]
+            timestamp = meta.get("timestamp", 0.0)
+            if timestamp < max(last_frame_at, self._viewport_changed_at):
+                return
             width, height = self._viewport
             scale = c_float(max(1.0, self._device_scale)).value
             # Match Chromium's float32 ScaleToCeiledSize. A one-pixel margin
