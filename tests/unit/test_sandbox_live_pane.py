@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -236,6 +237,44 @@ async def test_legacy_stream_does_not_wait_for_acks(live_runtime, monkeypatch) -
             event = await _next(agen)
             assert event["jpeg"] == str(n) and "frame_id" not in event
         assert not sess.frame_acks
+    finally:
+        await agen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_progressive_stream_refines_only_the_latest_frame(live_runtime, monkeypatch):
+    runtime, pages = live_runtime
+    monkeypatch.setattr(runtime_mod, "STREAM_FIRST_REFINE_S", 0.1)
+    monkeypatch.setattr(runtime_mod, "STREAM_REFINE_S", 0.1)
+    monkeypatch.setattr(ScreencastFrame, "motion_jpeg", lambda frame: f"motion:{frame.jpeg}")
+    sess = await _open(runtime)
+    agen = runtime.stream(sess, ack=True)
+    first = await _next(agen)
+    await runtime.apply_input(sess, frame_ack=first["frame_id"])
+    page = pages[0]
+
+    def repaint(value: str) -> None:
+        page.push(ScreencastFrame(value, 1920, 1080, time.monotonic()))
+
+    try:
+        repaint("one")
+        first_motion = await _next(agen)
+        assert first_motion["jpeg"] == "motion:one"
+        await runtime.apply_input(sess, frame_ack=first_motion["frame_id"])
+        repaint("old")
+        await runtime.apply_input(sess, scroll_dy=100)
+        # A newer wheel request keeps the pane in motion while Chromium repaints.
+        page.push(ScreencastFrame("latest", 1920, 1080, time.monotonic() - 1))
+        last_motion = await _next(agen)
+        assert last_motion["jpeg"] == "motion:latest"
+        assert (last_motion["width"], last_motion["height"]) == (1920, 1080)
+        # The last motion frame still awaits acknowledgement. The second slot
+        # lets the quiet repaint be refined without another viewer round trip.
+        clear = await _next(agen)
+        assert clear["jpeg"] == "latest"
+        assert set(sess.frame_acks) == {last_motion["frame_id"], clear["frame_id"]}
+        await runtime.apply_input(sess, frame_ack=last_motion["frame_id"])
+        assert (await _next(agen)) == {"ping": True}
     finally:
         await agen.aclose()
 

@@ -103,15 +103,17 @@ key 只显示 sha256 的前 8 位。进程重启后清零（`since` 是起点）
 
 ## 沙箱实时画面（pico#1446）
 
-Playwright 1.63.0 通过 Chromium CDP 取 JPEG。DPR 大于 1 的会话使用 Chromium 原生虚拟显示器，标签页随当前沙箱的 DPR 切换显示器，关桌时移除。用一次 `Emulation.setDeviceMetricsOverride` 提交 CSS 尺寸和 DPR。尺寸、标签页或 DPR 改变时重新挂捕获，静止页面也会出新帧。标签页尺寸适配失败时记录原因，画面回到现有 PNG 轮询。worker 核对帧的 CDP metadata 与 JPEG 像素尺寸，两者均允许 1 像素的舍入差，再按 CSS 尺寸发帧。重复画面在 worker 丢弃。Chromium 用 `--disable-lcd-text` 绘制灰阶文字，减轻 JPEG 色度采样带来的字体边缘模糊。[CDP Emulation](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/) · [Chromium 投屏和截图源码](https://chromium.googlesource.com/chromium/src/+/refs/tags/153.0.8010.12/content/browser/devtools/protocol/page_handler.cc)
+Playwright 1.63.0 通过 Chromium CDP 取 JPEG。DPR 大于 1 的会话使用 Chromium 原生虚拟显示器，标签页随当前沙箱的 DPR 切换显示器，关桌时移除。用一次 `Emulation.setDeviceMetricsOverride` 提交 CSS 尺寸和 DPR。同一标签调整 CSS 尺寸或 DPR 时沿用 CDP 投屏，Chromium 捕获新的合成画面。换标签时才重新挂捕获。标签页尺寸适配失败时记录原因，画面回到现有 PNG 轮询。worker 丢弃时间戳早于最近一次改尺寸的帧，再按 Chromium 的 float32 取整核对 CDP metadata 与 JPEG 像素尺寸（不留容差），然后按 CSS 尺寸发帧；同一视口代次内重复画面才丢，每代首帧必送。Chromium 用 `--disable-lcd-text` 绘制灰阶文字，减轻 JPEG 色度采样带来的字体边缘模糊。[CDP Emulation](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/) · [Chromium 投屏和截图源码](https://chromium.googlesource.com/chromium/src/+/refs/tags/153.0.8010.12/content/browser/devtools/protocol/page_handler.cc)
 
 PNG 在持有 DPR 的 CDP 会话通过 `Page.captureScreenshot` 读取当前窗口，不裁剪或改变窗口布局。worker 将 PNG 像素缩回 CSS 尺寸，保留当前滚动位置。真 Chromium 回归覆盖滚动 500 px 后按图点击、投屏期间连截三次 PNG、非整数 DPR 切换及不同会话并用和关桌回收。
 
 Chromium 的帧到达 worker 即向 CDP 确认，worker 只留最新一帧待发。新前端通过 `ack=1` 声明每路 SSE 有两帧的确认窗口。网页解码后按顺序发起确认请求，同时继续读流。确认丢失时，超过 15 秒的名额释放，有待发帧就发送最新一帧，包括页面静止前的最后一帧。未声明确认的旧前端仍连续接收。实时输入只回网址、标题、输入框标记和操作结果，登录保存按 15 秒节流。网页将滚轮增量合并，每次只挂一条滚动请求。Office、老师盘和推帧不可用时继续轮询 PNG。[CDP Page 协议](https://chromedevtools.github.io/devtools-protocol/tot/Page/) · [noVNC 的 RFB 消息](https://github.com/novnc/noVNC/blob/master/docs/rfb_notes)
 
+确认帧的客户端在画面变化时接收约 0.65× CSS 像素、质量 32 的 JPEG。worker 用 Pillow 缩放即将发送的帧，保留同一张原生 DPR、质量 75 的帧供静止后补发。最近画面变化或滚轮请求后 280 ms 补清晰帧。新视口首帧的细化从尺寸生效时起算 150 ms，Chromium 出帧已超过该时限时直接推清晰帧。尺寸变化会废弃上一布局仍待发的帧，晚到的旧 CDP 帧按时间戳丢弃。两档 JPEG 都按帧对应的 CSS 宽高显示和换算点击。未声明确认的客户端仍接收原生 JPEG。[TurboVNC Automatic Lossless Refresh](https://github.com/TurboVNC/turbovnc/blob/main/doc/performance.txt)
+
 ### JPEG 测量
 
-本地 Chromium 153.0.8010.12，DPR 1.5。同一份 12 CSS px 中英文长表分别测试表格和带彩色图表的布局。统一从实拍原生 1.5× PNG 的同一文字区域计算 RGB 均方根误差。1× 对照使用双三次放大对齐像素。开关对照统一使用灰阶文字栅格和 JPEG 75，括号内依次为 JPEG KiB、base64 经 gzip level 1 后的 KiB 和误差。
+返修 3 的本地 Chromium 153.0.8010.12，DPR 1.5。同一份 12 CSS px 中英文长表分别测试表格和带彩色图表的布局。统一从实拍原生 1.5× PNG 的同一文字区域计算 RGB 均方根误差。1× 对照使用双三次放大对齐像素。开关对照统一使用灰阶文字栅格和 JPEG 75，括号内依次为 JPEG KiB、base64 经 gzip level 1 后的 KiB 和误差。
 
 | CSS 尺寸与画面 | 强制 DSF 2，缩成 1.5× | 关闭强制 DSF，默认显示器 1× | 原生 1.5× |
 |---|---:|---:|---:|
@@ -131,23 +133,35 @@ Chromium 的帧到达 worker 即向 CDP 确认，worker 只留最新一帧待发
 
 ### 限速浏览器复测
 
-本地真 Chromium 加载沙箱面板，经 LibreChat 代理、Pico API 和 worker。LibreChat 使用固定测试身份。双向各 97 ms，5.5 Mbps 共享下行，实测 512 KiB 校准请求用时 978 ms。DPR 1.5，质量 75，分别点击、从 720×700 最大化至 1920×1080、在最大化下连续滚动约 8 秒。点击计到画面按钮变色，最大化计到面板以 CSS 尺寸显示 2880×1620 JPEG 且出现新布局标记。每个有效组合各跑三次。
+本地 Chromium 153.0.8010.12 加载实际的沙箱面板，经 LibreChat 的 Pico 路由、Pico API 和 worker，本地测量使用独立测试身份。链路双向各 97 ms，共享下行 5.5 Mbps，512 KiB 校准请求约 0.98 s。DPR 1.5，从 720×700 调到 1920×1080。点击测到按钮变色上屏，最大化测到 2880×1620 帧出现新布局标记，滚动按 8 秒内实际变化的画面计数。小字用同一 CSS 尺寸和原生 DPR 走一遍相同尺寸变化后截取的 PNG 作参考。
 
-| 合成方式与画面 | 点击到新帧，中位数（范围） | 最大化到清晰帧，中位数（范围） | 滚动中位帧率 | 最大化 JPEG |
-|---|---:|---:|---:|---:|
-| 基线强制 DSF 2，表格 | 641 ms（631–642） | 1464 ms（1388–1481） | 1.48 帧/s | 443.2 KiB |
-| 基线强制 DSF 2，表格及图表 | 571 ms（563–572） | 1346 ms（1220–1457） | 1.61 帧/s | 384.1 KiB |
-| 基线仅关闭强制 DSF | 无合格帧 | 无合格帧 | 无合格帧 | 1× 原始帧见上表 |
-| 原生 1.5×，表格 | 633 ms（606–663） | 1337 ms（1314–1369） | 1.49 帧/s | 456.7 KiB |
-| 原生 1.5×，表格及图表 | 560 ms（542–564） | 1207 ms（1178–1219） | 1.60 帧/s | 395.7 KiB |
+| 画面（三轮） | 点击到新帧 | 最大化到清晰帧 | 滚动中位数 | 清晰帧小字误差 | 动态 / 清晰 gzip KiB |
+|---|---:|---:|---:|---:|---:|
+| 表格 | 356–378 ms | 1361–1501 ms | 2.63 帧/s | 3.65 | 53.4 / 420.2 |
 
-仅关闭强制 DSF 时，720×700 和 1920×1080 对照的 1× 帧都无法通过基线 DPR 帧校验。原生 1.5× 的六次点击均低于 1 秒，两类页面最大化小字误差约 4。按 5.5 Mbps 估算，362.3 KiB 的压缩表格帧仅传输就约 540 ms。俄勒冈实链路和统筹老师试用待部署后验证。
+表格复测的分段样本，单位为 ms。滚动行从浏览器发出对应滚轮请求计时，沿用同一视口。
 
-最大化 <1 s、滚动 ≥2 帧/s 未达，pico#1446 返修 5 继续。
+| 样本 | 操作 → 发尺寸 | 前端请求 → worker 收到 | worker 收到 → metrics 完成 | metrics 完成 → Chromium 出帧 | Chromium 出帧 → worker 发送 | worker 发送 → 网页收完 | 网页收完 → 解码显示 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 最大化，第 2 轮清晰帧 | 16 | 178 | 64 | 281 | 8 | 744 | 70 |
+| 滚动，第 3 轮动态帧 | — | 139 | — | 284（从 worker 收到起） | 77 | 186 | 30 |
+
+同一张最大化表格图上，动态 JPEG 试过 1×/质量 30、0.8×/35、0.75×/32 和 0.65×/30，gzip 后分别约 103、70、83、51 KiB。选用 0.65×/32，保留原生 JPEG 75 作为清晰帧。原生 WebP 100 的同一表格帧 gzip 约 114 KiB，试拍从尺寸请求算起需 649–703 ms，原生 JPEG 75 为 311–431 ms。本轮保留 JPEG 的帧格式和质量。
+
+最大化 <1 s 仍未达。生产俄勒冈链路、10 个会话的混合办公负载和统筹老师试用待部署后验证。
+
+对账脚本先用 `node scripts/night-sandbox/p-sandbox-latency.mjs --print-fixture` 导出测试页，将它放在沙箱可访问的 HTTPS 地址。表格加图表的模式使用测试页参数 `?chart=1`。使用专用测试老师，身份从 `PICO_E2E_EMAIL` / `PICO_E2E_PASSWORD` 读取，测试桌会被关闭。同一账号不要并发跑。脚本需要支持 CDP 虚拟显示器的 Chromium 153，可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指定可执行文件。
+
+```bash
+node scripts/night-sandbox/p-sandbox-latency.mjs --base-url http://127.0.0.1:3090 --limit --fixture-url "$FIXTURE_URL"
+node scripts/night-sandbox/p-sandbox-latency.mjs --base-url https://pico.aivia.asia --fixture-url "$FIXTURE_URL"
+```
+
+每次运行三轮，报告和清晰帧 JPEG 原图写到 `.gpt-out/sandbox-latency/`。连接本机时另存原生 DPR 参考 PNG，按原像素计算小字 RMS，门限为 5。连接现网时报告点击和最大化时延、滚动帧率，小字清晰度用保存的 JPEG 原图放大核对。未达自动测量阈值时命令退出 1。
 
 ### 容量测量
 
-本轮在一个本地 Chromium 实例开 10 个 context，每个 3 个跨站标签，1920×1200 CSS px、DPR 2。十路各完成六次点击及取帧，关桌后虚拟显示器全部移除。按进程树采样，单桌两标签为 494.4 MiB PSS、85 个线程，三标签为 517.8 MiB PSS、97 个线程。十桌并行操作的样本峰值为 2076.7 MiB PSS、396 个线程。这次采样覆盖浏览器和测试进程，混合办公负载和 tmpfs 的容器账见上一轮数据。
+返修 3 在一个本地 Chromium 实例开 10 个 context，每个 3 个跨站标签，1920×1200 CSS px、DPR 2。十路各完成六次点击及取帧，关桌后虚拟显示器全部移除。按进程树采样，单桌两标签为 494.4 MiB PSS、85 个线程，三标签为 517.8 MiB PSS、97 个线程。十桌并行操作的样本峰值为 2076.7 MiB PSS、396 个线程。这次采样覆盖浏览器和测试进程，混合办公负载和 tmpfs 的容器账见上一轮数据。
 
 上一轮在本地 Linux 容器中用 cgroup v2 测量。十个老师各一个 Chromium context，每个 context 打开分属三个站点的标签，浏览器 1920×1200 CSS px、DPR 2。每个会话同时保留 Word、Excel、PPT 窗各一个，共 30 对 Xvfb + soffice。办公窗全部打开后十路浏览器各完成六次点击及取帧。第 11 个会话由现有会话额度拒绝。测量为每个 Xvfb 分配独立显示号，统计内存和 PID 容量。
 

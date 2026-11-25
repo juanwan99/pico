@@ -74,6 +74,8 @@ LOGIN_SAVE_EVERY_S = 15.0
 STREAM_CHECK_S = 0.1
 STREAM_PING_S = 15.0
 STREAM_MAX_IN_FLIGHT = 2
+STREAM_FIRST_REFINE_S = 0.15
+STREAM_REFINE_S = 0.28
 # "current" = the caller's own desk (one per school+membership). Lets the AI act
 # on a pane the teacher opened without having the session id in hand.
 CURRENT_SESSION = "current"
@@ -114,6 +116,7 @@ class SandboxWindow:
     surface: BrowserPage | OfficeDesktop
     # Stable element refs for AI hands (#1222); browser windows only.
     refs: RefBook = field(default_factory=RefBook)
+    last_scroll_at: float = 0.0
 
 
 @dataclass
@@ -729,12 +732,12 @@ class SandboxRuntime:
             click_x = click_y = None
         fit = getattr(surface, "set_viewport", None)
         if viewport_width and viewport_height and callable(fit):
-            for wake in session.live_panes:
-                wake.set()
             if device_pixel_ratio is None:
                 await fit(viewport_width, viewport_height)
             else:
                 await fit(viewport_width, viewport_height, device_pixel_ratio)
+            for wake in session.live_panes:
+                wake.set()
         clicked = click_x is not None and click_y is not None
         if clicked:
             await surface.click(int(click_x), int(click_y), **motion)
@@ -744,6 +747,10 @@ class SandboxRuntime:
             await surface.type_text(text, password=password)
         scroll = getattr(surface, "scroll", None)
         if scroll_dy and callable(scroll):
+            if streaming:
+                win.last_scroll_at = time.monotonic()
+                for wake in session.live_panes:
+                    wake.set()
             await scroll(int(scroll_dy))
         press = getattr(surface, "press_human_key", None)
         if key and callable(press):
@@ -965,8 +972,14 @@ class SandboxRuntime:
             while window_id := self._alive_focus(sess):
                 win = sess.focused()
                 token = getattr(win.surface, "page_token", 0)
+                cast_token = getattr(win.surface, "cast_token", token)
                 cast = getattr(win.surface, "screencast", None)
                 stop = None
+                refine: ScreencastFrame | None = None
+                refine_at = 0.0
+                first_frame = True
+                fit_at = time.monotonic()
+                page_token = token
                 frames: asyncio.Queue[ScreencastFrame] = asyncio.Queue(maxsize=1)
                 if callable(cast):
                     try:
@@ -978,10 +991,15 @@ class SandboxRuntime:
                     yield {"poll": True, "window_id": window_id}
                     last = time.monotonic()
                 try:
-                    # A tab switch or new viewport starts a cast at the new size.
+                    # An active cast follows resizes on the same tab. A new
+                    # viewport also lets a poll-only pane retry its failed cast.
+                    token_attr, expected = (
+                        ("cast_token", cast_token) if stop is not None else ("page_token", token)
+                    )
                     while (
                         self._alive_focus(sess) == window_id
-                        and getattr(win.surface, "page_token", 0) == token
+                        and getattr(win.surface, token_attr, getattr(win.surface, "page_token", 0))
+                        == expected
                     ):
                         wake.clear()
                         now = time.monotonic()
@@ -989,21 +1007,54 @@ class SandboxRuntime:
                             if now >= expires or frame_id not in sess.frame_acks:
                                 sess.frame_acks.pop(frame_id, None)
                                 del waiting[frame_id]
-                        if len(waiting) < STREAM_MAX_IN_FLIGHT and not frames.empty():
-                            frame = frames.get_nowait()
+                        frame = None
+                        current_token = getattr(win.surface, "page_token", 0)
+                        if current_token != page_token:
+                            page_token = current_token
+                            refine = None
+                            first_frame = True
+                            fit_at = now
+                        scroll_quiet_at = win.last_scroll_at + STREAM_REFINE_S
+                        clear_at = max(refine_at, scroll_quiet_at)
+                        if len(waiting) < STREAM_MAX_IN_FLIGHT:
+                            if not frames.empty():
+                                frame = frames.get_nowait()
+                                refine = None
+                                if frame.received_at is not None and frame.page_token != page_token:
+                                    continue
+                                if ack and frame.received_at is not None:
+                                    # Count the resize wait toward the first refinement.
+                                    refine_at = (
+                                        fit_at + STREAM_FIRST_REFINE_S if first_frame
+                                        else frame.received_at + STREAM_REFINE_S
+                                    )
+                                    first_frame = False
+                                    if now < max(refine_at, scroll_quiet_at):
+                                        refine = frame
+                            elif refine is not None and now >= clear_at:
+                                frame, refine = refine, None
+                        if frame is not None:
+                            jpeg = frame.jpeg
+                            if refine is frame:
+                                jpeg = await asyncio.to_thread(frame.motion_jpeg)
+                                if (
+                                    self._alive_focus(sess) != window_id
+                                    or getattr(win.surface, "page_token", 0) != page_token
+                                ):
+                                    continue
                             event = {
-                                "jpeg": frame.jpeg,
+                                "jpeg": jpeg,
                                 "width": frame.width,
                                 "height": frame.height,
                                 "window_id": window_id,
                             }
+                            last = time.monotonic()
                             if ack:
                                 frame_id = secrets.token_hex(12)
-                                waiting[frame_id] = now + STREAM_PING_S
+                                waiting[frame_id] = last + STREAM_PING_S
                                 sess.frame_acks[frame_id] = wake
                                 event["frame_id"] = frame_id
                             sess.live_panes[wake] = window_id
-                            last = now
                             yield event
                             continue
                         if now - last >= STREAM_PING_S:
@@ -1011,6 +1062,8 @@ class SandboxRuntime:
                             yield {"ping": True}
                             continue
                         deadline = next(iter(waiting.values()), last + STREAM_PING_S)
+                        if refine is not None and len(waiting) < STREAM_MAX_IN_FLIGHT:
+                            deadline = min(deadline, clear_at)
                         wait_s = min(STREAM_CHECK_S, deadline - now)
                         try:
                             await asyncio.wait_for(wake.wait(), wait_s)

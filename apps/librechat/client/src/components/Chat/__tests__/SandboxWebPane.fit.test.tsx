@@ -158,14 +158,15 @@ describe('SandboxWebPane fits the pane', () => {
         '/api/pico/v1/sandbox/sessions/sbox_fit/input',
         expect.objectContaining({ body: JSON.stringify({ frame_ack: 'frame_b' }) }),
       );
+      expect(screen.getByTestId('sandbox-web-viewport')).toHaveStyle({ aspectRatio: '480 / 620' });
       const ackError = new Error('ack lost');
       await act(async () => dropAck(ackError));
       expect(warn).toHaveBeenCalledWith('Sandbox frame acknowledgement failed', ackError);
       expect(reader.cancel).not.toHaveBeenCalled();
       const img = screen.getByTestId('sandbox-web-viewport');
       Object.defineProperties(img, {
-        naturalWidth: { value: 720 },
-        naturalHeight: { value: 930 },
+        naturalWidth: { value: 312 },
+        naturalHeight: { value: 403 },
       });
       img.getBoundingClientRect = () =>
         ({ left: 0, top: 0, width: 480, height: 620 }) as DOMRect;

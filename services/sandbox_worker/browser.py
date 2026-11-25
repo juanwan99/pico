@@ -21,6 +21,7 @@ import shutil
 import tempfile
 import time
 from collections.abc import Awaitable, Callable, Iterable
+from ctypes import c_float
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -52,6 +53,8 @@ SECRET_MASK = "••••"
 WAIT_MAX_S = 30.0
 # Live pane (#1215): Chromium pushes a JPEG on each repaint (CDP screencast).
 SCREENCAST_QUALITY = 75
+MOTION_QUALITY = 32
+MOTION_SCALE = 0.65
 SCROLL_MAX_PX = 2000
 # Tabs (#1217): a link that opens a new tab becomes the current page, like
 # Playwright MCP. Bounded so a popup storm cannot eat the sidecar.
@@ -265,6 +268,17 @@ class ScreencastFrame:
     jpeg: str
     width: int
     height: int
+    received_at: float | None = None
+    page_token: int = 0
+
+    def motion_jpeg(self) -> str:
+        size = (round(self.width * MOTION_SCALE), round(self.height * MOTION_SCALE))
+        with Image.open(io.BytesIO(base64.b64decode(self.jpeg))) as image:
+            image.draft("RGB", size)
+            thumb = image.resize(size, Image.Resampling.BILINEAR)
+            out = io.BytesIO()
+            thumb.save(out, format="JPEG", quality=MOTION_QUALITY)
+        return base64.b64encode(out.getvalue()).decode("ascii")
 
 
 class BrowserHands(Protocol):
@@ -611,6 +625,13 @@ async def _guard_route(route: Any) -> None:
     await route.continue_()
 
 
+@dataclass
+class _ViewportCommit:
+    size: tuple[int, int]
+    scale: float
+    frames: dict[Callable[[dict[str, Any]], None], dict[str, Any]]
+
+
 class PlaywrightPage:
     """One Chromium context. Login is saved to the teacher's own disk, not host HOME."""
 
@@ -619,12 +640,16 @@ class PlaywrightPage:
         self._page = page
         self._profile_dir = profile_dir
         self.loading_note = ""
-        # The live pane reattaches when the tab or its capture dimensions change.
+        # Captures follow the tab. The page token also invalidates frames on resize.
         self.page_token = 0
+        self.cast_token = 0
         self._viewport = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
         self._device_scale = 1.0
+        self._viewport_changed_at = 0.0
         self._viewport_lock = asyncio.Lock()
         self._viewport_task: asyncio.Task[None] | None = None
+        # Present only during a resize, with one validated frame per cast.
+        self._viewport_commit: _ViewportCommit | None = None
         self._metrics: dict[Any, Any] = {}
         self._screen_cdp: Any = None
         self._screen: dict[str, Any] | None = None
@@ -655,6 +680,7 @@ class PlaywrightPage:
         if page is not self._page:
             self._page = page
             self.page_token += 1
+            self.cast_token += 1
             if (
                 self._viewport != (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
                 or self._device_scale != 1
@@ -685,9 +711,12 @@ class PlaywrightPage:
         elif self._viewport_task is task:
             self._viewport_task = None
 
-    async def _apply_metrics(self, page: Any, viewport: tuple[int, int], scale: float) -> None:
+    async def _apply_metrics(self, page: Any, viewport: tuple[int, int], scale: float) -> float:
         cdp = await self._page_metrics(page)
         await self._place_on_screen(cdp, max(1.0, scale))
+        # CDP frame timestamps are Unix seconds. Start at dispatch so a frame
+        # rendered before the command response still belongs to the new viewport.
+        changed_at = time.time()
         await cdp.send(
             "Emulation.setDeviceMetricsOverride",
             {
@@ -697,6 +726,7 @@ class PlaywrightPage:
                 "deviceScaleFactor": scale,
             },
         )
+        return changed_at
 
     async def _place_on_screen(self, cdp: Any, scale: float) -> None:
         # Use Chromium's native headless display DPR so screencast has no resize filter.
@@ -756,14 +786,21 @@ class PlaywrightPage:
         scale = min(device_scale, MAX_DEVICE_SCALE)
         async with self._viewport_lock:
             if size != self._viewport or scale != self._device_scale:
-                # Reattach at the new size so a still page gets a fresh frame.
-                self.page_token += 1
                 task = self._viewport_task
-                await self._apply_metrics(self._page, size, scale)
-                self._viewport = size
-                self._device_scale = scale
-                if self._viewport_task is task:
-                    self._viewport_task = None
+                self._viewport_commit = commit = _ViewportCommit(size, scale, {})
+                try:
+                    changed_at = await self._apply_metrics(self._page, size, scale)
+                    # Publish the whole viewport generation without yielding to frame callbacks.
+                    self._viewport_changed_at = changed_at
+                    self._viewport = size
+                    self._device_scale = scale
+                    self.page_token += 1
+                    if self._viewport_task is task:
+                        self._viewport_task = None
+                finally:
+                    self._viewport_commit = None
+                for check_frame, event in commit.frames.items():
+                    check_frame(event)
         return size
 
     def _on_new_page(self, page: Any) -> None:
@@ -1398,19 +1435,53 @@ class PlaywrightPage:
         if task is not None:
             await asyncio.shield(task)
         async with self._viewport_lock:
-            width, height = self._viewport
-            scale = self._device_scale
-            cdp = await self._context.new_cdp_session(self._page)
-        native_scale = max(1.0, scale)
-        native_width = math.ceil(width * native_scale)
-        native_height = math.ceil(height * native_scale)
-        max_width = math.ceil(width * scale)
-        max_height = math.ceil(height * scale)
+            page = self._page
+            cdp = await self._context.new_cdp_session(page)
         active = True
         last_jpeg: str | None = None
+        last_page_token = self.page_token
+        last_frame_at = 0.0
+
+        def check_frame(event: dict[str, Any]) -> None:
+            nonlocal last_jpeg, last_page_token, last_frame_at
+            if not active or self._page is not page:
+                return
+            meta = event["metadata"]
+            timestamp = meta.get("timestamp", 0.0)
+            if timestamp < max(last_frame_at, self._viewport_changed_at):
+                return
+            commit = self._viewport_commit
+            width, height = commit.size if commit is not None else self._viewport
+            scale = commit.scale if commit is not None else self._device_scale
+            scale = c_float(max(1.0, scale)).value
+            # Match Chromium's float32 ScaleToCeiledSize. A one-pixel margin
+            # could accept the old surface while the resize is taking effect.
+            native_width = math.ceil(c_float(width * scale).value)
+            native_height = math.ceil(c_float(height * scale).value)
+            if (
+                round(meta["deviceWidth"] * scale) != native_width
+                or round(meta["deviceHeight"] * scale) != native_height
+            ):
+                return
+            # Chromium can pair a queued bitmap with the current view's metadata on resize.
+            # Check the JPEG header before using those coordinates for teacher input.
+            jpeg = event["data"]
+            with Image.open(io.BytesIO(base64.b64decode(jpeg))) as img:
+                if img.size != (native_width, native_height):
+                    return
+            if commit is not None:
+                # A late bitmap from the old layout must not replace a valid new frame.
+                pending = commit.frames.get(check_frame)
+                if pending is None or timestamp >= pending["metadata"].get("timestamp", 0.0):
+                    commit.frames[check_frame] = event
+                return
+            last_frame_at = timestamp
+            if self.page_token == last_page_token and jpeg == last_jpeg:
+                return
+            last_page_token, last_jpeg = self.page_token, jpeg
+            push(ScreencastFrame(jpeg, width, height, time.monotonic(), self.page_token))
 
         async def on_frame(event: dict[str, Any]) -> None:
-            nonlocal last_jpeg
             if not active:
                 return
             try:
@@ -1419,30 +1490,13 @@ class PlaywrightPage:
                 if active:
                     raise
                 logger.debug("screencast stopped while acknowledging a frame", exc_info=True)
-            if not active:
-                return
-            meta = event["metadata"]
-            # Chromium rounds the compositor raster using float32 DPR.
-            # Allow the one-pixel difference from Python's double precision.
-            if (
-                abs(round(meta["deviceWidth"] * native_scale) - native_width) > 1
-                or abs(round(meta["deviceHeight"] * native_scale) - native_height) > 1
-            ):
-                return
-            # Chromium can pair a queued bitmap with the current view's metadata on resize.
-            # Check the JPEG header before using those coordinates for teacher input.
-            jpeg = event["data"]
-            if jpeg == last_jpeg:
-                return
-            with Image.open(io.BytesIO(base64.b64decode(jpeg))) as img:
-                if abs(img.width - max_width) > 1 or abs(img.height - max_height) > 1:
-                    return
-            last_jpeg = jpeg
-            push(ScreencastFrame(jpeg, width, height))
+            check_frame(event)
 
         async def stop() -> None:
             nonlocal active
             active = False
+            if self._viewport_commit is not None:
+                self._viewport_commit.frames.pop(check_frame, None)
             try:
                 with CancelScope(shield=True):
                     await cdp.detach()
@@ -1456,8 +1510,9 @@ class PlaywrightPage:
                 {
                     "format": "jpeg",
                     "quality": SCREENCAST_QUALITY,
-                    "maxWidth": max_width,
-                    "maxHeight": max_height,
+                    # Chromium follows changes in surface size within these bounds.
+                    "maxWidth": VIEWPORT_MAX[0] * MAX_DEVICE_SCALE,
+                    "maxHeight": VIEWPORT_MAX[1] * MAX_DEVICE_SCALE,
                 },
             )
         except BaseException:
