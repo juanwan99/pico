@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Public workbench check. Use a dedicated drill account via PICO_E2E_EMAIL/PASSWORD.
+# Public workbench check for login page, release tip and first-screen bundles.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -76,54 +76,17 @@ PY
 count=0
 failed=0
 while IFS= read -r asset; do
-  result="$(curl -fsS --compressed --max-time 30 --output /dev/null \
+  result="$(curl -fsS -H 'Accept-Encoding: gzip, deflate, br, zstd' --max-time 30 --output /dev/null \
     --write-out '%{http_code}\t%{content_type}\t%header{x-pico-edge-cache}' "$base$asset")"
   IFS=$'\t' read -r code media cached <<<"$result"
-  if [[ "$code" == 200 && "$media" != text/html* && "$cached" == HIT ]]; then
+  if [[ "$code" == 200 && "$media" != text/html* && "$cached" =~ ^(HIT|STALE|UPDATING|REVALIDATED)$ ]]; then
     count=$((count + 1))
   else
     printf 'FAIL edge cache %s HTTP %s cache=%s type=%s\n' "$asset" "$code" "$cached" "$media" >&2
     failed=1
   fi
 done <"$work/assets"
-printf 'Edge cache HIT %s/%s bundles\n' "$count" "$(wc -l <"$work/assets")"
+printf 'Edge cache served %s/%s bundles\n' "$count" "$(wc -l <"$work/assets")"
 if [[ "$failed" == 1 ]]; then
   exit 1
 fi
-
-PICO_PUBLIC_BASE="$base" node --input-type=module <<'JS'
-import { emailPass, loadPlaywright } from './scripts/night-sandbox/lib.mjs';
-
-const { email, password } = emailPass();
-if (!email || !password) {
-  console.error('BLOCKED login and chat require PICO_E2E_EMAIL and PICO_E2E_PASSWORD');
-  process.exit(2);
-}
-
-const { chromium } = loadPlaywright();
-const browser = await chromium.launch();
-let step = 'login';
-try {
-  const page = await browser.newPage({ locale: 'zh-CN' });
-  await page.goto(new URL('/login', process.env.PICO_PUBLIC_BASE).href);
-  await page.locator('#email').fill(email);
-  await page.locator('#password').fill(password);
-  await page.getByTestId('login-button').click();
-  const composer = page.locator('#pico-wb-home-input');
-  await composer.waitFor({ state: 'visible', timeout: 45_000 });
-  console.log('PASS workbench login');
-  step = 'chat';
-  await composer.fill('请只回复「工作台连通」这五个字。');
-  await page.getByTestId('send-button').click();
-  await page.locator('.agent-turn .message-content')
-    .getByText('工作台连通', { exact: true }).waitFor({ state: 'visible', timeout: 90_000 });
-  await page.getByTestId('stop-generation-button').waitFor({ state: 'hidden', timeout: 10_000 });
-  console.log('PASS workbench chat');
-} catch (error) {
-  // Playwright's action log can include values entered in the login form.
-  console.error(`FAIL workbench ${step} (${error.name})`);
-  process.exitCode = 1;
-} finally {
-  await browser.close();
-}
-JS

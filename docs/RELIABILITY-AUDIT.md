@@ -34,7 +34,7 @@
 | 11-14 | dmit 停机，旧 Tailscale IP 仍被发版探针固定使用，冒烟假报 11/12。侧栏两行 CSV 上传等 110 秒，上传请求同步等 Meili 投影 | tip 去掉旧 IP，恢复公网探测。文件先落地，Meili 投影放后台。[旧探针](https://github.com/juanwan99/pico/pull/1405) · [Meili](https://github.com/juanwan99/pico/pull/1406) |
 | 11-16 起 | ECS 直连工作台公网 TCP 失败，发版 tip 检查受影响 | 11-18 已改为经本机出口代理做公网 tip 检查。[发版探针改道](https://github.com/juanwan99/pico/pull/1413) |
 | 11-18 | 推理把输出额度用完且无正文，重复原样重试仍可能空回 | 现有变更把该类空回标为 `output_exhausted`，不原样重试。[空回修复](https://github.com/juanwan99/pico/pull/1412) |
-| 11-24 | ECS 上行跑满，首屏静态包重复跨洋回源 | 当班已在边缘开缓存。本卡将缓存配置纳入仓库，并用 nginx 的缓存锁合并同一静态包的并发首次回源。共享上传流量仍待平台侧处置。 |
+| 11-24 | ECS 上行跑满，首屏静态包重复跨洋回源。原缓存到期后，请求仍会等跨洋回源 | 当班已在边缘开缓存。本卡将缓存配置纳入仓库，用 nginx 的缓存锁合并并发首次回源，缓存到期后先发旧副本并在后台发起条件请求。共享上传流量仍待平台侧处置。 |
 
 首轮公网复测在 `eea8d046b270893c19eea06314b4b6fbedc6e1df` 上测得 `/login` 0.373 秒、`/api/pico/tip` 0.625 秒、23/23 首屏包 HIT。此前同入口也出现过一次 3 秒超时。
 
@@ -50,9 +50,10 @@
 ## 边缘缓存配置和发版验收
 
 - 由平台运维在**俄勒冈边缘 nginx**现有 `http` 块引用 [缓存区配置](../deploy/nginx/pico-edge-cache-http.conf)，在同一 vhost 当前 `/assets/` 回源 location 引用 [缓存指令](../deploy/nginx/pico-edge-cache-assets.inc)。替换同作用域的临时缓存指令，沿用当前回源地址和代理请求头。缓存遵循 LibreChat 返回的 `s-maxage`、`Vary` 和 `no-store`，静态包换哈希即换缓存键。[nginx 代理缓存指令](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache)
+- 默认 24 小时的新鲜期结束后，边缘先送已有副本，再在后台用 ETag 或 Last-Modified 向源站校验。源站连接出错、超时或返回 502、504 时，边缘仍可送已有副本。[nginx 缓存更新与旧副本](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_use_stale)
 - 在该 location 生效的现有安全响应头所在作用域加入 `add_header X-Pico-Edge-Cache $upstream_cache_status;`。对象使用完整 Host 与请求 URI，登录、API 和聊天仍走各自的原回源 location。运维侧先 `nginx -t` 再 reload。
-- 发版后从公网客户端运行 `bash tests/acceptance/reliability-live.sh`。准备 curl 7.84+、Python 3、Node 和 LibreChat 的现有 Playwright 依赖及 Chromium，使用专用演练账户的 `PICO_E2E_EMAIL`、`PICO_E2E_PASSWORD`。脚本验 `/login`、`/api/pico/tip` 在 3 秒内返回，从实际 HTML 提取首屏 JS/CSS（含旧浏览器引用的包）逐个验证 HIT，再用浏览器登录、发送一句话、等助手的完整回复。部署产生新哈希后的冷缓存也按实测判定，MISS 会报失败。
-- 第二轮从工作区测得现网同一版本的 `/login` 2.165 秒、`/api/pico/tip` 0.607 秒及 23/23 HIT。缺专用演练账号，登录和聊天未执行。
+- 发版后从公网客户端运行 `bash tests/acceptance/reliability-live.sh`，需要 curl 7.84+ 和 Python 3。脚本核对 `/login`、`/api/pico/tip` 在 3 秒内返回，从实际 HTML 提取首屏 JS/CSS（含旧浏览器引用的包），使用 `Accept-Encoding: gzip, deflate, br, zstd` 检查浏览器使用的缓存变体。`HIT`、`STALE`、`UPDATING`、`REVALIDATED` 均算命中，`MISS` 会报失败。
+- 第二轮从工作区测得现网同一版本的 `/login` 2.165 秒、`/api/pico/tip` 0.607 秒及 23/23 HIT。登录聊天待演练账号（待业主）。
 - 现有 `bash scripts/e2e-smoke.sh --prod` 仍是 ECS 发版自身的合同检查；工作台公网验收单独从用户网络路径跑。
 
 ## 删除
