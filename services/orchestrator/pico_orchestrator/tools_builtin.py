@@ -2131,11 +2131,12 @@ def _workspace_handlers(
                         ),
                         what="sandbox_browser_screenshot_png",
                     )
-                    out = {**out, **raster_meta_from_write(shot, byte_size=len(png))}
                 except Exception:
-                    logger.debug(
-                        "sandbox screenshot artifact write skipped", exc_info=True
-                    )
+                    logger.warning("sandbox screenshot artifact write failed", exc_info=True)
+                    out["note"] = "截图没存进老师文件。"
+                else:
+                    out.update(raster_meta_from_write(shot, byte_size=len(png)))
+                    out["screenshot"]["title"] = shot["title"]
             await _emit(True, {"workspace_id": out.get("workspace_id") or ws})
             return out
         except ToolError as exc:

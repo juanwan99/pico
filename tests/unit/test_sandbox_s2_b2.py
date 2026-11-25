@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -243,8 +243,13 @@ async def test_browser_screenshot_can_name_artifacts_and_avoid_duplicates(
 
     monkeypatch.setattr(FakeChromiumPage, "title", chinese_page_title)
     await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
-    for gateway in (gw, build_default_gateway(store)):
-        await gateway.invoke(owner, "sandbox_browser_screenshot", {"name": name})
+    list_titles = AsyncMock(wraps=store.list)
+    read = AsyncMock(side_effect=AssertionError("screenshot naming must only list metadata"))
+    monkeypatch.setattr(store, "list", list_titles)
+    monkeypatch.setattr(store, "read", read)
+    for gateway, title in zip((gw, build_default_gateway(store)), expected, strict=True):
+        result = await gateway.invoke(owner, "sandbox_browser_screenshot", {"name": name})
+        assert result["screenshot"]["title"] == title
     # Two calls can pick names concurrently, including across gateway instances.
     write = store.write
 
@@ -253,7 +258,7 @@ async def test_browser_screenshot_can_name_artifacts_and_avoid_duplicates(
         return await write(principal, **kwargs)
 
     monkeypatch.setattr(store, "write", yield_before_write)
-    await asyncio.gather(
+    results = await asyncio.gather(
         gw.invoke(owner, "sandbox_browser_screenshot", {}),
         build_default_gateway(store).invoke(owner, "sandbox_browser_screenshot", {}),
     )
@@ -262,6 +267,26 @@ async def test_browser_screenshot_can_name_artifacts_and_avoid_duplicates(
         "登录 页面-1.png",
         "登录 页面-2.png",
     ]
+    assert {result["screenshot"]["title"] for result in results} == {
+        "登录 页面-1.png", "登录 页面-2.png",
+    }
+    assert list_titles.await_count == 4
+    read.assert_not_awaited()
+
+
+async def test_browser_screenshot_reports_artifact_write_failure(
+    embedded_runtime, monkeypatch, caplog
+) -> None:
+    store = MemoryArtifactStore(run_id="run-b2")
+    gw = build_default_gateway(store)
+    owner = P("school-a", "member-a", ["ai:run"])
+    await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+    monkeypatch.setattr(store, "write", AsyncMock(side_effect=RuntimeError("ledger write failed")))
+    result = await gw.invoke(owner, "sandbox_browser_screenshot", {"name": "登录"})
+    assert result["image_png_base64"]
+    assert result["note"] == "截图没存进老师文件。"
+    assert "screenshot" not in result
+    assert "ledger write failed" in caplog.text
 
 
 @pytest.mark.asyncio

@@ -57,6 +57,10 @@ HUMAN_LOGIN_COPY = "这是你的隔离浏览器，可以直接在画面里操作
 HUMAN_OFFICE_COPY = "沙箱已用 LibreOffice 打开这份文档。这是字处理窗口，不是 PDF，也不是下载。"
 SESSION_TTL_S = int(os.environ.get("PICO_SANDBOX_TTL_S") or str(30 * 60))
 MAX_SESSIONS = int(os.environ.get("PICO_SANDBOX_MAX_SESSIONS") or "8")
+# A committed page can still stall Chromium calls. Leave room under the sidecar deadline.
+LOADING_SCREENSHOT_TIMEOUT_S = 10.0
+LOADING_SNAPSHOT_TIMEOUT_S = 8.0
+LOADING_METADATA_TIMEOUT_S = 8.0
 APPLIED_COPY = "已把操作送进 sidecar Chromium。登录状态存在你自己的老师盘上，下次打开不用再登。"
 # Saved login (owner 2026-10-11 09:17): one file per teacher on their own disk.
 # Clearing the teacher disk, or logging out on the site, drops it.
@@ -338,6 +342,23 @@ class SandboxRuntime:
         sess.has_password_input = bool((flags or {}).get("has_password_input"))
         sess.last_used = time.time()
 
+    async def _sync_after_navigation(
+        self, sess: SandboxSession, loading: dict[str, str]
+    ) -> None:
+        timeout = asyncio.timeout(LOADING_SCREENSHOT_TIMEOUT_S if loading else None)
+        try:
+            async with timeout:
+                await self._sync(sess)
+        except TimeoutError:
+            if not timeout.expired():
+                raise
+            logger.info("Chromium screen sync timed out while loading", exc_info=True)
+            sess.title = sess.h1 = ""
+            sess.screenshot_png = b""
+            sess.has_text_input = sess.has_password_input = False
+            sess.last_used = time.time()
+            loading["note"] += "本次未能及时取得截图。"
+
     def _public_meta(self, sess: SandboxSession, **extra: Any) -> dict[str, Any]:
         disk = owner_disk_meta(sess.school_id, sess.membership_id)
         persist_note = PERSIST_COPY if sess.kind == "files" else sess.human_copy()
@@ -407,6 +428,7 @@ class SandboxRuntime:
         if len(self._sessions) >= MAX_SESSIONS:
             raise ToolError("sandbox.quota", "沙箱已满（最多 8 路），请关掉一路再开。机器未继续扩进程。")
         page = await self._open_browser(url, login_state=self._login_path(school, member))
+        loading = _loading_meta(page)
         stored = False
         try:
             parse_public_http_url(page.url)
@@ -429,7 +451,7 @@ class SandboxRuntime:
                 kind="browser",
             )
             await self._ensure_files_window(sess)
-            await self._sync(sess)
+            await self._sync_after_navigation(sess, loading)
             self._sessions[session_id] = sess
             stored = True
         except Exception:
@@ -442,7 +464,7 @@ class SandboxRuntime:
                 f"已在 sidecar Chromium 打开公开页。{HUMAN_LOGIN_COPY}"
                 "登录一次后存在你的老师盘上，下次打开自动带上。"
             ),
-            **_loading_meta(page),
+            **loading,
         )
 
     async def open_files_desk(
@@ -559,7 +581,7 @@ class SandboxRuntime:
                     await go(url)
                     copy = "已在 sidecar Chromium 打开公开页。"
                     loading = _loading_meta(item.surface)
-                await self._sync(sess)
+                await self._sync_after_navigation(sess, loading)
                 return self._public_meta(sess, message=f"{copy}{HUMAN_LOGIN_COPY}", **loading)
         page = await self._open_browser(
             url, login_state=self._login_path(sess.school_id, sess.membership_id)
@@ -571,7 +593,7 @@ class SandboxRuntime:
             sess.windows.append(win)
             sess.focused_id = win.window_id
             await self._ensure_files_window(sess)
-            await self._sync(sess)
+            await self._sync_after_navigation(sess, loading)
         except Exception:
             await page.close()
             raise
@@ -779,34 +801,53 @@ class SandboxRuntime:
             await hands.press_key(key)
         elif verb == "wait_for":
             await hands.wait_for(text=text, text_gone=text_gone, seconds=float(seconds or 0))
-        extra: dict[str, Any] = (
+        loading = (
             _loading_meta(window.surface) if verb in {"navigate", "navigate_back"} else {}
         )
-        full, delta = window.refs.update(
-            await hands.snapshot(), page=getattr(hands, "page_token", 0)
-        )
-        whole = verb == "snapshot" or delta is None
-        await self._sync(session)
-        await self._save_login(session)
+        extra: dict[str, Any] = {}
+        timeout = asyncio.timeout(LOADING_SNAPSHOT_TIMEOUT_S if loading else None)
+        try:
+            async with timeout:
+                snapshot = await hands.snapshot()
+        except TimeoutError:
+            if not timeout.expired():
+                raise
+            logger.info("Chromium snapshot timed out while loading", exc_info=True)
+            loading["note"] += "本次未能及时取得快照。"
+        else:
+            full, delta = window.refs.update(snapshot, page=getattr(hands, "page_token", 0))
+            whole = verb == "snapshot" or delta is None
+            extra.update(snapshot=full if whole else delta, snapshot_mode="full" if whole else "delta")
+        await self._sync_after_navigation(session, loading)
+
         message = HANDS_COPY.get(verb, APPLIED_COPY)
-        dialogs = hands.take_dialogs()
-        if dialogs:
-            message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)
-            extra["dialogs"] = dialogs
-        tabs = await hands.tabs("list", 0)
+        timeout = asyncio.timeout(LOADING_METADATA_TIMEOUT_S if loading else None)
+        try:
+            async with timeout:
+                await self._save_login(session)
+                dialogs = hands.take_dialogs()
+                if dialogs:
+                    message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)
+                    extra["dialogs"] = dialogs
+                tabs = await hands.tabs("list", 0)
+        except TimeoutError:
+            if not timeout.expired():
+                raise
+            logger.info("Chromium metadata sync timed out while loading", exc_info=True)
+            loading["note"] += "本次未能及时更新登录状态或标签页。"
+        else:
+            if len(tabs) > 1 or verb == "tabs":
+                # A new tab opened (or the AI asked): it is already the current page.
+                extra["tabs"] = tabs
         if page_file_meta:
             extra.update(page_file_meta)
         if verb == "page_fn":
             extra["page_result"] = page_result
-        if len(tabs) > 1 or verb == "tabs":
-            # A new tab opened (or the AI asked): it is already the current page.
-            extra["tabs"] = tabs
         return self._public_meta(
             session,
             action=verb,
-            snapshot=full if whole else delta,
-            snapshot_mode="full" if whole else "delta",
             message=message,
+            **loading,
             **extra,
         )
 

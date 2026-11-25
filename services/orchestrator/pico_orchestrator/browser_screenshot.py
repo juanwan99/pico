@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from sys import maxsize
 from typing import Any
 from weakref import WeakValueDictionary
 
@@ -31,10 +32,11 @@ async def write_browser_screenshot(
     # Concurrent screenshot calls must choose and write titles one at a time.
     owner = (principal.school_id, principal.membership_id)
     async with _write_locks.setdefault(owner, asyncio.Lock()):
+        titles = {row["title"] for row in await store.list(principal, limit=maxsize)}
         while True:
             suffix = f"-{number}.png" if not name or number > 1 else ".png"
             title = f"{stem[:128 - len(suffix)]}{suffix}"
             deny_secret_filename(title)
-            if await store.read(principal, artifact_id=None, title=title) is None:
+            if title not in titles:
                 return await store.write(principal, title=title, content=png, kind="image")
             number += 1

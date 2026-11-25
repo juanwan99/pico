@@ -27,6 +27,7 @@ os.environ.setdefault("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
 import sandbox_worker.browser as browser_mod
 import sandbox_worker.runtime as runtime_mod
 from pico_orchestrator.gateway import ToolError
+from pico_orchestrator.sandbox_sidecar import _TIMEOUT_S
 from pico_orchestrator.tools_builtin import build_default_gateway
 from sandbox_worker.browser import VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 
@@ -78,8 +79,9 @@ def navigation_page(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("action", ["open", "from_files", "reopen", "navigate", "back"])
+@pytest.mark.parametrize("capture_timeout", [False, True])
 async def test_committed_navigation_survives_dom_timeout(
-    action, navigation_page, monkeypatch, caplog, tmp_path
+    action, capture_timeout, navigation_page, monkeypatch, caplog, tmp_path
 ) -> None:
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
@@ -121,6 +123,16 @@ async def test_committed_navigation_survives_dom_timeout(
 
     target = SITE + ("/b" if action in {"reopen", "navigate"} else "/a")
     page.wait_for_load_state.side_effect = PlaywrightTimeoutError("fixture DOM wait expired")
+    if capture_timeout:
+        async def wait_forever(*args, **kwargs):
+            await asyncio.Future()
+
+        page.screenshot.side_effect = wait_forever
+        page.aria_snapshot.side_effect = wait_forever
+        context.storage_state.side_effect = wait_forever
+        monkeypatch.setattr(runtime_mod, "LOADING_SCREENSHOT_TIMEOUT_S", 0)
+        monkeypatch.setattr(runtime_mod, "LOADING_SNAPSHOT_TIMEOUT_S", 0)
+        monkeypatch.setattr(runtime_mod, "LOADING_METADATA_TIMEOUT_S", 0)
     monkeypatch.setattr(browser_mod, "time", SimpleNamespace(
         monotonic=Mock(side_effect=[100.0, 125.0]),
     ))
@@ -133,18 +145,43 @@ async def test_committed_navigation_survives_dom_timeout(
             else:
                 result = await gateway.invoke(owner, "sandbox_browser_open", {"url": target})
         if action == "back":
-            page.go_back.assert_awaited_once_with(wait_until="commit", timeout=60_000)
+            page.go_back.assert_awaited_once_with(wait_until="commit", timeout=45_000)
         else:
-            page.goto.assert_awaited_once_with(target, wait_until="commit", timeout=60_000)
-        page.wait_for_load_state.assert_awaited_once_with("domcontentloaded", timeout=35_000)
+            page.goto.assert_awaited_once_with(target, wait_until="commit", timeout=45_000)
+        page.wait_for_load_state.assert_awaited_once_with("domcontentloaded", timeout=20_000)
         assert result["ok"] is True
         assert result["url"] == target
-        assert result["note"] == "页面还在加载，可稍后再取快照 / 截图。"
+        note = "页面还在加载，可稍后再取快照 / 截图。"
+        if capture_timeout:
+            note += "本次未能及时取得截图。"
+            assert result["byte_size"] == 0
+            assert runtime.get(result["session_id"]).screenshot_png == b""
+            if action in {"navigate", "back"}:
+                assert "snapshot" not in result
+                assert "snapshot_mode" not in result
+                note = (
+                    "页面还在加载，可稍后再取快照 / 截图。"
+                    "本次未能及时取得快照。本次未能及时取得截图。"
+                    "本次未能及时更新登录状态或标签页。"
+                )
+        assert result["note"] == note
         assert "fixture DOM wait expired" in caplog.text
         context.close.assert_not_awaited()
     finally:
+        context.storage_state.side_effect = None
         for sid in list(runtime._sessions):
             await runtime.destroy(sid)
+
+
+def test_loading_navigation_leaves_room_under_sidecar_timeout() -> None:
+    assert 0 < runtime_mod.LOADING_SCREENSHOT_TIMEOUT_S <= 10
+    assert 0 < runtime_mod.LOADING_SNAPSHOT_TIMEOUT_S <= 10
+    assert (
+        browser_mod.GOTO_TIMEOUT_MS / 1000
+        + runtime_mod.LOADING_SNAPSHOT_TIMEOUT_S
+        + runtime_mod.LOADING_SCREENSHOT_TIMEOUT_S
+        + runtime_mod.LOADING_METADATA_TIMEOUT_S
+    ) < _TIMEOUT_S
 
 
 @pytest.mark.parametrize(
@@ -152,7 +189,10 @@ async def test_committed_navigation_survives_dom_timeout(
     [
         ("net::ERR_CONNECTION_REFUSED", "连接被拒绝"),
         ("net::ERR_NAME_NOT_RESOLVED", "DNS 失败"),
+        ("net::ERR_NAME_RESOLUTION_FAILED", "DNS 失败"),
         ("net::ERR_BLOCKED_BY_CLIENT", "访问被拦截"),
+        ("net::ERR_HTTP_RESPONSE_CODE_FAILURE", "公开页返回错误状态"),
+        ("net::ERR_CONNECTION_TIMED_OUT", "超时"),
         ("timeout", "超时"),
     ],
 )
@@ -179,6 +219,35 @@ async def test_back_reports_http_error_before_waiting_for_dom(navigation_page) -
     with pytest.raises(ToolError, match="HTTP 503"):
         await surface.navigate_back()
     page.wait_for_load_state.assert_not_awaited()
+
+
+async def test_real_chromium_open_keeps_original_page_during_popup(monkeypatch, tmp_path) -> None:
+    async def fulfil_with_popup(route) -> None:
+        await route.fulfill(
+            status=200,
+            content_type="text/html",
+            body="<title>Original</title><script>window.open('about:blank')</script>",
+        )
+
+    monkeypatch.setattr(browser_mod, "PROFILE_ROOT", tmp_path)
+    monkeypatch.setattr(browser_mod, "_guard_route", fulfil_with_popup)
+    try:
+        try:
+            await browser_mod._ensure_browser()
+        except ToolError as exc:
+            pytest.skip(f"Chromium unavailable: {exc.__cause__}")
+        surface = await browser_mod.open_chromium(SITE + "/popup")
+        try:
+            assert surface.url == SITE + "/popup"
+            assert await surface.title() == "Original"
+            rows = await surface.tabs("list", 0)
+            assert [(r["url"], r["current"]) for r in rows] == [
+                (SITE + "/popup", True), ("about:blank", False),
+            ]
+        finally:
+            await surface.close()
+    finally:
+        await browser_mod.shutdown_browser()
 
 
 @pytest.mark.asyncio

@@ -464,7 +464,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_screenshot",
-    "Look at the current sandbox browser screen: the image comes back to you in this call (for pictures, charts or canvas the snapshot cannot read) and the PNG is kept so the teacher's next question can see the page. session_id defaults to the teacher's open sandbox.",
+    "Look at the current sandbox browser screen: the image comes back to you in this call (for pictures, charts or canvas the snapshot cannot read) and the PNG is kept so the teacher's next question can see the page. session_id defaults to the teacher's open sandbox. When telling the teacher the saved filename, use screenshot.title from the result.",
     Type.Object(
       {
         session_id: Type.Optional(Type.String()),

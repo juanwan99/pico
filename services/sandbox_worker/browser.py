@@ -36,7 +36,7 @@ VIEWPORT_HEIGHT = 800
 VIEWPORT_MIN = (360, 300)
 VIEWPORT_MAX = (1920, 1200)
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
-GOTO_TIMEOUT_MS = 60_000
+GOTO_TIMEOUT_MS = 45_000
 PAGE_LOADING_NOTE = "页面还在加载，可稍后再取快照 / 截图。"
 # AI hands (#1207): aria snapshot with Playwright refs. Bounded so one page
 # cannot flood the model context.
@@ -841,49 +841,8 @@ class PlaywrightPage:
 
     async def navigate(self, url: str) -> None:
         parse_public_http_url(url)
-        await self._navigate(url)
+        self.loading_note = await _navigate_page(self._page, url)
         assert_http_public_or_internal(self.url)
-
-    async def _navigate(self, url: str | None) -> None:
-        from playwright.async_api import Error
-        from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-
-        page = self._page
-        before = page.url
-        self.loading_note = ""
-        deadline = time.monotonic() + GOTO_TIMEOUT_MS / 1000
-        try:
-            if url is None:
-                response = await page.go_back(wait_until="commit", timeout=GOTO_TIMEOUT_MS)
-                if response is None and page.url == before:
-                    raise ToolError("sandbox.action_failed", "这个标签页没有上一页")
-            else:
-                response = await page.goto(url, wait_until="commit", timeout=GOTO_TIMEOUT_MS)
-            if response is not None and response.status >= 400:
-                raise ToolError("sandbox.fetch_failed", f"公开页返回 HTTP {response.status}")
-
-            remaining_ms = (deadline - time.monotonic()) * 1000
-            if remaining_ms > 0:
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=remaining_ms)
-                except PlaywrightTimeoutError:
-                    logger.info("Chromium committed but DOM is still loading", exc_info=True)
-                    self.loading_note = PAGE_LOADING_NOTE
-            else:
-                self.loading_note = PAGE_LOADING_NOTE
-        except Error as exc:
-            logger.warning("Chromium navigation failed", exc_info=True)
-            error_code = str(exc).partition("\n")[0].partition("net::")[2].split(" ", 1)[0]
-            message = "连不上该公开页，或访问被拦截"
-            if isinstance(exc, PlaywrightTimeoutError) or error_code in {
-                "ERR_TIMED_OUT", "ERR_CONNECTION_TIMED_OUT",
-            }:
-                message = "打开公开页超时"
-            elif error_code == "ERR_NAME_NOT_RESOLVED" or error_code.startswith("ERR_DNS_"):
-                message = "无法解析该公开页的域名（DNS 失败）"
-            elif error_code == "ERR_CONNECTION_REFUSED":
-                message = "连不上该公开页（连接被拒绝）"
-            raise ToolError("sandbox.fetch_failed", message) from exc
 
     async def _element_info(self, loc: Any) -> dict[str, Any]:
         try:
@@ -959,7 +918,7 @@ class PlaywrightPage:
             raise ToolError("sandbox.action_failed", "移不到这个元素上（可能被遮住或已消失）") from exc
 
     async def navigate_back(self) -> None:
-        await self._navigate(None)
+        self.loading_note = await _navigate_page(self._page, None)
         assert_http_public_or_internal(self.url)
 
     async def type_ref(self, ref: str, text: str, *, submit: bool, slowly: bool = False) -> None:
@@ -1278,6 +1237,52 @@ class PlaywrightPage:
         await _close_context(self._context, self._profile_dir)
 
 
+async def _navigate_page(page: Any, url: str | None) -> str:
+    from playwright.async_api import Error
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+    before = page.url
+    deadline = time.monotonic() + GOTO_TIMEOUT_MS / 1000
+    try:
+        if url is None:
+            response = await page.go_back(wait_until="commit", timeout=GOTO_TIMEOUT_MS)
+            if response is None and page.url == before:
+                raise ToolError("sandbox.action_failed", "这个标签页没有上一页")
+        else:
+            response = await page.goto(url, wait_until="commit", timeout=GOTO_TIMEOUT_MS)
+        if response is not None and response.status >= 400:
+            logger.warning("Chromium navigation returned HTTP %s", response.status)
+            raise ToolError("sandbox.fetch_failed", f"公开页返回 HTTP {response.status}")
+
+        remaining_ms = (deadline - time.monotonic()) * 1000
+        if remaining_ms <= 0:
+            return PAGE_LOADING_NOTE
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=remaining_ms)
+        except PlaywrightTimeoutError:
+            logger.info("Chromium committed but DOM is still loading", exc_info=True)
+            return PAGE_LOADING_NOTE
+        return ""
+    except Error as exc:
+        logger.warning("Chromium navigation failed", exc_info=True)
+        match = re.search(r"\bnet::(ERR_[A-Z0-9_]+)\b", str(exc).partition("\n")[0])
+        error_code = match[1] if match else ""
+        message = "连不上该公开页，或访问被拦截"
+        if isinstance(exc, PlaywrightTimeoutError) or error_code in {
+            "ERR_TIMED_OUT", "ERR_CONNECTION_TIMED_OUT",
+        }:
+            message = "打开公开页超时"
+        elif error_code in {
+            "ERR_NAME_NOT_RESOLVED", "ERR_NAME_RESOLUTION_FAILED",
+        } or error_code.startswith("ERR_DNS_"):
+            message = "无法解析该公开页的域名（DNS 失败）"
+        elif error_code == "ERR_CONNECTION_REFUSED":
+            message = "连不上该公开页（连接被拒绝）"
+        elif error_code == "ERR_HTTP_RESPONSE_CODE_FAILURE":
+            message = "公开页返回错误状态"
+        raise ToolError("sandbox.fetch_failed", message) from exc
+
+
 async def open_chromium(url: str, *, login_state: Path | None = None) -> PlaywrightPage:
     """Open a public URL in headless Chromium. Caller already ran web_guard.
 
@@ -1298,9 +1303,10 @@ async def open_chromium(url: str, *, login_state: Path | None = None) -> Playwri
         )
         await context.route("**/*", _guard_route)
         page = context.pages[0] if context.pages else await context.new_page()
+        loading_note = await _navigate_page(page, url)
+        parse_public_http_url(page.url)
         surface = PlaywrightPage(context, page, profile_dir)
-        await surface._navigate(url)
-        parse_public_http_url(surface.url)
+        surface.loading_note = loading_note
         opened = True
         return surface
     except ToolError:
