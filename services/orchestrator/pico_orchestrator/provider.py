@@ -222,6 +222,15 @@ def ocr_backend_model() -> str:
     return (os.environ.get("PICO_OCR_MODEL") or "").strip() or product_backend_model(deep=False)
 
 
+def exam_read_model() -> str:
+    """Exam extraction model: ``PICO_EXAM_READ_MODEL``, else the fast lane."""
+    cfg = resolve_provider()
+    if cfg is not None and cfg.name == PERSONAL_PROVIDER_NAME:
+        return cfg.model
+    model = (os.environ.get("PICO_EXAM_READ_MODEL") or "").strip()
+    return model or product_backend_model(deep=False)
+
+
 def _deepseek_config() -> ProviderConfig | None:
     ds_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
     if current_grading_school() is not None:

@@ -442,6 +442,16 @@ def test_ocr_lane_without_env_follows_fast_lane(
     assert ocr_backend_model() == "deepseek-flash"
 
 
+def test_exam_read_model_keeps_personal_provider_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator.provider import ProviderConfig, exam_read_model, personal_provider_scope
+
+    monkeypatch.setenv("PICO_EXAM_READ_MODEL", "deepseek-flash")
+    cfg = ProviderConfig("personal", "sk-test", "https://example.test/v1", "personal-model")
+
+    with personal_provider_scope(cfg):
+        assert exam_read_model() == cfg.model
+
+
 def test_ocr_lane_candidates_keep_deepseek_as_backup(
     deepseek_brain_gemini_ocr: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
