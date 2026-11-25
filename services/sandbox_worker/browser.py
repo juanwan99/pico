@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import difflib
+import html
 import json
 import logging
 import os
@@ -52,6 +53,17 @@ MAX_TABS = 8
 DIALOG_NOTE_MAX = 200
 # Whole-form fill + attachments (#1219), Playwright MCP fill_form / file_upload.
 FILL_FORM_MAX = 40
+_DATE_INPUT_FORMATS = {
+    "date": "YYYY-MM-DD",
+    "time": "HH:MM（可带 :SS 和小数秒）",
+    "datetime-local": "YYYY-MM-DDTHH:MM（可带 :SS 和小数秒）",
+    "month": "YYYY-MM",
+    "week": "YYYY-Www（例如 2026-W48）",
+}
+_ACTIONABILITY_REASONS = re.compile(
+    r"\b(element is not (?:editable|enabled|visible|stable)|intercepts pointer events"
+    r"|did not find some options)$"
+)
 UPLOAD_MAX_FILES = 10
 UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 # Page-native save (#1242): hang File on this page, then call a dotted path.
@@ -323,6 +335,16 @@ def mask_secret_values(snapshot: str, secrets: list[str]) -> str:
         if value:
             out = out.replace(value, SECRET_MASK)
     return out
+
+
+def _mask_action_values(detail: str, values: Iterable[str]) -> str:
+    variants = {
+        variant
+        for value in values
+        if value
+        for variant in (value, json.dumps(value, ensure_ascii=False)[1:-1], html.escape(value))
+    }
+    return mask_secret_values(detail, sorted(variants, key=len, reverse=True))
 
 
 # Code / password shaped: 4–32 chars, no spaces, no CJK. Mail bodies and names stay
@@ -879,6 +901,37 @@ class PlaywrightPage:
                 "这个编号在当前页面上找不到（页面变了）。先调用 sandbox_browser_snapshot 取新编号。",
             ) from exc
 
+    async def _action_error(
+        self,
+        exc: Exception,
+        message: str,
+        *,
+        input_type: str = "",
+        values: tuple[str, ...] | list[str] = (),
+    ) -> ToolError:
+        # Playwright includes call arguments and DOM previews in the call log.
+        typed = [*self._typed, *values]
+        passwords = await self._password_values()
+        if input_type == "password":
+            passwords.extend(values)
+        detail = str(exc)
+        logger.warning(
+            "browser action failed: %s\n%s", message, _mask_action_values(detail, [*typed, *passwords])
+        )
+        first_line, _, call_log = detail.strip().partition("\n")
+        for line in reversed(call_log.splitlines()):
+            reason = _ACTIONABILITY_REASONS.search(line.strip())
+            if reason:
+                first_line += f"（{reason.group()}）"
+                break
+        if first_line:
+            sensitive = [*passwords, *(v for v in typed if _CODE_LIKE.fullmatch(v))]
+            message += f"。{_mask_action_values(first_line, sensitive)}"
+        expected = _DATE_INPUT_FORMATS.get(input_type)
+        if expected:
+            message += f"。这个输入框要求 {expected} 格式。"
+        return ToolError("sandbox.action_failed", message)
+
     async def _settle(self, before: str) -> None:
         for _ in range(25):
             if str(self._page.url or "") != before:
@@ -891,6 +944,8 @@ class PlaywrightPage:
         assert_http_public_or_internal(self.url)
 
     async def click_ref(self, ref: str, *, double: bool = False) -> None:
+        from playwright.async_api import Error as PlaywrightError
+
         loc = self._ref(ref)
         info = await self._element_info(loc)
         step = is_handoff_control(info)
@@ -902,10 +957,8 @@ class PlaywrightPage:
                 await loc.dblclick(timeout=5_000)
             else:
                 await loc.click(timeout=5_000)
-        except Exception as exc:
-            raise ToolError(
-                "sandbox.action_failed", "点不到这个元素（可能被遮住或已消失）"
-            ) from exc
+        except PlaywrightError as exc:
+            raise await self._action_error(exc, "点不到这个元素") from None
         await self._settle(before)
 
     async def hover_ref(self, ref: str) -> None:
@@ -924,6 +977,8 @@ class PlaywrightPage:
     async def type_ref(self, ref: str, text: str, *, submit: bool, slowly: bool = False) -> None:
         """`slowly` types key by key (Playwright MCP `browser_type` slowly): recipient,
         search and autocomplete boxes react to keys, not to a pasted value (#1233)."""
+        from playwright.async_api import Error as PlaywrightError
+
         # Never log `text`.
         loc = self._ref(ref)
         info = await self._element_info(loc)
@@ -938,16 +993,22 @@ class PlaywrightPage:
                 await loc.press_sequentially(text, timeout=5_000 + 50 * len(text))
             else:
                 await loc.fill(text, timeout=5_000)
-        except Exception as exc:
-            raise ToolError("sandbox.action_failed", "这个元素不能输入文字") from exc
+            if submit:
+                await loc.press("Enter", timeout=5_000)
+        except PlaywrightError as exc:
+            input_type = info.get("type", "") if info.get("tag") == "INPUT" else ""
+            raise await self._action_error(
+                exc, "无法输入或提交文字", input_type=input_type, values=[text]
+            ) from None
         if submit:
-            await loc.press("Enter", timeout=5_000)
             await self._settle(before)
 
     async def fill_form(self, fields: list[dict[str, Any]]) -> None:
         """Fill many fields in one call (#1219). Each element decides how: text box
         ``fill``, checkbox / radio ``set_checked``, dropdown ``select_option``.
         Never logs values."""
+        from playwright.async_api import Error as PlaywrightError
+
         if not fields or len(fields) > FILL_FORM_MAX:
             raise ToolError("tool.invalid_arguments", f"fields 要 1–{FILL_FORM_MAX} 格")
         for i, field in enumerate(fields, start=1):
@@ -958,22 +1019,25 @@ class PlaywrightPage:
             tag = str(info.get("tag") or "").upper()
             kind = str(info.get("type") or "").lower()
             role = str(info.get("role") or "").lower()
+            entered: list[str] = []
             try:
                 if kind in {"checkbox", "radio"} or role in CHECK_ROLES:
                     await loc.set_checked(is_checked_value(value), timeout=5_000)
                 elif tag == "SELECT":
-                    picks = [str(v) for v in value] if isinstance(value, list) else [str(value)]
-                    await self.select_ref(ref, picks)
+                    entered = [str(v) for v in value] if isinstance(value, list) else [str(value)]
+                    await self._select_options(loc, entered)
                 else:
                     text = "" if value is None else str(value)
+                    entered = [text]
                     self._typed.append(text)
                     await loc.fill(text, timeout=5_000)
-            except ToolError:
-                raise
-            except Exception as exc:
-                raise ToolError(
-                    "sandbox.action_failed", f"第 {i} 格（{ref}）填不进去，前面 {i - 1} 格已填"
-                ) from exc
+            except PlaywrightError as exc:
+                raise await self._action_error(
+                    exc,
+                    f"第 {i} 格（{ref}）填不进去，前面 {i - 1} 格已填",
+                    input_type=kind if tag == "INPUT" else "",
+                    values=entered,
+                ) from None
 
     async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None:
         """Attach files (#1219): a file input takes them directly; an「上传」button opens
@@ -1108,18 +1172,26 @@ class PlaywrightPage:
             f"这一页上没有函数 {fn}（主页面和 iframe 都找过了）。不要猜别的名字。",
         )
 
-    async def select_ref(self, ref: str, values: list[str]) -> None:
-        loc = self._ref(ref)
-        await self._element_info(loc)
+    async def _select_options(self, loc: Any, values: list[str]) -> None:
+        from playwright.async_api import Error as PlaywrightError
+
         try:
-            await loc.select_option([str(v) for v in values], timeout=5_000)
-        except Exception:  # noqa: BLE001 — retry by visible label
-            try:
-                await loc.select_option(label=[str(v) for v in values], timeout=5_000)
-            except Exception as exc:
-                raise ToolError(
-                    "sandbox.action_failed", "下拉框里没有这个选项（按 value 或显示文字都没找到）"
-                ) from exc
+            await loc.select_option(values, timeout=5_000)
+        except PlaywrightError:  # The tool also accepts visible labels.
+            await loc.select_option(label=values, timeout=5_000)
+
+    async def select_ref(self, ref: str, values: list[str]) -> None:
+        from playwright.async_api import Error as PlaywrightError
+
+        loc = self._ref(ref)
+        info = await self._element_info(loc)
+        try:
+            await self._select_options(loc, values)
+        except PlaywrightError as exc:
+            input_type = info.get("type", "") if info.get("tag") == "INPUT" else ""
+            raise await self._action_error(
+                exc, "下拉框选项选不进去", input_type=input_type, values=values
+            ) from None
 
     async def press_key(self, key: str) -> None:
         token = (key or "").strip()

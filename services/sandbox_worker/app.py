@@ -110,7 +110,7 @@ def _tool_http(exc: ToolError) -> HTTPException:
         status = 403
     elif exc.code in {"sandbox.quota", "sandbox.rate_limited"}:
         status = 429
-    elif exc.code == "sandbox.human_took_over":
+    elif exc.code in {"sandbox.human_took_over", "browser.busy"}:
         status = 409
     elif exc.code in {"sandbox.session_not_found", "artifact.not_found", "sandbox.file_not_found"}:
         status = 404

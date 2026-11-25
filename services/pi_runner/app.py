@@ -5,8 +5,8 @@ Two listeners, one process:
 * control (127.0.0.1:18790, pico-api only, ``X-Pico-Runner-Token``):
   WebSocket ``/v1/session`` pipes Pi RPC stdio of one container (when the
   runner is full the request waits in line and gets ``queued`` frames); file
-  upload (attachments) / listing + download (outputs) — only while no box
-  is running on that workspace.
+  uploads and attachment downloads require an idle workspace. Listing and
+  downloading outputs also work while the box is running.
 * proxy (pico-ws gateway IP:18791, workspace containers only): forwards a
   fixed list of paths — model ``/l/<run>/v1/{chat/completions,responses,models}``
   and gateway tools ``/t/<run>/v1/tool`` — to pico-api's token-checked
@@ -440,15 +440,16 @@ def build_control_app(runner: Runner) -> FastAPI:
             "runtime": settings.runtime,
         }
 
-    def _gate(request: Request, school: str, member: str, conv: str) -> WorkspaceKey | JSONResponse:
+    def _gate(
+        request: Request, school: str, member: str, conv: str, *, allow_busy: bool = False
+    ) -> WorkspaceKey | JSONResponse:
         if not _authorized(settings, request.headers.get("x-pico-runner-token")):
             return _deny("auth.denied", 401)
         try:
             key = WorkspaceKey.parse(school, member, conv)
         except PolicyError as exc:
             return _deny(exc.code, 400)
-        if runner.busy(key):
-            # Files are only touched while no box can race them.
+        if not allow_busy and runner.busy(key):
             return _deny("runner.workspace_busy", 409)
         return key
 
@@ -472,8 +473,10 @@ def build_control_app(runner: Runner) -> FastAPI:
         return {"ok": True, "path": str(rel), "bytes": len(body)}
 
     @app.get("/v1/ws/{school}/{member}/{conv}/outputs")
-    async def list_outputs(school: str, member: str, conv: str, request: Request):
-        key = _gate(request, school, member, conv)
+    async def list_outputs(
+        school: str, member: str, conv: str, request: Request, idle_only: bool = False
+    ):
+        key = _gate(request, school, member, conv, allow_busy=not idle_only)
         if isinstance(key, JSONResponse):
             return key
         ws = key.workspace_dir(settings.workspace_root)
@@ -491,7 +494,7 @@ def build_control_app(runner: Runner) -> FastAPI:
 
     @app.get("/v1/ws/{school}/{member}/{conv}/file")
     async def get_file(school: str, member: str, conv: str, path: str, request: Request):
-        key = _gate(request, school, member, conv)
+        key = _gate(request, school, member, conv, allow_busy=path.startswith("outputs/"))
         if isinstance(key, JSONResponse):
             return key
         try:

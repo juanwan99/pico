@@ -12,6 +12,7 @@ import re
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from pico_orchestrator.artifact_types import (
     is_valid_ooxml_package,
@@ -97,6 +98,7 @@ from pico_orchestrator.sandbox_s1 import (
 )
 from pico_orchestrator.sandbox_s2 import PNG_MAGIC, raster_html_isolated, raster_meta_from_write
 from pico_orchestrator.sandbox_sidecar import sidecar_json
+from pico_orchestrator.sandbox_upload_files import resolve_upload_filenames, upload_file_not_found
 from pico_orchestrator.usage_hook import (
     emit_image_usage,
     emit_query_embed_usage,
@@ -131,6 +133,9 @@ class _UnavailableArtifactStore:
         raise ToolError("artifact.store_unavailable", "Artifact ledger is unavailable")
 
     async def list(self, *_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+        raise ToolError("artifact.store_unavailable", "Artifact ledger is unavailable")
+
+    async def list_run_titles(self, *_args: Any, **_kwargs: Any) -> dict[str, str]:
         raise ToolError("artifact.store_unavailable", "Artifact ledger is unavailable")
 
 
@@ -2013,6 +2018,18 @@ def _workspace_handlers(
             await _emit(False, {"error_code": exc.code, "artifact_id": artifact_id})
             raise
 
+    def _parse_browser_url(url: str) -> None:
+        try:
+            parse_public_http_url(url)
+        except ToolError as exc:
+            if exc.code != "web.denied":
+                raise
+            if urlsplit(url).scheme == "file" or url.startswith(("/", "./", "outputs/")):
+                raise ToolError(
+                    exc.code, f"{exc.message}。看本次 Run 生成的 HTML 用 sandbox_preview_inspect。"
+                ) from exc
+            raise
+
     async def browser_open(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         """B2: open a public page in the isolated sidecar. Human-in-the-loop login."""
         started = time.perf_counter()
@@ -2037,7 +2054,7 @@ def _workspace_handlers(
             )
 
         try:
-            parse_public_http_url(url)
+            _parse_browser_url(url)
             out = await sidecar_json(
                 "POST",
                 "/v1/internal/sessions/open",
@@ -2143,10 +2160,13 @@ def _workspace_handlers(
             await _emit(False, {"error_code": exc.code})
             raise
 
-    async def _upload_from_ledger(principal: Principal, ids: Any) -> list[dict[str, str]]:
+    async def _upload_from_ledger(
+        principal: Principal, ids: Any, *, filename_ids: list[str] | None = None
+    ) -> list[dict[str, str]]:
         """Ledger artifacts (e.g. the Word just generated) as upload payloads (#1219)."""
         out: list[dict[str, str]] = []
-        for artifact_id in [str(i).strip() for i in (ids if isinstance(ids, list) else [ids])][:10]:
+        explicit_ids = [str(i).strip() for i in (ids if isinstance(ids, list) else [ids])][:10]
+        for artifact_id in [*(filename_ids or []), *explicit_ids]:
             if not artifact_id:
                 continue
             row = await store.read(principal, artifact_id=artifact_id, title=None)
@@ -2208,12 +2228,18 @@ def _workspace_handlers(
                     for f in raw_fields
                     if isinstance(f, dict)
                 ]
+            upload_artifacts: dict[str, str] = {}
             if action == "file_upload":
-                body["filenames"] = [str(n) for n in (args.get("filenames") or []) if str(n).strip()]
-                body["files"] = await _upload_from_ledger(principal, args.get("artifact_ids") or [])
+                filenames = [str(n) for n in (args.get("filenames") or []) if str(n).strip()]
+                body["filenames"], filename_ids, box_files, upload_artifacts = (
+                    await resolve_upload_filenames(store, principal, run_id, filenames)
+                )
+                body["files"] = box_files + await _upload_from_ledger(
+                    principal, args.get("artifact_ids") or [], filename_ids=filename_ids
+                )
                 if not body["filenames"] and not body["files"]:
                     raise ToolError(
-                        "tool.invalid_arguments", "要传的文件：filenames（老师盘）或 artifact_ids（账本）"
+                        "tool.invalid_arguments", "要传的文件：filenames（产物或老师盘）或 artifact_ids"
                     )
             if action == "page_file":
                 body["filenames"] = [str(n) for n in (args.get("filenames") or []) if str(n).strip()]
@@ -2260,7 +2286,7 @@ def _workspace_handlers(
 
             try:
                 if body["url"]:
-                    parse_public_http_url(body["url"])
+                    _parse_browser_url(body["url"])
                 out = await sidecar_json(
                     "POST", f"/v1/internal/sessions/{session_id}/act", json_body=body
                 )
@@ -2270,6 +2296,8 @@ def _workspace_handlers(
                 return out
             except ToolError as exc:
                 await _emit(False, {"error_code": exc.code})
+                if action == "file_upload" and exc.code == "sandbox.file_not_found":
+                    raise await upload_file_not_found(exc, upload_artifacts, run_id) from exc
                 raise
 
         return hand
@@ -2800,8 +2828,8 @@ def build_default_gateway(
             "sandbox_browser_file_upload",
             (
                 "Attach files to the file input (or the upload button) with the given ref: "
-                "filenames from the teacher's sandbox disk and/or artifact_ids from the Pico "
-                "ledger (e.g. a document you just generated). Max 10 files, 25 MB. "
+                "filenames from this run's outputs or the teacher's sandbox disk, "
+                "and/or artifact_ids from the Pico ledger. Max 10 files, 25 MB. "
             ),
             "Args: ref, filenames?, artifact_ids?, element?, session_id?.",
         ),
@@ -3281,7 +3309,9 @@ def openai_tool_schemas(
                 "filenames": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Files on the teacher's sandbox disk",
+                    "description": (
+                        "This run's artifact titles or paths in outputs/, or teacher disk filenames"
+                    ),
                 },
                 "artifact_ids": {
                     "type": "array",
