@@ -248,6 +248,7 @@ async def stream_session(
     session_id: str,
     school_id: str,
     membership_id: str,
+    ack: bool = False,
     x_pico_sandbox_token: str | None = Header(default=None),
 ) -> StreamingResponse:
     """Live pane (#1215): SSE of JPEG frames. Client disconnect stops the screencast."""
@@ -259,7 +260,7 @@ async def stream_session(
     except ToolError as exc:
         raise _tool_http(exc) from exc
 
-    stream = RUNTIME.stream(sess)
+    stream = RUNTIME.stream(sess, ack=ack)
 
     return StreamingResponse(
         (sse_event(event) async for event in stream),

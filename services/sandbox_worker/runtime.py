@@ -689,6 +689,7 @@ class SandboxRuntime:
         if not session.is_streaming(win):
             return await self.screenshot(session)
         await self._sync(session, capture=False)
+        session.h1 = await win.surface.h1()
         await self._save_login(session, throttle=True)
         return self._public_meta(session)
 
@@ -948,7 +949,9 @@ class SandboxRuntime:
             return ""
         return sess.focused().window_id
 
-    async def stream(self, sess: SandboxSession) -> AsyncGenerator[dict[str, Any], None]:
+    async def stream(
+        self, sess: SandboxSession, *, ack: bool = False
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """Live pane (#1215): JPEG frames from the focused browser window.
 
         Office / files windows yield ``poll`` once; the pane keeps polling PNG.
@@ -988,18 +991,20 @@ class SandboxRuntime:
                                 del waiting[frame_id]
                         if len(waiting) < STREAM_MAX_IN_FLIGHT and not frames.empty():
                             frame = frames.get_nowait()
-                            frame_id = secrets.token_hex(12)
-                            waiting[frame_id] = now + STREAM_PING_S
-                            sess.frame_acks[frame_id] = wake
-                            sess.live_panes[wake] = window_id
-                            last = now
-                            yield {
+                            event = {
                                 "jpeg": frame.jpeg,
                                 "width": frame.width,
                                 "height": frame.height,
-                                "frame_id": frame_id,
                                 "window_id": window_id,
                             }
+                            if ack:
+                                frame_id = secrets.token_hex(12)
+                                waiting[frame_id] = now + STREAM_PING_S
+                                sess.frame_acks[frame_id] = wake
+                                event["frame_id"] = frame_id
+                            sess.live_panes[wake] = window_id
+                            last = now
+                            yield event
                             continue
                         if now - last >= STREAM_PING_S:
                             last = now

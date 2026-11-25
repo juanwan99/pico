@@ -252,7 +252,7 @@ async def sidecar_stream(path: str, *, params: dict[str, Any]) -> AsyncGenerator
             membership_id=str(params.get("membership_id") or ""),
         )
         async def events() -> AsyncGenerator[bytes, None]:
-            async with aclosing(RUNTIME.stream(sess)) as stream:
+            async with aclosing(RUNTIME.stream(sess, ack=params.get("ack", False))) as stream:
                 async for event in stream:
                     yield sse_event(event)
 

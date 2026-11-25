@@ -132,7 +132,7 @@ export default function SandboxWebPane({
   const liveRef = useRef(live);
   liveRef.current = live;
   const streamingRef = useRef(false);
-  const scrollRef = useRef({ dy: 0, timer: 0 });
+  const scrollRef = useRef({ dy: 0, timer: 0, running: false });
   const dragRef = useRef<PaneDrag | null>(null);
   const dragEndedRef = useRef(false);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -494,6 +494,28 @@ export default function SandboxWebPane({
     void pumpDrag(d);
   };
 
+  const pumpScroll = async () => {
+    const pending = scrollRef.current;
+    pending.running = true;
+    try {
+      while (Math.round(pending.dy)) {
+        flushTyped();
+        await inOrder(() => {
+          const dy = Math.round(pending.dy);
+          pending.dy = 0;
+          if (dy) {
+            return postPicoSandboxInput(sessionId, { scroll_dy: dy });
+          }
+        });
+      }
+    } catch {
+      pending.dy = 0;
+      setError('滚动未送出，请重试');
+    } finally {
+      pending.running = false;
+    }
+  };
+
   const onViewportWheel = (ev: React.WheelEvent<HTMLImageElement>) => {
     // Ctrl/⌘ + wheel zooms the pane; a zoomed-in pane scrolls itself.
     if (ev.ctrlKey || ev.metaKey || zoom > 1 || live !== 'live') {
@@ -501,17 +523,12 @@ export default function SandboxWebPane({
     }
     const pending = scrollRef.current;
     pending.dy += ev.deltaY;
-    if (pending.timer) {
+    if (pending.timer || pending.running) {
       return;
     }
     pending.timer = window.setTimeout(() => {
-      const dy = Math.round(pending.dy);
-      pending.dy = 0;
       pending.timer = 0;
-      if (dy) {
-        flushTyped();
-        void postInOrder({ scroll_dy: dy }).catch(() => setError('滚动未送出，请重试'));
-      }
+      void pumpScroll();
     }, SCROLL_FLUSH_MS);
   };
 

@@ -505,7 +505,7 @@ export default function ResultPanel({
         message.includes('web.denied') || message.includes('denied')
           ? '该地址不能在隔离网页打开'
           : message.includes('quota') || message.includes('已满')
-            ? '沙箱已满（最多 8 路）'
+            ? message
             : '打开网页失败，请稍后重试',
       );
     }

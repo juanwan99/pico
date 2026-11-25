@@ -11,6 +11,7 @@ import asyncio
 import base64
 import difflib
 import html
+import io
 import json
 import logging
 import math
@@ -28,6 +29,7 @@ from urllib.parse import urlsplit
 from anyio import CancelScope
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.web_guard import parse_public_http_url
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,7 @@ VIEWPORT_HEIGHT = 800
 # 1280x800 picture shrunk into it. Upstream = Playwright set_viewport_size.
 VIEWPORT_MIN = (360, 300)
 VIEWPORT_MAX = (1920, 1200)
+MAX_DEVICE_SCALE = 2
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 GOTO_TIMEOUT_MS = 45_000
 PAGE_LOADING_NOTE = "页面还在加载，可稍后再取快照 / 截图。"
@@ -48,7 +51,7 @@ SNAPSHOT_MAX_CHARS = 30_000
 SECRET_MASK = "••••"
 WAIT_MAX_S = 30.0
 # Live pane (#1215): Chromium pushes a JPEG on each repaint (CDP screencast).
-SCREENCAST_QUALITY = 80
+SCREENCAST_QUALITY = 75
 SCROLL_MAX_PX = 2000
 # Tabs (#1217): a link that opens a new tab becomes the current page, like
 # Playwright MCP. Bounded so a popup storm cannot eat the sidecar.
@@ -233,6 +236,8 @@ CHROMIUM_ARGS = (
     "--no-first-run",
     "--password-store=basic",
     "--hide-scrollbars",
+    # Give the compositor enough backing pixels for the highest pane DPR.
+    f"--force-device-scale-factor={MAX_DEVICE_SCALE}",
 )
 
 
@@ -657,17 +662,18 @@ class PlaywrightPage:
         return {"width": self._viewport[0], "height": self._viewport[1]}
 
     async def _fit_page(self, page: Any) -> None:
-        from playwright.async_api import Error
-
-        async with self._viewport_lock:
-            if page.is_closed():
-                return
-            try:
-                await self._apply_metrics(page, self._viewport, self._device_scale)
-            except Error:
+        try:
+            async with self._viewport_lock:
                 if not page.is_closed():
-                    raise
+                    await self._apply_metrics(page, self._viewport, self._device_scale)
+        except Exception:
+            if page.is_closed():
                 logger.debug("tab closed during viewport update", exc_info=True)
+            else:
+                logger.warning("sandbox tab viewport update failed", exc_info=True)
+        finally:
+            if self._viewport_task is asyncio.current_task():
+                self._viewport_task = None
 
     async def _apply_metrics(self, page: Any, viewport: tuple[int, int], scale: float) -> None:
         size = {"width": viewport[0], "height": viewport[1]}
@@ -683,8 +689,6 @@ class PlaywrightPage:
                     **size,
                     "mobile": False,
                     "deviceScaleFactor": scale,
-                    # Resize the headless compositor as well as emulating the page's DPR.
-                    "viewport": {"x": 0, "y": 0, **size, "scale": 1},
                 },
             )
 
@@ -696,7 +700,7 @@ class PlaywrightPage:
             max(VIEWPORT_MIN[0], min(VIEWPORT_MAX[0], int(width))),
             max(VIEWPORT_MIN[1], min(VIEWPORT_MAX[1], int(height))),
         )
-        scale = min(device_scale, 2.0)
+        scale = min(device_scale, MAX_DEVICE_SCALE)
         async with self._viewport_lock:
             if size != self._viewport or scale != self._device_scale:
                 # Retire the old cast before Chromium repaints at intermediate sizes.
@@ -841,7 +845,27 @@ class PlaywrightPage:
 
     async def screenshot_png(self) -> bytes:
         async with self._viewport_lock:
-            raw = await self._page.screenshot(type="png", full_page=False, scale="css")
+            page = self._page
+            cdp = self._metrics.get(page)
+            if cdp is None:
+                raw = await page.screenshot(type="png", full_page=False, scale="css")
+            else:
+                # Capture on the session that owns the DPR override, in CSS pixels as before.
+                viewport = (await cdp.send("Page.getLayoutMetrics"))["cssVisualViewport"]
+                screenshot = await cdp.send(
+                    "Page.captureScreenshot",
+                    {
+                        "format": "png",
+                        "clip": {
+                            "x": viewport["pageX"],
+                            "y": viewport["pageY"],
+                            "width": viewport["clientWidth"],
+                            "height": viewport["clientHeight"],
+                            "scale": 1 / self._device_scale,
+                        },
+                    },
+                )
+                raw = base64.b64decode(screenshot["data"])
         png = bytes(raw)
         if not png.startswith(PNG_MAGIC):
             raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能截取 viewport")
@@ -1327,25 +1351,41 @@ class PlaywrightPage:
         """
         from playwright.async_api import Error
 
-        if self._viewport_task is not None:
-            await asyncio.shield(self._viewport_task)
+        task = self._viewport_task
+        if task is not None:
+            await asyncio.shield(task)
         async with self._viewport_lock:
             width, height = self._viewport
             scale = self._device_scale
             cdp = await self._context.new_cdp_session(self._page)
+        max_width = math.ceil(width * scale)
+        max_height = math.ceil(height * scale)
         active = True
 
         async def on_frame(event: dict[str, Any]) -> None:
             if not active:
                 return
-            # Retain the frame in arrival order and release Chromium's slot right away.
-            push(ScreencastFrame(event["data"], width, height))
             try:
                 await cdp.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
             except Error:
                 if active:
                     raise
                 logger.debug("screencast stopped while acknowledging a frame", exc_info=True)
+            if not active:
+                return
+            meta = event["metadata"]
+            css_width, css_height = round(meta["deviceWidth"]), round(meta["deviceHeight"])
+            # Chromium can pair a queued bitmap with the current view's metadata on resize.
+            # Check the JPEG header before using those coordinates for teacher input.
+            density = min(MAX_DEVICE_SCALE, max_width / css_width, max_height / css_height)
+            jpeg = event["data"]
+            with Image.open(io.BytesIO(base64.b64decode(jpeg))) as img:
+                if (
+                    abs(img.width - css_width * density) > 1
+                    or abs(img.height - css_height * density) > 1
+                ):
+                    return
+            push(ScreencastFrame(jpeg, css_width, css_height))
 
         async def stop() -> None:
             nonlocal active
@@ -1363,8 +1403,8 @@ class PlaywrightPage:
                 {
                     "format": "jpeg",
                     "quality": SCREENCAST_QUALITY,
-                    "maxWidth": math.ceil(width * scale),
-                    "maxHeight": math.ceil(height * scale),
+                    "maxWidth": max_width,
+                    "maxHeight": max_height,
                 },
             )
         except BaseException:

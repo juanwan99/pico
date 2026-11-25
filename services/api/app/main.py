@@ -1054,6 +1054,7 @@ async def sandbox_session_screenshot(
 @app.get("/v1/sandbox/sessions/{session_id}/stream")
 async def sandbox_session_stream(
     session_id: str,
+    ack: bool = False,
     principal: Principal = Depends(require_scope("ai:read")),
 ) -> StreamingResponse:
     """Live pane (#1215): pass the sidecar's JPEG SSE through, same owner check."""
@@ -1066,6 +1067,7 @@ async def sandbox_session_stream(
             params={
                 "school_id": principal.school_id,
                 "membership_id": principal.membership_id,
+                "ack": ack,
             },
         )
     except ToolError as exc:

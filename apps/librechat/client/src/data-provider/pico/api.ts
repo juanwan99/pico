@@ -523,7 +523,7 @@ export async function streamPicoSandbox(
   signal: AbortSignal,
 ): Promise<void> {
   const res = await fetch(
-    `/api/pico/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/stream`,
+    `/api/pico/v1/sandbox/sessions/${encodeURIComponent(sessionId)}/stream?ack=1`,
     {
       credentials: 'include',
       headers: { ...authHeaders(), Accept: 'text/event-stream' },

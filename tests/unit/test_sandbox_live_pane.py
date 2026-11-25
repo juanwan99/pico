@@ -148,7 +148,7 @@ def test_sse_event_is_one_data_line() -> None:
 async def test_frames_flow_and_stream_ends_when_sandbox_is_destroyed(live_runtime) -> None:
     runtime, pages = live_runtime
     sess = await _open(runtime)
-    agen = runtime.stream(sess)
+    agen = runtime.stream(sess, ack=True)
     first = await _next(agen)
     assert first["jpeg"] == "FIRST" and first["window_id"] == sess.focused_id
     await runtime.apply_input(sess, frame_ack=first["frame_id"])
@@ -168,7 +168,7 @@ async def test_frames_flow_and_stream_ends_when_sandbox_is_destroyed(live_runtim
 async def test_slow_viewer_receives_final_frame_after_page_stops_repainting(live_runtime) -> None:
     runtime, pages = live_runtime
     sess = await _open(runtime)
-    agen = runtime.stream(sess)
+    agen = runtime.stream(sess, ack=True)
     first = await _next(agen)
     pages[0].frame("SECOND")
     assert (await _next(agen))["jpeg"] == "SECOND"
@@ -186,7 +186,7 @@ async def test_stream_has_at_most_two_unconfirmed_frames(live_runtime, monkeypat
     runtime, pages = live_runtime
     monkeypatch.setattr(runtime_mod, "STREAM_PING_S", 5)
     sess = await _open(runtime)
-    agen = runtime.stream(sess)
+    agen = runtime.stream(sess, ack=True)
     first = await _next(agen)
     pages[0].frame("SECOND")
     second = await _next(agen)
@@ -208,7 +208,7 @@ async def test_lost_ack_expires_within_the_ping_interval(live_runtime, monkeypat
     runtime, pages = live_runtime
     monkeypatch.setattr(runtime_mod, "STREAM_CHECK_S", 5)
     sess = await _open(runtime)
-    agen = runtime.stream(sess)
+    agen = runtime.stream(sess, ack=True)
     first = await _next(agen)
     pages[0].frame("SECOND")
     await _next(agen)
@@ -221,6 +221,23 @@ async def test_lost_ack_expires_within_the_ping_interval(live_runtime, monkeypat
     await runtime.apply_input(sess, frame_ack=first["frame_id"])
     assert delivered["frame_id"] in sess.frame_acks
     await agen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_legacy_stream_does_not_wait_for_acks(live_runtime, monkeypatch) -> None:
+    runtime, pages = live_runtime
+    monkeypatch.setattr(runtime_mod, "STREAM_PING_S", 5)
+    sess = await _open(runtime)
+    agen = runtime.stream(sess)
+    try:
+        assert "frame_id" not in await _next(agen)
+        for n in range(3):
+            pages[0].frame(str(n))
+            event = await _next(agen)
+            assert event["jpeg"] == str(n) and "frame_id" not in event
+        assert not sess.frame_acks
+    finally:
+        await agen.aclose()
 
 
 @pytest.mark.asyncio
@@ -242,7 +259,7 @@ async def test_office_window_says_poll_and_switching_back_restarts_cast(live_run
 
 
 @pytest.mark.asyncio
-async def test_live_input_and_meta_skip_png_and_throttle_login(live_runtime) -> None:
+async def test_live_input_and_meta_skip_png_and_throttle_login(live_runtime, monkeypatch) -> None:
     runtime, pages = live_runtime
     sess = await _open(runtime)
     page = pages[0]
@@ -251,7 +268,12 @@ async def test_live_input_and_meta_skip_png_and_throttle_login(live_runtime) -> 
     for _ in range(2):
         meta = await runtime.apply_input(sess, click_x=10, click_y=20)
         assert meta["clicked"] and meta["title"] == "Page"
-    await runtime.pane_meta(sess)
+    async def live_h1() -> str:
+        return "Updated heading"
+
+    monkeypatch.setattr(page, "h1", live_h1)
+    assert sess.h1 == ""
+    assert (await runtime.pane_meta(sess))["h1"] == "Updated heading"
     assert page.click_settled is False
     assert page.shots == 1 and page.saves == 1
     await agen.aclose()
@@ -289,7 +311,8 @@ async def test_pane_wheel_and_keys_reach_the_page(live_runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_api_stream_helper_checks_owner_then_streams(live_runtime) -> None:
+@pytest.mark.parametrize("ack", [False, True])
+async def test_api_stream_helper_checks_owner_then_streams(live_runtime, ack) -> None:
     runtime, _pages = live_runtime
     sess = await _open(runtime)
     path = f"/v1/internal/sessions/{sess.session_id}/stream"
@@ -297,10 +320,11 @@ async def test_api_stream_helper_checks_owner_then_streams(live_runtime) -> None
         await sidecar_stream(path, params={"school_id": "school-b", "membership_id": "member-b"})
     assert denied.value.code == "sandbox.forbidden"
     chunks = await sidecar_stream(
-        path, params={"school_id": "school-a", "membership_id": "member-a"}
+        path, params={"school_id": "school-a", "membership_id": "member-a", "ack": ack}
     )
     first = await asyncio.wait_for(chunks.__anext__(), 2.0)
-    assert json.loads(first.decode()[len("data: ") :])["jpeg"] == "FIRST"
+    event = json.loads(first.decode()[len("data: ") :])
+    assert event["jpeg"] == "FIRST" and ("frame_id" in event) is ack
     await chunks.aclose()
 
 

@@ -543,7 +543,8 @@ router.get('/v1/sandbox/sessions/:sessionId/stream', async (req, res) => {
   const abort = new AbortController();
   res.on('close', () => abort.abort());
   try {
-    const r = await fetch(`${picoBase()}/v1/sandbox/sessions/${req.params.sessionId}/stream`, {
+    const query = req.query.ack === '1' ? '?ack=1' : '';
+    const r = await fetch(`${picoBase()}/v1/sandbox/sessions/${req.params.sessionId}/stream${query}`, {
       headers: {
         Authorization: `Bearer ${picoKey()}`,
         Accept: 'text/event-stream',

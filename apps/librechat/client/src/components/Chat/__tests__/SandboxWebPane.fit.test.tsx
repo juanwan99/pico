@@ -140,6 +140,10 @@ describe('SandboxWebPane fits the pane', () => {
     try {
       await act(async () => { await Promise.resolve(); });
       expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/pico/v1/sandbox/sessions/sbox_fit/stream?ack=1',
+        expect.objectContaining({ headers: expect.objectContaining({ Accept: 'text/event-stream' }) }),
+      );
       await act(async () => decoded());
       expect(fetchMock).toHaveBeenNthCalledWith(
         2,
@@ -194,5 +198,38 @@ describe('SandboxWebPane fits the pane', () => {
         }
       }
     }
+  });
+
+  it('merges wheel movement while a scroll is in flight and lets a click through', async () => {
+    size.w = 0;
+    size.h = 0;
+    const post = postPicoSandboxInput as jest.Mock;
+    let finishScroll!: (value: object) => void;
+    post.mockImplementationOnce(() => new Promise((resolve) => { finishScroll = resolve; }));
+    render(<SandboxWebPane sessionId="sbox_fit" kind="browser" />);
+    await act(async () => { await Promise.resolve(); });
+    const img = screen.getByTestId('sandbox-web-viewport');
+    Object.defineProperties(img, {
+      naturalWidth: { value: 480 },
+      naturalHeight: { value: 620 },
+    });
+    img.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 480, height: 620 }) as DOMRect;
+    await act(async () => {
+      fireEvent.wheel(img, { deltaY: 50 });
+      await jest.advanceTimersByTimeAsync(120);
+      for (const deltaY of [110, 160, -40]) {
+        fireEvent.wheel(img, { deltaY });
+        await jest.advanceTimersByTimeAsync(120);
+      }
+      fireEvent.click(img, { clientX: 60, clientY: 80 });
+    });
+    expect(post.mock.calls).toEqual([['sbox_fit', { scroll_dy: 50 }]]);
+    await act(async () => finishScroll({}));
+    expect(post.mock.calls).toEqual([
+      ['sbox_fit', { scroll_dy: 50 }],
+      ['sbox_fit', { click_x: 60, click_y: 80 }],
+      ['sbox_fit', { scroll_dy: 230 }],
+    ]);
   });
 });
