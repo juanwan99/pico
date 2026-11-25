@@ -25,6 +25,8 @@
 | 11-23 06:37–18:37、11-24 02:10 起 | 11-23 补跑 06:51 开始上传 2.7 GB，18:37 被 systemd 判超时。11-24 日备 02:26 开始上传 2.7 GB，导出截止无成功记录。03:00 新鲜度告警已到 38.5 小时。恢复演练无结果行 | 补跑从启动到退出是 12 小时，仓内 unit 配的是 6 小时。运维需核对实际加载的 unit 与 rclone 上传日志，以及最新 `COMPLETE` 和恢复演练。共享出口挤占已在 11-24 观察到，现有导出缺上传失败明细 |
 | 11-23 02:15、15:50 | 两次本线变更未通过 `env-set` / `env-record`，巡检显示没留原因。前一条为 edu-core#6121 去掉 Grok 备用（业主定不换模型、不充 Grok，备份 `.env.bak-20261123-grok`），后一条为 pico#1344 把 `PICO_HEDGE_*` 从 off 改为 unset（备份 `.env.bak-1344-11231550`） | 卡面确认两条已补进 `~/pico-env-changes.log`。导出的全段留痕中有 14 条 `watch:UNLOGGED`，本次短窗内 4 轮。后续改配置用既有 `env-set` |
 
+Google Drive 满额返回 `403 storageQuotaExceeded` 时，日备曾在退出时删掉本机唯一副本；现在上传、远端核对或上传 `COMPLETE` 失败时移到 `${PICO_BACKUP_KEEP_DIR:-/data/ops/pico-backup-keep}/<stamp>/`，保留最近 7 份，由平台运维补传并核对数据后再放远端 `COMPLETE`。
+
 ### 窗口内其他已定位的问题
 
 | 时间 | 现象和根因 | 修复及状态 |

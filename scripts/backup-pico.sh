@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pico#1270 · Daily pico backup, off this host → Google Drive (gdrive:pico-backup).
 #
-#   backup-pico.sh run     dump everything, upload, verify sizes, prune > KEEP_DAYS, clean local
+#   backup-pico.sh run     dump, upload, verify sizes, then clean local or keep failed uploads
 #   backup-pico.sh drill   pull the newest backup and restore it into throwaway containers
 #                          (--corrupt flips one byte first: proves a bad backup is stopped;
 #                           CORRUPT_CAUGHT exits 0 and leaves the real drill status alone)
@@ -23,6 +23,7 @@ REMOTE="${PICO_BACKUP_REMOTE:-gdrive:pico-backup}"
 PROXY="${PICO_BACKUP_PROXY:-http://127.0.0.1:7893}"
 KEEP_DAYS="${PICO_BACKUP_KEEP_DAYS:-15}"
 WORK="${PICO_BACKUP_WORK:-$HOME/var/pico-backup-work}"
+KEEP_DIR="${PICO_BACKUP_KEEP_DIR:-/data/ops/pico-backup-keep}"
 LOG_DIR="${PICO_BACKUP_LOG_DIR:-$HOME/logs}"
 STATUS_JSON="${PICO_BACKUP_STATUS_JSON:-$LOG_DIR/pico-backup-status.json}"
 ALERT_BIN="${PICO_BACKUP_ALERT:-$HOME/scripts/edu-backup-alert.py}"
@@ -129,6 +130,16 @@ PY
   nonempty "$out"
 }
 
+keep_failed_backup() {
+  local dir="$1" stamp="$2"
+  mkdir -p "$KEEP_DIR"
+  mv -T -- "$dir" "$KEEP_DIR/$stamp"
+  log "backup kept at $KEEP_DIR/$stamp"
+  find "$KEEP_DIR" -regextype posix-extended -mindepth 1 -maxdepth 1 -type d \
+    -regex '.*/20[0-9]{6}T[0-9]{6}[+-][0-9]{4}' -print0 \
+    | LC_ALL=C sort -zr | tail -z -n +8 | xargs -0 -r rm -rf --
+}
+
 cmd_run() {
   exec 9>"$WORK/run.lock"
   flock -n 9 || fail "another run holds the lock"
@@ -139,7 +150,6 @@ cmd_run() {
   stamp="$(date +%Y%m%dT%H%M%S%z)"
   dir="$WORK/$stamp"
   mkdir -p "$dir"
-  trap 'rm -rf "$dir"' EXIT
 
   log "mongo"
   docker exec "$MONGO" mongodump --archive --gzip --quiet >"$dir/mongo.archive.gz" || fail "mongodump"
@@ -192,11 +202,13 @@ PY
     fi
   done
   log "upload $(du -sh "$dir" | cut -f1) → $REMOTE/$stamp"
+  trap 'keep_failed_backup "$dir" "$stamp"' EXIT
   rclone_cmd copy "$dir" "$REMOTE/$stamp" || fail "upload (see $WORK/rclone.err)"
   # Off-host means the remote has every file at the right size.
   rclone_cmd check "$dir" "$REMOTE/$stamp" --size-only --one-way || fail "remote size check"
   printf '%s\n' "$stamp" >"$dir/COMPLETE"
   rclone_cmd copyto "$dir/COMPLETE" "$REMOTE/$stamp/COMPLETE" || fail "upload COMPLETE"
+  trap 'rm -rf "$dir"' EXIT
   rclone_cmd delete "$REMOTE" --min-age "${KEEP_DAYS}d" --drive-use-trash=false || log "prune skipped"
   rclone_cmd rmdirs "$REMOTE" --leave-root || true
   write_status OK "$stamp $(du -sb "$dir" | cut -f1) bytes"
