@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "longtask-eval.py"
@@ -106,6 +107,22 @@ def test_fake_green_flagged_explicitly() -> None:
     assert with_files.fake_green is False and with_files.ok is True
     table = lte.render_markdown([res, with_files])
     assert "假绿" in table and "| 是 |" in table and "假绿：1" in table
+
+
+def test_png_counts_as_a_produced_artifact() -> None:
+    case = {"id": "PNG", "expect": {"kinds": ["png"]}}
+    arts = [{"id": "image", "kind": "png", "title": "screenshot.png"}]
+    pico = Mock(spec=lte.Pico)
+    pico.download.return_value = b"\x89PNG\r\n\x1a\n"
+    res = lte.CaseResult(case=case["id"])
+
+    lte.score_case(case, arts, pico, res)
+    lte.flag_fake_green(res, "succeeded")
+
+    assert res.artifacts == 1
+    assert res.artifact_kinds == ["png"]
+    assert res.auto_score == res.max_score == 1
+    assert res.ok and not res.fake_green
 
 
 def test_coding_suite_cases_and_checkers() -> None:

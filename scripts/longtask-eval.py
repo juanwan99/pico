@@ -72,7 +72,7 @@ def look_read_call(tool: str, args: dict[str, Any]) -> bool:
 
 CASES_DIR = ROOT / "testdata" / "longtask-eval"
 CHECKS_DIR = CASES_DIR / "checks"
-PRODUCED_KINDS = {"xlsx", "docx", "pptx", "html"}
+PRODUCED_KINDS = {"xlsx", "docx", "pptx", "html", "png"}
 SUITES = {"office": "LT", "coding": "LC", "hard": "LH", "xlong": "LX", "look": "LV"}
 DEFAULT_SUITES = ("office", "coding", "hard")
 
