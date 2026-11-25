@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -101,6 +102,13 @@ class MemoryArtifactStore:
 
     async def list(self, principal: P, *, limit: int):
         return self._rows[::-1][:limit]
+
+    async def list_run_titles(self, principal: P, *, run_id: str) -> dict[str, str]:
+        titles: dict[str, str] = {}
+        for row in reversed(self._rows):
+            if row["run_id"] == run_id:
+                titles.setdefault(row["title"], row["artifact_id"])
+        return titles
 
 
 def _png() -> bytes:
@@ -537,6 +545,63 @@ async def test_file_upload_resolves_latest_title_in_this_run(hands_runtime) -> N
 
 
 @pytest.mark.asyncio
+async def test_upload_title_query_reads_only_this_runs_owned_metadata() -> None:
+    from app.artifact_store import LedgerArtifactStore
+    from app.db import ArtifactRow, Base, TaskRow
+    from sqlalchemy import event
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    owner = P("school-a", "member-a", ["ai:run"])
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    factory = async_sessionmaker(engine)
+    store = LedgerArtifactStore(factory, conversation_id="convo-a")
+    queries: list[str] = []
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def record_select(_conn, _cursor, statement, _params, _context, _executemany):
+        if statement.startswith("SELECT"):
+            queries.append(statement)
+
+    def output(artifact_id: str, run_id: str, day: int) -> ArtifactRow:
+        return ArtifactRow(
+            id=artifact_id, run_id=run_id, title="x.png", inline="payload",
+            created_at=datetime(2026, 11, day, tzinfo=UTC).replace(tzinfo=None),
+        )
+
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with factory.begin() as session:
+            session.add_all([
+                TaskRow(
+                    school_id=owner.school_id, membership_id=owner.membership_id,
+                    conversation_id="convo-a", artifacts=[
+                        output("older", "run-a", 1), output("newest", "run-a", 2),
+                        output("other-run", "run-b", 3),
+                    ],
+                ),
+                TaskRow(
+                    school_id=owner.school_id, membership_id="other-member",
+                    conversation_id="convo-a", artifacts=[output("other-tenant", "run-a", 4)],
+                ),
+                TaskRow(
+                    school_id=owner.school_id, membership_id=owner.membership_id,
+                    conversation_id="convo-b", artifacts=[output("other-convo", "run-a", 5)],
+                ),
+            ])
+
+        assert await store.list_run_titles(owner, run_id="run-a") == {"x.png": "newest"}
+        assert len(queries) == 1
+        selected, _, conditions = queries[0].partition("\nFROM")
+        assert selected.strip() == (
+            "SELECT artifacts.id, artifacts.title, artifacts.run_id, artifacts.created_at"
+        )
+        assert "artifacts.run_id = " in conditions
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_page_file_and_page_fn_from_disk(hands_runtime) -> None:
     """#1242: hang disk files, then call a dotted path; missing / rate-limit fail clearly."""
     from pico_orchestrator.sandbox_persist import write_owner_disk_file
@@ -694,14 +759,21 @@ async def test_navigate_denies_intranet_and_needs_open_session(hands_runtime) ->
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("url", ["file:///workspace/outputs/index.html", "outputs/index.html"])
-async def test_browser_file_url_denial_points_to_preview(hands_runtime, url) -> None:
+@pytest.mark.parametrize(("url", "suggests_preview"), [
+    ("file:///workspace/outputs/index.html", True),
+    ("/workspace/outputs/index.html", True),
+    ("outputs/index.html", True),
+    ("./index.html", True),
+    ("www.example.com/login", False),
+    ("zhidao.baidu.com/question/1.html", False),
+])
+async def test_browser_file_url_denial_points_to_preview(hands_runtime, url, suggests_preview) -> None:
     owner = P("school-a", "member-a", ["ai:run"])
     for tool in ("sandbox_browser_open", "sandbox_browser_navigate"):
         with pytest.raises(ToolError) as exc:
             await _gw().invoke(owner, tool, {"url": url})
         assert exc.value.code == "web.denied"
-        assert "sandbox_preview_inspect" in exc.value.message
+        assert ("sandbox_preview_inspect" in exc.value.message) == suggests_preview
     runtime, _ = hands_runtime
     assert not runtime._sessions
 
@@ -731,6 +803,13 @@ async def test_act_http_errors_report_the_sidecar_reason(http_sidecar) -> None:
     await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
     listed = await gw.invoke(owner, "sandbox_browser_tabs", {"action": "list"})
     assert len(listed["tabs"]) == 1
+
+    with pytest.raises(ToolError) as exc:
+        await gw.invoke(
+            owner, "sandbox_browser_file_upload", {"ref": "e1", "filenames": ["missing.png"]}
+        )
+    assert exc.value.code == "sandbox.file_not_found"
+    assert "老师盘上没有这个文件" in exc.value.message
 
     identity = {"school_id": owner.school_id, "membership_id": owner.membership_id}
     path = "/v1/internal/sessions/current/act"

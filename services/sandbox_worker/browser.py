@@ -337,6 +337,16 @@ def mask_secret_values(snapshot: str, secrets: list[str]) -> str:
     return out
 
 
+def _mask_action_values(detail: str, values: Iterable[str]) -> str:
+    variants = {
+        variant
+        for value in values
+        if value
+        for variant in (value, json.dumps(value, ensure_ascii=False)[1:-1], html.escape(value))
+    }
+    return mask_secret_values(detail, sorted(variants, key=len, reverse=True))
+
+
 # Code / password shaped: 4–32 chars, no spaces, no CJK. Mail bodies and names stay
 # readable so the AI can check what it wrote.
 _CODE_LIKE = re.compile(r"[\x21-\x7e]{4,32}")
@@ -897,17 +907,17 @@ class PlaywrightPage:
         message: str,
         *,
         input_type: str = "",
-        values: Iterable[str] = (),
+        values: tuple[str, ...] | list[str] = (),
     ) -> ToolError:
         # Playwright includes call arguments and DOM previews in the call log.
-        masked_values = {
-            variant
-            for value in [*self._typed, *values, *await self._password_values()]
-            if value
-            for variant in (value, json.dumps(value, ensure_ascii=False)[1:-1], html.escape(value))
-        }
-        detail = mask_secret_values(str(exc), sorted(masked_values, key=len, reverse=True))
-        logger.warning("browser action failed: %s\n%s", message, detail)
+        typed = [*self._typed, *values]
+        passwords = await self._password_values()
+        if input_type == "password":
+            passwords.extend(values)
+        detail = str(exc)
+        logger.warning(
+            "browser action failed: %s\n%s", message, _mask_action_values(detail, [*typed, *passwords])
+        )
         first_line, _, call_log = detail.strip().partition("\n")
         for line in reversed(call_log.splitlines()):
             reason = _ACTIONABILITY_REASONS.search(line.strip())
@@ -915,7 +925,8 @@ class PlaywrightPage:
                 first_line += f"（{reason.group()}）"
                 break
         if first_line:
-            message += f"。{first_line}"
+            sensitive = [*passwords, *(v for v in typed if _CODE_LIKE.fullmatch(v))]
+            message += f"。{_mask_action_values(first_line, sensitive)}"
         expected = _DATE_INPUT_FORMATS.get(input_type)
         if expected:
             message += f"。这个输入框要求 {expected} 格式。"
@@ -986,7 +997,9 @@ class PlaywrightPage:
                 await loc.press("Enter", timeout=5_000)
         except PlaywrightError as exc:
             input_type = info.get("type", "") if info.get("tag") == "INPUT" else ""
-            raise await self._action_error(exc, "无法输入或提交文字", input_type=input_type) from None
+            raise await self._action_error(
+                exc, "无法输入或提交文字", input_type=input_type, values=[text]
+            ) from None
         if submit:
             await self._settle(before)
 
@@ -1006,15 +1019,16 @@ class PlaywrightPage:
             tag = str(info.get("tag") or "").upper()
             kind = str(info.get("type") or "").lower()
             role = str(info.get("role") or "").lower()
-            picks: list[str] = []
+            entered: list[str] = []
             try:
                 if kind in {"checkbox", "radio"} or role in CHECK_ROLES:
                     await loc.set_checked(is_checked_value(value), timeout=5_000)
                 elif tag == "SELECT":
-                    picks = [str(v) for v in value] if isinstance(value, list) else [str(value)]
-                    await self._select_options(loc, picks)
+                    entered = [str(v) for v in value] if isinstance(value, list) else [str(value)]
+                    await self._select_options(loc, entered)
                 else:
                     text = "" if value is None else str(value)
+                    entered = [text]
                     self._typed.append(text)
                     await loc.fill(text, timeout=5_000)
             except PlaywrightError as exc:
@@ -1022,7 +1036,7 @@ class PlaywrightPage:
                     exc,
                     f"第 {i} 格（{ref}）填不进去，前面 {i - 1} 格已填",
                     input_type=kind if tag == "INPUT" else "",
-                    values=picks,
+                    values=entered,
                 ) from None
 
     async def upload_files(self, ref: str, files: list[tuple[str, str, bytes]]) -> None:

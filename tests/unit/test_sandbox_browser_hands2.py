@@ -392,6 +392,9 @@ async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path, caplog)
             "who": "张三", "pw": "hunter2", "agree": "on", "size": "l",
             "grade": "g2", "note": "第二行", "remind": "true",
         }
+        name = _ref(snap, "textbox", "姓名")
+        await surface.fill_form([{"ref": name, "value": "5"}])
+        await surface.type_ref(name, "a", submit=False)
         date = _ref(snap, "textbox", "日期")
         bad_date = "2026/11/24"
         with pytest.raises(ToolError) as exc:
@@ -410,7 +413,8 @@ async def test_real_chromium_fill_form_and_upload(monkeypatch, tmp_path, caplog)
             await surface.select_ref(date, ["private-option"])
         with pytest.raises(ToolError, match="element is not enabled"):
             await surface.click_ref(_ref(snap, "button", "不可点击"))
-        assert "Call log:" in caplog.text
+        assert f"Timeout {browser_mod.SECRET_MASK}000ms" in caplog.text
+        assert f"C{browser_mod.SECRET_MASK}ll log:" in caplog.text
         assert bad_date not in caplog.text and "hunter2" not in caplog.text
         assert "private-option" not in caplog.text
         with pytest.raises(ToolError):

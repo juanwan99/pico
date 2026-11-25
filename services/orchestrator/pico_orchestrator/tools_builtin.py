@@ -135,6 +135,9 @@ class _UnavailableArtifactStore:
     async def list(self, *_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
         raise ToolError("artifact.store_unavailable", "Artifact ledger is unavailable")
 
+    async def list_run_titles(self, *_args: Any, **_kwargs: Any) -> dict[str, str]:
+        raise ToolError("artifact.store_unavailable", "Artifact ledger is unavailable")
+
 
 def _required_text(args: dict[str, Any], key: str, *, maximum: int) -> str:
     value = args.get(key)
@@ -2021,11 +2024,7 @@ def _workspace_handlers(
         except ToolError as exc:
             if exc.code != "web.denied":
                 raise
-            parts = urlsplit(url)
-            local_path = not (parts.scheme or parts.netloc) and (
-                "/" in parts.path or parts.path.lower().endswith((".html", ".htm"))
-            )
-            if parts.scheme == "file" or local_path:
+            if urlsplit(url).scheme == "file" or url.startswith(("/", "./", "outputs/")):
                 raise ToolError(
                     exc.code, f"{exc.message}。看本次 Run 生成的 HTML 用 sandbox_preview_inspect。"
                 ) from exc

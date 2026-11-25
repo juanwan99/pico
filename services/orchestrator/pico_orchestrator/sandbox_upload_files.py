@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import PurePosixPath
+from typing import Protocol, cast
 
 from pico_orchestrator.gateway import ArtifactStore, Principal, ToolError
-from pico_orchestrator.sandbox_s1 import deny_secret_filename
+from pico_orchestrator.sandbox_s1 import deny_secret_filename, with_io_timeout
 
 _OUTPUT_PARENTS = {PurePosixPath(p) for p in (".", "outputs", "/workspace/outputs")}
 _SUGGESTION_COUNT = 5
+
+
+class _RunArtifactStore(Protocol):
+    async def list_run_titles(self, principal: Principal, *, run_id: str) -> dict[str, str]: ...
 
 
 async def resolve_upload_filenames(
@@ -21,12 +25,10 @@ async def resolve_upload_filenames(
     if not run_id or not filenames:
         return filenames, [], {}
 
-    # list() sorts newest first. Filter by run before limiting the suggestions,
-    # so another run's artifacts cannot shadow a title from this run.
-    artifacts: dict[str, str] = {}
-    for row in await store.list(principal, limit=sys.maxsize):
-        if row.get("run_id") == run_id and row.get("title") and row.get("artifact_id"):
-            artifacts.setdefault(row["title"], row["artifact_id"])
+    artifacts = await with_io_timeout(
+        cast(_RunArtifactStore, store).list_run_titles(principal, run_id=run_id),
+        what="list current run artifact titles",
+    )
 
     disk_names: list[str] = []
     artifact_ids: list[str] = []
