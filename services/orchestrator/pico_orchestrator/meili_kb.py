@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -998,32 +999,64 @@ class MeiliIndex:
         wait_s: float = 45.0,
     ) -> Any:
         """POST/PATCH/DELETE that must land. 202 without a succeeded task is fake-green."""
+        body = self._submit(method, path, payload, timeout=timeout)
+        if isinstance(body, dict) and body.get("taskUid") is not None:
+            self._wait_task(int(body["taskUid"]), timeout_s=wait_s)
+        return body
+
+    def _submit(self, method: str, path: str, payload: Any, *, timeout: float) -> Any:
         status, body = self._call(method, path, payload, timeout=timeout)
         if status >= 400:
             raise RuntimeError(f"meili {method} {path} http {status}")
-        if isinstance(body, dict) and body.get("taskUid") is not None:
-            self._wait_task(int(body["taskUid"]), timeout_s=wait_s)
         return body
 
     def _wait_task(self, task_uid: int, *, timeout_s: float = 45.0) -> None:
         import time
 
         deadline = time.monotonic() + max(1.0, timeout_s)
-        last: dict[str, Any] = {}
+        state = "unknown"
         while time.monotonic() < deadline:
-            status, body = self._call("GET", f"/tasks/{task_uid}", timeout=3.0)
-            if status >= 400 or not isinstance(body, dict):
-                raise RuntimeError(f"meili task {task_uid} http {status}")
-            last = body
-            state = str(body.get("status") or "")
+            state = self._task_status(task_uid)
             if state == "succeeded":
                 return
-            if state in {"failed", "canceled"}:
-                err = body.get("error") if isinstance(body.get("error"), dict) else {}
-                code = str(err.get("code") or state)
-                raise RuntimeError(f"meili task {task_uid} {state}: {code}")
             time.sleep(0.2)
-        raise RuntimeError(f"meili task {task_uid} timeout ({last.get('status') or 'unknown'})")
+        raise RuntimeError(f"meili task {task_uid} timeout ({state})")
+
+    def _task_status(self, task_uid: int) -> str:
+        status, body = self._call("GET", f"/tasks/{task_uid}", timeout=3.0)
+        if status >= 400 or not isinstance(body, dict):
+            raise RuntimeError(f"meili task {task_uid} http {status}")
+        state = str(body.get("status") or "")
+        if state in {"failed", "canceled"}:
+            err = body.get("error") if isinstance(body.get("error"), dict) else {}
+            code = str(err.get("code") or state)
+            raise RuntimeError(f"meili task {task_uid} {state}: {code}")
+        if state not in {"enqueued", "processing", "succeeded"}:
+            raise RuntimeError(f"meili task {task_uid} unexpected status: {state!r}")
+        return state
+
+    def _has_pending_tasks(self) -> bool:
+        status, body = self._call(
+            "GET", f"/tasks?indexUids={INDEX}&statuses=enqueued,processing&limit=1"
+        )
+        if status != 200:
+            raise RuntimeError(f"meili pending tasks http {status}")
+        return bool(body["results"])
+
+    async def wait_until_idle(self) -> None:
+        # An API restart can leave the previously submitted batch running in Meili.
+        while await asyncio.to_thread(self._has_pending_tasks):
+            await asyncio.sleep(1)
+
+    async def upsert_rebuild_batch(self, docs: list[dict[str, Any]]) -> None:
+        task_uid = await asyncio.to_thread(self._submit_rebuild_batch, docs)
+        while await asyncio.to_thread(self._task_status, task_uid) != "succeeded":
+            await asyncio.sleep(1)
+
+    def _submit_rebuild_batch(self, docs: list[dict[str, Any]]) -> int:
+        self.ensure()
+        body = self._submit("POST", f"/indexes/{INDEX}/documents", docs, timeout=30.0)
+        return int(body["taskUid"])
 
     def upsert(self, doc: dict[str, Any]) -> None:
         if not doc.get("chunk_id") and not doc.get("artifact_id"):
@@ -1207,18 +1240,21 @@ class MeiliIndex:
         return len(hits) if isinstance(hits, list) else 0
 
     def artifact_ids(self, *, page: int = 1000) -> set[str]:
-        """Every artifact_id currently projected. Facets cap at maxValuesPerFacet,
-        so page through /documents/fetch instead. Raises on any HTTP failure."""
+        """Artifacts whose first chunk is present. Rebuild writes that chunk last."""
         out: set[str] = set()
         offset = 0
         while True:
             status, payload = self._call(
                 "POST",
                 f"/indexes/{INDEX}/documents/fetch",
-                {"fields": ["artifact_id"], "limit": page, "offset": offset},
+                {"fields": ["artifact_id", "seq"], "limit": page, "offset": offset},
                 timeout=15.0,
             )
-            if status == 404:
+            if (
+                status == 404
+                and isinstance(payload, dict)
+                and payload.get("code") == "index_not_found"
+            ):
                 return out
             if status >= 400 or not isinstance(payload, dict):
                 raise RuntimeError(f"meili documents/fetch http {status}")
@@ -1226,25 +1262,13 @@ class MeiliIndex:
             if not isinstance(results, list):
                 raise TypeError("meili documents/fetch malformed")
             for row in results:
-                if isinstance(row, dict):
+                if isinstance(row, dict) and row.get("seq", 0) == 0:
                     aid = str(row.get("artifact_id") or "").strip()
                     if aid:
                         out.add(aid)
             if len(results) < page:
                 return out
             offset += page
-
-
-def indexed_artifact_ids(*, client: HttpClient | None = None) -> set[str] | None:
-    """Artifacts already in Meili, or None when that cannot be known.
-    None must make callers fall back to a full rebuild — never to skipping."""
-    if not meili_configured():
-        return None
-    try:
-        return MeiliIndex(client).artifact_ids()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("meili artifact_ids failed: %s", type(exc).__name__)
-        return None
 
 
 def upsert_material(doc: dict[str, Any], *, client: HttpClient | None = None) -> bool:

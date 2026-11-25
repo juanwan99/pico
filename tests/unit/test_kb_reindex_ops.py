@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from pathlib import Path
+from threading import Event
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -49,9 +53,15 @@ def test_reindex_all_allows_eth0_hairpin_on_loopback_socket(
             self.client = _Client()
             self.scope = {"server": ("127.0.0.1", 18765)}
 
-    out = asyncio.run(kb_reindex_all(_Req()))  # type: ignore[arg-type]
-    assert out["ok"] is True
-    assert out["indexed"] == 2
+    async def queue_and_wait():
+        request = _Req()
+        request.app = app
+        out = await kb_reindex_all(request)
+        await app.state.kb_reindex_task
+        return out
+
+    out = asyncio.run(queue_and_wait())
+    assert out == {"ok": True, "queued": True, "mode": "incremental"}
     rebuild.assert_awaited_once_with(None, force=False)
 
 
@@ -98,20 +108,20 @@ def test_health_includes_meili_fields(monkeypatch: pytest.MonkeyPatch) -> None:
 class _FetchClient:
     """Fake Meili: /documents/fetch pages over the given artifact ids."""
 
-    def __init__(self, ids: list[str], *, status: int = 200) -> None:
+    def __init__(self, ids: list[str | dict]) -> None:
         self.ids = ids
-        self.status = status
         self.calls: list[dict] = []
 
     def request(self, method, url, *, json=None, headers=None, timeout=8.0):
         assert method == "POST" and url.endswith("/documents/fetch")
         self.calls.append(dict(json or {}))
-        if self.status != 200:
-            return self.status, {"message": "boom"}
         offset = int(json["offset"])
         limit = int(json["limit"])
         page = self.ids[offset : offset + limit]
-        return 200, {"results": [{"artifact_id": a} for a in page], "total": len(self.ids)}
+        return 200, {
+            "results": [a if isinstance(a, dict) else {"artifact_id": a} for a in page],
+            "total": len(self.ids),
+        }
 
 
 def test_meili_artifact_ids_pages_past_facet_cap(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,14 +136,17 @@ def test_meili_artifact_ids_pages_past_facet_cap(monkeypatch: pytest.MonkeyPatch
     assert [c["offset"] for c in client.calls] == [0, 100, 200]
 
 
-def test_indexed_artifact_ids_returns_none_on_http_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_artifact_ids_ignores_incomplete_artifacts():
     from pico_orchestrator import meili_kb
 
-    monkeypatch.setenv("PICO_MEILI_URL", "http://127.0.0.1:7700")
-    monkeypatch.setenv("MEILI_MASTER_KEY", "k")
-    assert meili_kb.indexed_artifact_ids(client=_FetchClient([], status=500)) is None
+    client = _FetchClient([
+        {"artifact_id": "complete", "seq": 2},
+        {"artifact_id": "partial", "seq": 1},
+        {"artifact_id": "complete", "seq": 0},
+        {"artifact_id": "legacy"},
+    ])
+    assert meili_kb.MeiliIndex(client).artifact_ids(page=2) == {"complete", "legacy"}
+    assert all(call["fields"] == ["artifact_id", "seq"] for call in client.calls)
 
 
 class _Art:
@@ -154,10 +167,15 @@ class _Task:
     title = "edu-read · 旧.docx"
 
 
-def _fake_session_factory(rows):
+def _fake_session_factory(rows, body_reads):
+    from app.db import ArtifactRow
+
     class _Result:
+        def __init__(self, entries):
+            self.entries = entries
+
         def all(self):
-            return rows
+            return self.entries
 
     class _Session:
         async def __aenter__(self):
@@ -167,7 +185,12 @@ def _fake_session_factory(rows):
             return False
 
         async def execute(self, stmt):
-            return _Result()
+            if stmt.column_descriptions[0]["expr"] is ArtifactRow:
+                return _Result(rows)
+            ids = set(stmt.compile().params["id_1"])
+            body_reads.update(ids)
+            return _Result([(artifact.id, artifact.inline) for artifact, _ in rows
+                            if artifact.id in ids])
 
     return lambda: _Session
 
@@ -176,34 +199,43 @@ def _wire_rebuild(monkeypatch: pytest.MonkeyPatch, rows, known):
     from app import kb_rebuild
 
     chunked: list[str] = []
-    monkeypatch.setattr(kb_rebuild, "session_factory", _fake_session_factory(rows))
-    monkeypatch.setattr(kb_rebuild, "indexed_artifact_ids", lambda: known)
-    monkeypatch.setattr(kb_rebuild, "is_lab_school", lambda _s: False)
-    monkeypatch.setattr(kb_rebuild, "is_material", lambda **_k: True)
-    monkeypatch.setattr(kb_rebuild, "upsert_documents", lambda docs, **_k: True)
+    body_reads: set[str] = set()
+    def artifact_ids():
+        if isinstance(known, Exception):
+            raise known
+        return known
+
+    index = SimpleNamespace(
+        wait_until_idle=AsyncMock(),
+        upsert_rebuild_batch=AsyncMock(),
+        artifact_ids=artifact_ids,
+    )
+    monkeypatch.setattr(kb_rebuild, "MeiliIndex", lambda: index)
+    monkeypatch.setattr(kb_rebuild, "session_factory", _fake_session_factory(rows, body_reads))
 
     def _chunks(_p, *, artifact_id, **_k):
         chunked.append(artifact_id)
         return [{"id": f"{artifact_id}:0", "artifact_id": artifact_id}]
 
     monkeypatch.setattr(kb_rebuild, "material_chunk_docs", _chunks)
-    return kb_rebuild, chunked
+    return kb_rebuild, chunked, body_reads, index
 
 
 def test_rebuild_incremental_skips_already_indexed(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = [(_Art("old", "旧.docx"), _Task()), (_Art("new", "新.docx"), _Task())]
-    kb_rebuild, chunked = _wire_rebuild(monkeypatch, rows, {"old"})
+    kb_rebuild, chunked, body_reads, _ = _wire_rebuild(monkeypatch, rows, {"old"})
 
     out = asyncio.run(kb_rebuild.rebuild_materials(None))
     assert out["mode"] == "incremental"
     assert out["indexed"] == 1 and out["unchanged"] == 1 and out["skipped"] == 0
     assert out["total"] == 2
     assert chunked == ["new"]
+    assert body_reads == {"new"}
 
 
 def test_rebuild_force_rechunks_everything(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = [(_Art("old", "旧.docx"), _Task()), (_Art("new", "新.docx"), _Task())]
-    kb_rebuild, chunked = _wire_rebuild(monkeypatch, rows, {"old"})
+    kb_rebuild, chunked, _, _ = _wire_rebuild(monkeypatch, rows, {"old"})
 
     out = asyncio.run(kb_rebuild.rebuild_materials(None, force=True))
     assert out["mode"] == "full"
@@ -211,34 +243,121 @@ def test_rebuild_force_rechunks_everything(monkeypatch: pytest.MonkeyPatch) -> N
     assert sorted(chunked) == ["new", "old"]
 
 
-def test_rebuild_falls_back_to_full_when_index_unreadable(
+def test_rebuild_stops_when_index_unreadable(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [(_Art("old", "旧.docx"), _Task())]
+    error = RuntimeError("meili documents/fetch http 500")
+    kb_rebuild, chunked, body_reads, index = _wire_rebuild(monkeypatch, rows, error)
+
+    with pytest.raises(RuntimeError, match="documents/fetch http 500"):
+        asyncio.run(kb_rebuild.rebuild_materials())
+    assert not chunked and not body_reads
+    index.upsert_rebuild_batch.assert_not_awaited()
+
+
+async def test_meili_rebuild_waits_for_a_slow_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator import meili_kb
+
+    states = iter(["enqueued", *(["processing"] * 61), "succeeded"])
+    calls = []
+
+    class SlowMeili:
+        has_older_task = True
+
+        def request(self, method, url, **_):
+            calls.append(method)
+            if "/tasks?" in url:
+                results = [{"uid": 10}] if self.has_older_task else []
+                self.has_older_task = False
+                return 200, {"results": results}
+            if method == "POST":
+                return 202, {"taskUid": 11}
+            assert url.endswith("/tasks/11")
+            return 200, {"status": next(states)}
+
+    sleep = AsyncMock()
+    monkeypatch.setattr(meili_kb, "asyncio", SimpleNamespace(to_thread=asyncio.to_thread, sleep=sleep))
+    index = meili_kb.MeiliIndex(SlowMeili())
+    monkeypatch.setattr(index, "ensure", lambda: None)
+
+    await index.wait_until_idle()
+    await index.upsert_rebuild_batch([{"chunk_id": "upload_0000"}])
+    assert calls == ["GET", "GET", "POST", *(["GET"] * 63)]
+    assert sleep.await_count == 63
+
+
+async def test_reindex_all_force_ack_and_health_while_meili_is_busy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    rows = [(_Art("old", "旧.docx"), _Task())]
-    kb_rebuild, chunked = _wire_rebuild(monkeypatch, rows, None)
+    from pico_orchestrator import meili_kb
 
-    out = asyncio.run(kb_rebuild.rebuild_materials(None))
-    assert out["mode"] == "full"
-    assert out["indexed"] == 1 and chunked == ["old"]
+    rows = [(_Art("upload", "新.docx"), _Task())]
+    kb_rebuild, _, _, _ = _wire_rebuild(monkeypatch, rows, {"upload"})
+    monkeypatch.setattr(app.state, "kb_reindex_task", None, raising=False)
+    started = Event()
+    release = Event()
+
+    class SlowMeili:
+        def request(self, method, url, *, json=None, **_):
+            if url.endswith("/health"):
+                return 200, {"status": "available"}
+            if "/tasks?" in url:
+                return 200, {"results": []}
+            if url.endswith("/documents"):
+                assert method == "POST" and json[0]["artifact_id"] == "upload"
+                return 202, {"taskUid": 11}
+            assert url.endswith("/tasks/11")
+            started.set()
+            assert release.wait(5)
+            return 200, {"status": "succeeded"}
+
+    index = meili_kb.MeiliIndex(SlowMeili())
+    monkeypatch.setattr(index, "ensure", lambda: None)
+    monkeypatch.setattr(kb_rebuild, "MeiliIndex", lambda: index)
+    monkeypatch.setattr(meili_kb, "MeiliIndex", lambda: index)
+    monkeypatch.setenv("MEILI_MASTER_KEY", "test-key")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:18765"
+    ) as client:
+        queued = await asyncio.wait_for(client.post("/v1/kb/reindex-all?force=1"), 1)
+        assert queued.status_code == 202
+        assert queued.json() == {"ok": True, "queued": True, "mode": "full"}
+
+        try:
+            assert await asyncio.to_thread(started.wait, 2)
+            started_at = time.monotonic()
+            health = await asyncio.wait_for(client.get("/health"), 1)
+            assert health.status_code == 200 and health.json()["ok"] is True
+            assert health.json()["meili_reachable"] is True
+            assert time.monotonic() - started_at < 1
+            assert (await client.post("/v1/kb/reindex-all")).status_code == 409
+            assert not app.state.kb_reindex_task.done()
+        finally:
+            release.set()
+            await app.state.kb_reindex_task
 
 
-def test_reindex_all_force_query_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
-    rebuild = AsyncMock(return_value={"ok": True, "mode": "full"})
-    monkeypatch.setattr("app.main.rebuild_materials", rebuild)
+async def test_rebuild_caps_batch_size_and_stops_on_failed_task(monkeypatch: pytest.MonkeyPatch):
+    rows = [(_Art("upload", "新.docx"), _Task())]
+    kb_rebuild, _, _, index = _wire_rebuild(monkeypatch, rows, set())
+    size = kb_rebuild._BATCH_SIZE
+    monkeypatch.setattr(
+        kb_rebuild, "material_chunk_docs",
+        lambda *_args, **_kwargs: [{"seq": seq} for seq in range(2 * size + 1)],
+    )
+    pace = AsyncMock()
+    monkeypatch.setattr(kb_rebuild._Pace, "before", pace)
+    index.upsert_rebuild_batch.side_effect = [None, RuntimeError("meili task canceled")]
 
-    class _Client:
-        host = "127.0.0.1"
-
-    class _Req:
-        def __init__(self) -> None:
-            self.client = _Client()
-            self.scope = {"server": ("127.0.0.1", 18765)}
-
-    asyncio.run(kb_reindex_all(_Req(), force=True))  # type: ignore[arg-type]
-    rebuild.assert_awaited_once_with(None, force=True)
-    rebuild.reset_mock()
-    asyncio.run(kb_reindex_all(_Req()))  # type: ignore[arg-type]
-    rebuild.assert_awaited_once_with(None, force=False)
+    with pytest.raises(RuntimeError, match="task canceled"):
+        await kb_rebuild.rebuild_materials()
+    assert [call.args[0] for call in pace.await_args_list] == [size, size]
+    batches = [call.args[0] for call in index.upsert_rebuild_batch.await_args_list]
+    assert [[doc["seq"] for doc in batch] for batch in batches] == [
+        list(range(2 * size, size, -1)),
+        list(range(size, 0, -1)),
+    ]
 
 
 def test_rebuild_leaves_pico_drafts_out(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -253,8 +372,9 @@ def test_rebuild_leaves_pico_drafts_out(monkeypatch: pytest.MonkeyPatch) -> None
         (_Art("draft", "讲义.docx", origin="pico"), _RunTask()),
         (_Art("legacy-draft", "旧讲义.docx", origin=""), _RunTask()),
     ]
-    kb_rebuild, chunked = _wire_rebuild(monkeypatch, rows, set())
+    kb_rebuild, chunked, body_reads, _ = _wire_rebuild(monkeypatch, rows, set())
 
     out = asyncio.run(kb_rebuild.rebuild_materials(None, force=True))
     assert sorted(chunked) == ["legacy-up", "up"]
+    assert body_reads == {"legacy-up", "up"}
     assert out["skipped"] == 2

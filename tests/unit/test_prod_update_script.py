@@ -69,9 +69,8 @@ def _fake_runtime(
     login_code: str = "200",
     login_network_fail: bool = False,
     login_failures_before_success: int = 0,
-    reindex_http: str = "200",
-    reindex_body: str = '{"ok":true,"indexed":1,"skipped":0,"total":1}',
-    meili_docs: int = 1,
+    reindex_http: str = "202",
+    reindex_body: str = '{"ok":true,"queued":true,"mode":"incremental"}',
     office_down: bool = False,
     leftover_volumes: tuple[str, ...] = (),
     volume_rm_fails: bool = False,
@@ -226,7 +225,8 @@ def _fake_runtime(
         # impl reads /health from stdout; the smoke gate uses `-o file -w %{http_code}`.
         "    if [ -n \"$out_file\" ]; then printf '%s' \"$health_body\" >\"$out_file\"; printf '200'; "
         "else printf '%s' \"$health_body\"; fi ;;\n"
-        "  */kb/reindex-all)\n"
+        "  */kb/reindex-all|*/kb/reindex-all?force=1)\n"
+        '    printf "%s\n" "$*" >>"$here/reindex-requests";\n'
         "    if [ -n \"$out_file\" ]; then printf '%s' '"
         + reindex_body
         + "' >\"$out_file\"; fi\n"
@@ -234,12 +234,7 @@ def _fake_runtime(
         + reindex_http
         + "'\n"
         "    ;;\n"
-        "  */indexes/pico_materials/stats)\n"
-        "    if [ -n \"$out_file\" ]; then printf '%s' '{\"numberOfDocuments\":"
-        + str(int(meili_docs))
-        + "}' >\"$out_file\"; fi\n"
-        "    printf '200'\n"
-        "    ;;\n"
+        "  */indexes/pico_materials/stats) exit 7 ;;\n"
         + login_body
         # ---- E2E smoke gate endpoints (scripts/e2e-smoke.sh --prod) ----
         + "  */api/pico/tip)\n"
@@ -570,13 +565,27 @@ def test_prod_update_refuses_kb_reindex_failure(tmp_path: Path) -> None:
     assert "[pico] done" not in result.stdout
 
 
-def test_prod_update_refuses_empty_meili_after_reindex(tmp_path: Path) -> None:
+def test_prod_update_requires_enqueue_acknowledgment(tmp_path: Path) -> None:
     production, sha = _production_checkout(tmp_path)
-    bin_dir = _fake_runtime(tmp_path, meili_docs=0)
+    bin_dir = _fake_runtime(tmp_path, reindex_body='{"ok":true,"queued":false}')
     result = _run_prod_update(production, sha, bin_dir)
     assert result.returncode == 10
-    assert "Meili has 0 documents after reindex" in result.stderr
+    assert "kb reindex was not queued" in result.stderr
     assert "[pico] done" not in result.stdout
+
+
+def test_prod_update_force_enqueues_only_one_rebuild(tmp_path: Path, monkeypatch) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, reindex_body='{"ok":true,"queued":true,"mode":"full"}')
+    monkeypatch.setenv("PICO_KB_REINDEX_FORCE", "1")
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "kb reindex queued mode=full" in result.stdout
+    requests = (bin_dir / "reindex-requests").read_text().splitlines()
+    assert len(requests) == 1
+    assert "--max-time 8 -X POST" in requests[0]
+    assert requests[0].endswith("/v1/kb/reindex-all?force=1")
+    assert "smoke 12/12 PASS (prod)" in result.stdout
 
 
 def test_prod_update_ui_readiness_uses_librechat_url_default(tmp_path: Path) -> None:
@@ -586,7 +595,7 @@ def test_prod_update_ui_readiness_uses_librechat_url_default(tmp_path: Path) -> 
     assert result.returncode == 0, result.stderr
     assert "UI readiness: waiting for http://127.0.0.1:18088/login HTTP 200" in result.stdout
     assert "8080/login" not in result.stdout
-    assert "kb reindex ok" in result.stdout
+    assert "kb reindex queued mode=incremental" in result.stdout
 
 
 def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) -> None:

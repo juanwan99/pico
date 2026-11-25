@@ -3,25 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
-import time
 from typing import Any
 
-from pico_orchestrator.meili_kb import (
-    indexed_artifact_ids,
-    is_lab_school,
-    is_material,
-    material_chunk_docs,
-    upsert_documents,
-)
+from pico_orchestrator.meili_kb import MeiliIndex, is_lab_school, is_material, material_chunk_docs
 from sqlalchemy import select
+from sqlalchemy.orm import load_only
 
 from app.artifact_store import decode_artifact_payload
 from app.auth import Principal
 from app.db import ArtifactRow, TaskRow, is_teacher_material, session_factory
 
-_FLUSH = 80
+logger = logging.getLogger(__name__)
+_BATCH_SIZE = 20
 _PER_MIN = 600
+_rebuild_lock = asyncio.Lock()
 
 
 def rebuild_per_min() -> int:
@@ -32,21 +29,38 @@ def rebuild_per_min() -> int:
 
 
 class _Pace:
-    """Chunks written per minute (pico#1271). Each chunk is one embedding request
-    Meili makes to New API; 09-16's full ingest hit ch5 with ~2,100 a minute. The
-    first minute's worth goes at once, so a deploy's small incremental pass
-    never waits; a full rebuild (~72k chunks) takes about two hours."""
+    """Leave a write-free interval after each batch, sized by its chunk count."""
 
     def __init__(self, per_min: int) -> None:
         self.per_min = per_min
-        self.sent = 0
-        self.t0 = time.monotonic()
+        self.delay = 0.0
 
-    async def after(self, n: int) -> None:
-        self.sent += n
-        wait = (self.sent - self.per_min) * 60.0 / self.per_min - (time.monotonic() - self.t0)
-        if wait > 0:
-            await asyncio.sleep(wait)
+    async def before(self, n: int) -> None:
+        if self.delay > 0:
+            await asyncio.sleep(self.delay)
+        self.delay = n * 60.0 / self.per_min
+
+
+def _chunk_artifact(
+    artifact: ArtifactRow,
+    task: TaskRow,
+    inline: str | None,
+    stored_text: str | None,
+) -> list[dict[str, Any]]:
+    content = (
+        decode_artifact_payload(inline, artifact.content_encoding)
+        if artifact.content_encoding == "base64"
+        else inline or ""
+    )
+    return material_chunk_docs(
+        task,
+        artifact_id=artifact.id,
+        title=artifact.title,
+        kind=artifact.kind,
+        content=content,
+        created_at=artifact.created_at.isoformat() if artifact.created_at else None,
+        stored_text=stored_text,
+    )
 
 
 async def rebuild_materials(
@@ -54,107 +68,116 @@ async def rebuild_materials(
     *,
     force: bool = False,
 ) -> dict[str, Any]:
-    """Project ledger materials into Meili.
+    """Project ledger materials into Meili, one completed batch at a time."""
+    async with _rebuild_lock:
+        return await _rebuild_materials(principal, force=force)
 
-    Incremental by default: artifacts whose chunks are already in the index are
-    left alone (``unchanged``), so a deploy only chunks what is new. ``force``
-    re-chunks everything (needed after chunker/schema changes). If the set of
-    indexed ids cannot be read, fall back to a full pass rather than skip.
-    """
+
+async def _rebuild_materials(principal: Principal | None, *, force: bool) -> dict[str, Any]:
+    idx = MeiliIndex()
+    await idx.wait_until_idle()
+    known = set() if force else await asyncio.to_thread(idx.artifact_ids)
+
     factory = session_factory()
-    indexed = 0
-    skipped = 0
-    unchanged = 0
-    pending: list[dict[str, Any]] = []
-    pending_arts = 0
-    known: set[str] | None = None if force else indexed_artifact_ids()
-    mode = "incremental" if known is not None else "full"
+    stmt = (
+        select(ArtifactRow, TaskRow)
+        .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+        .options(
+            load_only(
+                ArtifactRow.id,
+                ArtifactRow.title,
+                ArtifactRow.kind,
+                ArtifactRow.origin,
+                ArtifactRow.content_encoding,
+                ArtifactRow.created_at,
+                raiseload=True,
+            ),
+            load_only(TaskRow.id, TaskRow.title, TaskRow.school_id, TaskRow.membership_id),
+        )
+    )
+    if principal is not None:
+        stmt = stmt.where(
+            TaskRow.school_id == principal.school_id,
+            TaskRow.membership_id == principal.membership_id,
+        )
     async with factory() as session:
-        stmt = select(ArtifactRow, TaskRow).join(TaskRow, ArtifactRow.task_id == TaskRow.id)
-        if principal is not None:
-            stmt = stmt.where(
-                TaskRow.school_id == principal.school_id,
-                TaskRow.membership_id == principal.membership_id,
-            )
         rows = (await session.execute(stmt)).all()
 
-    stored_by_task_title: dict[tuple[str, str], str] = {}
+    stored_by_task_title: dict[tuple[str, str], list[str]] = {}
     for artifact, task in rows:
-        if str(artifact.kind or "") != "kb_text":
-            continue
-        if (artifact.content_encoding or "utf8") != "utf8":
-            continue
-        body = str(artifact.inline or "").strip()
-        if not body:
-            continue
-        stored_by_task_title[(str(task.id), str(artifact.title or ""))] = body
+        if artifact.kind == "kb_text" and (artifact.content_encoding or "utf8") == "utf8":
+            stored_by_task_title.setdefault((task.id, artifact.title), []).append(artifact.id)
 
     pace = _Pace(rebuild_per_min())
-
-    def _flush() -> int:
-        nonlocal pending, pending_arts, indexed, skipped
-        if not pending:
-            return 0
-        flushed = len(pending)
-        if upsert_documents(pending, replace_artifact=False):
-            indexed += pending_arts
-        else:
-            skipped += pending_arts
-        pending = []
-        pending_arts = 0
-        return flushed
-
+    indexed = 0
+    unchanged = 0
+    skipped = 0
+    pending: list[dict[str, Any]] = []
     for artifact, task in rows:
-        if is_lab_school(str(task.school_id or "")):
+        if (
+            is_lab_school(str(task.school_id or ""))
+            or not is_material(kind=artifact.kind, title=artifact.title)
+            or not is_teacher_material(artifact.origin, task.title)
+        ):
             skipped += 1
             continue
-        if not is_material(kind=artifact.kind, title=artifact.title):
-            skipped += 1
-            continue
-        if not is_teacher_material(artifact.origin, task.title):
-            # pico#1298: Pico drafts are not library material.
-            skipped += 1
-            continue
-        if known is not None and str(artifact.id) in known:
+        if artifact.id in known:
             unchanged += 1
             continue
-        encoding = artifact.content_encoding or "utf8"
-        content: str | bytes | None
-        if encoding == "base64":
-            try:
-                content = decode_artifact_payload(artifact.inline, encoding)
-            except Exception:  # noqa: BLE001
-                content = None
-        else:
-            content = artifact.inline or ""
 
-        class _P:
-            school_id = task.school_id
-            membership_id = task.membership_id
-
-        created = artifact.created_at.isoformat() if artifact.created_at else None
-        docs = material_chunk_docs(
-            _P(),
-            artifact_id=artifact.id,
-            title=artifact.title,
-            kind=artifact.kind,
-            content=content,
-            created_at=created,
-            stored_text=stored_by_task_title.get((str(task.id), str(artifact.title or ""))),
+        # Read bodies only for materials being rebuilt. Release SQLite before embedding.
+        stored_ids = stored_by_task_title.get((task.id, artifact.title), [])
+        async with factory() as session:
+            result = await session.execute(
+                select(ArtifactRow.id, ArtifactRow.inline).where(
+                    ArtifactRow.id.in_([artifact.id, *stored_ids])
+                )
+            )
+            payloads = dict(result.all())
+        if artifact.id not in payloads:
+            # A teacher may delete the artifact after the metadata scan.
+            skipped += 1
+            continue
+        stored_text = None
+        for aid in stored_ids:
+            if body := (payloads.get(aid) or "").strip():
+                stored_text = body
+        docs = await asyncio.to_thread(
+            _chunk_artifact, artifact, task, payloads[artifact.id], stored_text
         )
         if not docs:
             skipped += 1
             continue
-        pending.extend(docs)
-        pending_arts += 1
-        if len(pending) >= _FLUSH:
-            await pace.after(_flush())
-    _flush()
+        indexed += 1
+
+        # Write chunk 0 last so an interrupted multi-batch artifact stays eligible on retry.
+        for doc in reversed(docs):
+            pending.append(doc)
+            if len(pending) == _BATCH_SIZE:
+                await pace.before(len(pending))
+                await idx.upsert_rebuild_batch(pending)
+                pending = []
+    if pending:
+        await pace.before(len(pending))
+        await idx.upsert_rebuild_batch(pending)
+
     return {
         "ok": True,
-        "mode": mode,
+        "mode": "full" if force else "incremental",
         "indexed": indexed,
         "unchanged": unchanged,
         "skipped": skipped,
         "total": indexed + unchanged + skipped,
     }
+
+
+def log_rebuild_result(task: asyncio.Task[dict[str, Any]]) -> None:
+    if task.cancelled():
+        logger.warning("kb reindex cancelled")
+        return
+    try:
+        result = task.result()
+    except Exception:
+        logger.exception("kb reindex failed")
+    else:
+        logger.info("kb reindex completed %s", result)
