@@ -22,6 +22,22 @@
       "cache_write_yuan_per_million": 45.625
     },
     {
+      "id": "new-api:uu-codex:gpt-6.2-sol",
+      "kind": "llm",
+      "model": "gpt-6.2-sol",
+      "input_yuan_per_million": 2.0,
+      "output_yuan_per_million": 2.0,
+      "note": "UU Codex-限时组（倍率 0.2），业主 11-24 报输出价；输入价未报按输出同价记上限，回退到 12 uu-pro 时 terra 输出 2.0；edu-core#6410"
+    },
+    {
+      "id": "new-api:uu-codex:gpt-6.1-terra",
+      "kind": "llm",
+      "model": "gpt-6.1-terra",
+      "input_yuan_per_million": 1.0,
+      "output_yuan_per_million": 1.0,
+      "note": "UU Codex-限时组（倍率 0.2），业主 11-24 报输出价；输入价未报按输出同价记上限，回退到 12 uu-pro 时 terra 输出 2.0；edu-core#6410"
+    },
+    {
       "id": "new-api:gemini-vertex-trial:gemini-3.1-flash-image",
       "kind": "image",
       "model": "gemini-3.1-flash-image",
