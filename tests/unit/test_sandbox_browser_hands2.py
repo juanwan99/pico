@@ -12,6 +12,8 @@ import os
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -23,7 +25,10 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 os.environ.setdefault("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
 
 import sandbox_worker.browser as browser_mod
+import sandbox_worker.runtime as runtime_mod
 from pico_orchestrator.gateway import ToolError
+from pico_orchestrator.sandbox_sidecar import _TIMEOUT_S
+from pico_orchestrator.tools_builtin import build_default_gateway
 from sandbox_worker.browser import VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 
 SITE = "https://site.example"
@@ -54,6 +59,195 @@ async def _fulfil(route) -> None:
         await route.abort()
         return
     await route.fulfill(status=200, content_type="text/html; charset=utf-8", body=body)
+
+
+@pytest.fixture
+def navigation_page(monkeypatch, tmp_path):
+    page = Mock(
+        url=SITE + "/a",
+        goto=AsyncMock(return_value=SimpleNamespace(status=200)),
+        go_back=AsyncMock(return_value=SimpleNamespace(status=200)),
+        wait_for_load_state=AsyncMock(),
+    )
+    context = Mock(pages=[page], route=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(browser_mod, "_ensure_browser", AsyncMock(
+        return_value=Mock(new_context=AsyncMock(return_value=context)),
+    ))
+    monkeypatch.setattr(browser_mod, "PROFILE_ROOT", tmp_path)
+    surface = browser_mod.PlaywrightPage(context, page, tmp_path)
+    return page, context, surface
+
+
+@pytest.mark.parametrize("action", ["open", "from_files", "reopen", "navigate", "back"])
+@pytest.mark.parametrize("capture_timeout", [False, True])
+async def test_committed_navigation_survives_dom_timeout(
+    action, capture_timeout, navigation_page, monkeypatch, caplog, tmp_path
+) -> None:
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+    page, context, _ = navigation_page
+
+    async def commit(url: str, **_):
+        page.url = url
+        return SimpleNamespace(status=200)
+
+    async def go_back(**kwargs):
+        return await commit(SITE + "/a", **kwargs)
+
+    page.goto.side_effect = commit
+    page.go_back.side_effect = go_back
+    page.title = AsyncMock(return_value="慢页面")
+    page.aria_snapshot = AsyncMock(return_value='- heading "慢页面"')
+    page.frames = [page]
+    page.evaluate = AsyncMock(return_value=[])
+    page.screenshot = AsyncMock(return_value=browser_mod.PNG_MAGIC)
+    page.is_closed.return_value = False
+    context.storage_state = AsyncMock(return_value={})
+
+    runtime = runtime_mod.SandboxRuntime()
+    monkeypatch.setattr(runtime_mod, "RUNTIME", runtime)
+    monkeypatch.setenv("PICO_SANDBOX_URL", "embedded")
+    monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disk"))
+    gateway = build_default_gateway()
+    owner = SimpleNamespace(school_id="school-a", membership_id="member-a", scopes=["ai:run"])
+    if action == "from_files":
+        await runtime.open_files_desk(
+            school_id=owner.school_id, membership_id=owner.membership_id, run_id=None,
+        )
+    elif action in {"reopen", "navigate", "back"}:
+        initial = SITE + ("/b" if action == "back" else "/a")
+        opened = await gateway.invoke(owner, "sandbox_browser_open", {"url": initial})
+        assert "note" not in opened
+        page.goto.reset_mock()
+        page.wait_for_load_state.reset_mock()
+
+    target = SITE + ("/b" if action in {"reopen", "navigate"} else "/a")
+    page.wait_for_load_state.side_effect = PlaywrightTimeoutError("fixture DOM wait expired")
+    if capture_timeout:
+        async def wait_forever(*args, **kwargs):
+            await asyncio.Future()
+
+        page.screenshot.side_effect = wait_forever
+        page.aria_snapshot.side_effect = wait_forever
+        context.storage_state.side_effect = wait_forever
+        monkeypatch.setattr(runtime_mod, "LOADING_SCREENSHOT_TIMEOUT_S", 0)
+        monkeypatch.setattr(runtime_mod, "LOADING_SNAPSHOT_TIMEOUT_S", 0)
+        monkeypatch.setattr(runtime_mod, "LOADING_METADATA_TIMEOUT_S", 0)
+    monkeypatch.setattr(browser_mod, "time", SimpleNamespace(
+        monotonic=Mock(side_effect=[100.0, 125.0]),
+    ))
+    try:
+        with caplog.at_level("INFO", logger=browser_mod.__name__):
+            if action == "navigate":
+                result = await gateway.invoke(owner, "sandbox_browser_navigate", {"url": target})
+            elif action == "back":
+                result = await gateway.invoke(owner, "sandbox_browser_navigate_back", {})
+            else:
+                result = await gateway.invoke(owner, "sandbox_browser_open", {"url": target})
+        if action == "back":
+            page.go_back.assert_awaited_once_with(wait_until="commit", timeout=45_000)
+        else:
+            page.goto.assert_awaited_once_with(target, wait_until="commit", timeout=45_000)
+        page.wait_for_load_state.assert_awaited_once_with("domcontentloaded", timeout=20_000)
+        assert result["ok"] is True
+        assert result["url"] == target
+        note = "页面还在加载，可稍后再取快照 / 截图。"
+        if capture_timeout:
+            note += "本次未能及时取得截图。"
+            assert result["byte_size"] == 0
+            assert runtime.get(result["session_id"]).screenshot_png == b""
+            if action in {"navigate", "back"}:
+                assert "snapshot" not in result
+                assert "snapshot_mode" not in result
+                note = (
+                    "页面还在加载，可稍后再取快照 / 截图。"
+                    "本次未能及时取得快照。本次未能及时取得截图。"
+                    "本次未能及时更新登录状态或标签页。"
+                )
+        assert result["note"] == note
+        assert "fixture DOM wait expired" in caplog.text
+        context.close.assert_not_awaited()
+    finally:
+        context.storage_state.side_effect = None
+        for sid in list(runtime._sessions):
+            await runtime.destroy(sid)
+
+
+def test_loading_navigation_leaves_room_under_sidecar_timeout() -> None:
+    assert 0 < runtime_mod.LOADING_SCREENSHOT_TIMEOUT_S <= 10
+    assert 0 < runtime_mod.LOADING_SNAPSHOT_TIMEOUT_S <= 10
+    assert (
+        browser_mod.GOTO_TIMEOUT_MS / 1000
+        + runtime_mod.LOADING_SNAPSHOT_TIMEOUT_S
+        + runtime_mod.LOADING_SCREENSHOT_TIMEOUT_S
+        + runtime_mod.LOADING_METADATA_TIMEOUT_S
+    ) < _TIMEOUT_S
+
+
+@pytest.mark.parametrize(
+    ("error_text", "reason"),
+    [
+        ("net::ERR_CONNECTION_REFUSED", "连接被拒绝"),
+        ("net::ERR_NAME_NOT_RESOLVED", "DNS 失败"),
+        ("net::ERR_NAME_RESOLUTION_FAILED", "DNS 失败"),
+        ("net::ERR_BLOCKED_BY_CLIENT", "访问被拦截"),
+        ("net::ERR_HTTP_RESPONSE_CODE_FAILURE", "公开页返回错误状态"),
+        ("net::ERR_CONNECTION_TIMED_OUT", "超时"),
+        ("timeout", "超时"),
+    ],
+)
+async def test_open_reports_failure_before_commit(
+    error_text, reason, navigation_page, caplog
+) -> None:
+    from playwright.async_api import Error
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+    page, context, _ = navigation_page
+    error_type = PlaywrightTimeoutError if error_text == "timeout" else Error
+    page.goto.side_effect = error_type(f"Page.goto: {error_text} at {page.url}")
+    with pytest.raises(ToolError, match=reason) as failure:
+        await browser_mod.open_chromium(page.url)
+    assert failure.value.code == "sandbox.fetch_failed"
+    assert error_text in caplog.text
+    page.wait_for_load_state.assert_not_awaited()
+    context.close.assert_awaited_once()
+
+
+async def test_back_reports_http_error_before_waiting_for_dom(navigation_page) -> None:
+    page, _, surface = navigation_page
+    page.go_back.return_value = SimpleNamespace(status=503)
+    with pytest.raises(ToolError, match="HTTP 503"):
+        await surface.navigate_back()
+    page.wait_for_load_state.assert_not_awaited()
+
+
+async def test_real_chromium_open_keeps_original_page_during_popup(monkeypatch, tmp_path) -> None:
+    async def fulfil_with_popup(route) -> None:
+        await route.fulfill(
+            status=200,
+            content_type="text/html",
+            body="<title>Original</title><script>window.open('about:blank')</script>",
+        )
+
+    monkeypatch.setattr(browser_mod, "PROFILE_ROOT", tmp_path)
+    monkeypatch.setattr(browser_mod, "_guard_route", fulfil_with_popup)
+    try:
+        try:
+            await browser_mod._ensure_browser()
+        except ToolError as exc:
+            pytest.skip(f"Chromium unavailable: {exc.__cause__}")
+        surface = await browser_mod.open_chromium(SITE + "/popup")
+        try:
+            assert surface.url == SITE + "/popup"
+            assert await surface.title() == "Original"
+            rows = await surface.tabs("list", 0)
+            assert [(r["url"], r["current"]) for r in rows] == [
+                (SITE + "/popup", True), ("about:blank", False),
+            ]
+        finally:
+            await surface.close()
+    finally:
+        await browser_mod.shutdown_browser()
 
 
 @pytest.mark.asyncio
