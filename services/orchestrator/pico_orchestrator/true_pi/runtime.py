@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import time
 import uuid
@@ -303,7 +304,7 @@ async def run_true_pi_agent(
         stall = pi_stall_switch_s() if i == 0 and len(models) > 1 else 0.0
         st = upstream.run_state(rid)
         if st is not None:
-            st.last_status = None
+            st.relay_failure = None
         last = await _run_true_pi_once(
             emit=gate.emit,
             **{**kwargs, "caps": replace(caps, backend_model=mid), "stall_switch_s": stall},
@@ -347,7 +348,8 @@ class _FailoverGate:
             await self._emit(kind, payload)
             return
         self._held.append((kind, payload))
-        if kind in _LIVE_KINDS:
+        # A delayed resume already has work to preserve and must be visible during the wait.
+        if kind in _LIVE_KINDS or (kind == "run.resume" and payload.get("wait_seconds")):
             await self.flush()
 
     async def flush(self) -> None:
@@ -1166,6 +1168,7 @@ async def _run_true_pi_once(
         # its session; ask it to carry on from where it stopped. Before any
         # output brain-HA still fails over to the next model instead.
         from pico_orchestrator import upstream
+        from pico_orchestrator.brain_ha import is_model_dead
         from pico_orchestrator.true_pi.config import resume_max
 
         # pico#1331: a personal endpoint's error must reach the teacher at
@@ -1173,7 +1176,8 @@ async def _run_true_pi_once(
         active_provider_now = resolve_provider()
         personal_turn = active_provider_now is not None and active_provider_now.name == "personal"
         budget = 0 if (toolless or personal_turn) else resume_max()
-        spare = upstream.run_state(rid)
+        relay_run = upstream.run_state(rid)
+        resume_waited = 0.0
         while (
             state.settled
             and state.provider_error
@@ -1181,20 +1185,33 @@ async def _run_true_pi_once(
             and not state.no_resume
             and state.resumes < budget
             and _provider_fail_code(state.provider_error) != "model.usage_limit"
-            # A resume is one more upstream request: it comes out of the run's
-            # spare pool, with the proxy's retries (pico#1271).
-            and spare is not None
-            and spare.spare > 0
         ):
-            spare.spare -= 1
+            if is_model_dead(f"{state.provider_error} {upstream.upstream_error(rid)}"):
+                break
+            failure = relay_run.relay_failure if relay_run is not None else None
+            wait_s = None
+            if failure is not None and not state.tool_hung:
+                remaining = upstream.RESUME_WAIT_MAX_S - resume_waited
+                if upstream.verdict(failure.status) != "retry" or remaining <= 0:
+                    break
+                wait_s = failure.retry_after_s
+                if wait_s is None:
+                    backoff = upstream.RESUME_BACKOFF_S
+                    wait_s = backoff[min(state.resumes, len(backoff) - 1)]
+                wait_s = min(wait_s, remaining)
+            if not wait_s:
+                # Keep the spare charge for immediate resumes (#1271).
+                if relay_run is None or relay_run.spare <= 0:
+                    break
+                relay_run.spare -= 1
             state.resumes += 1
             reason = str(state.provider_error)[:200]
-            logger.info("true_pi resume run_id=%s n=%s/%s reason=%s", rid, state.resumes, budget, reason)
-            state.provider_error = None
-            state.settled = False
+            logger.info(
+                "true_pi resume run_id=%s n=%s/%s wait_s=%s reason=%s",
+                rid, state.resumes, budget, wait_s, reason,
+            )
             state.event_kinds.append("run.resume")
             hung = state.tool_hung
-            state.tool_hung = ""
             # A status line in the step box, not words in the reply (pico#1320).
             await emit(
                 "run.resume",
@@ -1202,10 +1219,25 @@ async def _run_true_pi_once(
                     "attempt": state.resumes,
                     "max": budget,
                     "reason": reason,
-                    "text": resume_teacher_note(state.resumes, tool_hang=bool(hung)),
+                    "text": resume_teacher_note(state.resumes, tool_hang=bool(hung), wait_s=wait_s),
+                    **({"wait_seconds": wait_s} if wait_s is not None else {}),
                     **tag,
                 },
             )
+            if wait_s:
+                # The watcher finishes on cancellation or the run deadline.
+                await asyncio.wait({watcher}, timeout=wait_s)
+                if (
+                    await is_cancelled()
+                    or timed_out.is_set()
+                    or wall_expired(loop.time(), deadline)
+                ):
+                    break
+                resume_waited += wait_s
+                last_progress_wall = fuse_from = loop.time()
+            state.provider_error = None
+            state.settled = False
+            state.tool_hung = ""
             state.awaiting_start = True
             if hasattr(transport, "plan_agent_ends"):
                 # Plan-mode end counting is per prompt; the last prompt's ends would
@@ -1735,9 +1767,13 @@ def turn_label(turn_no: int) -> str:
     return f"〔本对话第 {turn_no} 轮〕\n"
 
 
-def resume_teacher_note(attempt: int, *, tool_hang: bool = False) -> str:
+def resume_teacher_note(
+    attempt: int, *, tool_hang: bool = False, wait_s: float | None = None
+) -> str:
     if tool_hang:
         return f"有一条命令跑太久没结束，已中断，换个办法接着做（第 {attempt} 次）"
+    if wait_s:
+        return f"Pico 这会儿忙，{math.ceil(wait_s)} 秒后接着做（第 {attempt} 次）"
     return f"正在重试（第 {attempt} 次）"
 
 

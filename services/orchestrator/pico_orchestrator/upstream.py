@@ -7,9 +7,9 @@ Every request Pico sends to New API goes through here: direct chat
 
 * **Budget.** One logical call sends at most ``CALL_BUDGET`` requests, counting
   the first attempt, retries, and model switches together.
-* **One run, one spare pool.** Whatever layers sit above (Pi retry, Pico
-  resume, brain fail-over), the extra requests of one run come out of
-  ``RUN_SPARE``. When it is spent, calls still go out — once each, no extras.
+* **One run, one spare pool.** In-call retries and immediate Pico resumes
+  share ``RUN_SPARE``. When it is spent, calls still go out once each.
+  Delayed same-session resumes have their own wait and attempt limits.
 * **One retry layer**: only before the first token, only for 429 / 5xx / no
   connection, after a 2 s then 6 s pause (or the relay's ``Retry-After``). A
   dead key or a missing channel switches model instead, at once.
@@ -68,6 +68,9 @@ DEAD_STATUS = frozenset({401, 402, 403})
 # 503 / 429 is not better 5 ms later. ``Retry-After`` wins, capped.
 RETRY_BACKOFF_S: tuple[float, ...] = (2.0, 6.0)
 RETRY_AFTER_MAX_S = 20.0
+# Once Pi has settled after a failed step, leave time for a longer relay outage.
+RESUME_BACKOFF_S = (20.0, 60.0, 120.0)
+RESUME_WAIT_MAX_S = 300.0
 # What a teacher reads when the relay stayed busy (429 / 5xx) through the budget.
 # Not「模型」: teacher text never names the machinery (teacher_text, owner 10-14).
 BUSY_TEXT = "Pico 这会儿忙，请稍后再试。"
@@ -127,7 +130,7 @@ def worth_retry(exc: BaseException) -> bool:
     return verdict(status) == "retry" if status is not None else no_answer(exc)
 
 
-def retry_after(exc: BaseException) -> float | None:
+def retry_after(exc: BaseException, *, cap: float = RETRY_AFTER_MAX_S) -> float | None:
     """Seconds the relay asked us to wait (``Retry-After``), capped; None when it did not say."""
     for e in _chain(exc):
         headers = getattr(e, "headers", None)
@@ -145,7 +148,7 @@ def retry_after(exc: BaseException) -> float | None:
                 secs = parsedate_to_datetime(raw).timestamp() - time.time()
             except (TypeError, ValueError):
                 continue
-        return min(max(0.0, secs), RETRY_AFTER_MAX_S)
+        return min(max(0.0, secs), cap)
     return None
 
 
@@ -162,12 +165,19 @@ def backoff(exc: BaseException, n: int) -> float:
 # --- per-run spare pool -------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class RelayFailure:
+    # None means a transport failure without an HTTP response.
+    status: int | None
+    text: str
+    retry_after_s: float | None
+
+
 @dataclass
 class RunState:
     spare: int = RUN_SPARE
-    # Last error status the relay itself answered (the proxy's own 401/403 never land here).
-    last_status: int | None = None
-    last_error: str = ""
+    # Failure of the latest model call, if any (the proxy's own 401/403 never land here).
+    relay_failure: RelayFailure | None = None
     sent: int = 0
     # Requests the relay answered 2xx: New API logs each as one call (edu-core#4350).
     answered: int = 0
@@ -192,11 +202,12 @@ def run_state(run_id: str | None) -> RunState | None:
     return st
 
 
-def note_upstream_error(run_id: str | None, status: int, text: str) -> None:
+def note_upstream_error(
+    run_id: str | None, status: int | None, text: str, *, retry_after_s: float | None = None
+) -> None:
     st = run_state(run_id)
     if st is not None:
-        st.last_status = status
-        st.last_error = (text or "")[:300]
+        st.relay_failure = RelayFailure(status, text[:300], retry_after_s)
 
 
 def note_answered(run_id: str | None = None) -> None:
@@ -226,9 +237,10 @@ def answered_calls(run_id: str | None) -> int | None:
 def upstream_error(run_id: str | None) -> str:
     """``upstream <status> <body>`` the relay answered this run, or ''."""
     st = _RUNS.get(run_id or "")
-    if st is None or st.last_status is None:
+    failure = st.relay_failure if st is not None else None
+    if failure is None or failure.status is None:
         return ""
-    return f"upstream {st.last_status} {st.last_error}".strip()
+    return f"upstream {failure.status} {failure.text}".strip()
 
 
 # --- one logical call ---------------------------------------------------------

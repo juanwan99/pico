@@ -135,6 +135,9 @@ async def _stream(
             on_done()
 
     call = call or upstream.Call("tool", budget=1)
+    run = upstream.run_state(run_id) if call.purpose != "tool" else None
+    if run is not None:
+        run.relay_failure = None
 
     def start(k: int):
         return _open(
@@ -154,8 +157,13 @@ async def _stream(
         _done()
         logger.warning("ws-proxy upstream %s after %s attempts", exc.status, call.sent)
         upstream.count(call.purpose, f"http_{exc.status}")
-        if call.purpose != "tool":
-            upstream.note_upstream_error(run_id, exc.status, exc.body.decode("utf-8", "replace"))
+        if run is not None:
+            upstream.note_upstream_error(
+                run_id,
+                exc.status,
+                exc.body.decode("utf-8", "replace"),
+                retry_after_s=upstream.retry_after(exc, cap=upstream.RESUME_WAIT_MAX_S),
+            )
         out = {k: v for k, v in exc.headers.items() if k.lower() not in _HOP}
         return Response(exc.body, status_code=exc.status, headers=out)
     except upstream.UpstreamBusy:
@@ -165,6 +173,8 @@ async def _stream(
         _done()
         logger.warning("ws-proxy upstream error %s", type(exc).__name__)
         upstream.count(call.purpose, "unreachable")
+        if run is not None and isinstance(exc, httpx.HTTPError):
+            upstream.note_upstream_error(run_id, None, type(exc).__name__)
         return _deny("proxy.upstream_unreachable", 502)
     except BaseException:
         _done()

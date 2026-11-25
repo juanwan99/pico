@@ -273,9 +273,140 @@ async def test_proxy_503_three_per_step_and_the_run_pool_runs_dry(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "retry_after", "recovers_at", "resume_max", "expected_waits"),
+    [
+        (500, None, 120, 3, [20, 60, 120]),
+        (None, None, 120, 3, [20, 60, 120]),
+        (429, "240", 120, 3, [240]),
+        (429, "900", 600, 10, [300]),
+        (500, None, 260, 3, [20, 60, 120]),
+    ],
+)
+async def test_pi_resumes_after_relay_outage_with_an_empty_spare_pool(
+    monkeypatch, status, retry_after, recovers_at, resume_max, expected_waits
+) -> None:
+    import hashlib
+
+    from pico_orchestrator.run_types import RunCaps
+    from pico_orchestrator.true_pi import runner, runtime
+    from pico_orchestrator.true_pi.client import FakeTransport, RpcEvent
+
+    run_id = "long-pi"
+    files = {}
+    delivered = {}
+    events = []
+    relay_times = []
+    elapsed = 0.0
+    # Leave the real run-start and cancellation waits alone. Advance the relay's
+    # outage clock by whatever delay the run asks for between prompts.
+    real_wait = asyncio.wait
+
+    async def wait(tasks, *, timeout=None):
+        nonlocal elapsed
+        if timeout is not None and timeout > runtime._QUEUE_CANCEL_POLL:
+            elapsed += timeout
+            return await real_wait(tasks, timeout=0)
+        return await real_wait(tasks, timeout=timeout)
+
+    async def relay(request, n):
+        if n <= 9:
+            # Three earlier steps recovered on their final in-call retry.
+            return httpx.Response(500 if n % 3 else 200)
+        relay_times.append(elapsed)
+        if elapsed >= recovers_at:
+            return httpx.Response(200, text="报告已补齐。")
+        if status is None:
+            raise httpx.ReadTimeout("no response", request=request)
+        headers = {"Retry-After": retry_after} if retry_after is not None else {}
+        message = "Database error" if status == 500 else "rate limit"
+        return httpx.Response(status, json={"error": {"message": message}}, headers=headers)
+
+    class WorkspaceTransport(FakeTransport):
+        runner = SimpleNamespace(key="ws-key")
+
+        async def send(self, command):
+            if command["type"] == "prompt":
+                assert not self._closed
+                for kind in ("agent_start", "turn_start"):
+                    await self._event_q.put(RpcEvent({"type": kind}))
+                if not self.sent:
+                    for _ in range(3):
+                        assert (await _proxy_step(run_id))[0] == 200
+                    files["outputs/report.md"] = b"# Report\n"
+                    await self._event_q.put(
+                        RpcEvent({"type": "tool_execution_start", "toolName": "bash"})
+                    )
+                code, body = await _proxy_step(run_id)
+                msg = {"role": "assistant", "content": []}
+                if code == 200:
+                    assert files["outputs/report.md"] == b"# Report\n"
+                    files["outputs/appendix.md"] = b"# Appendix\n"
+                    msg["content"] = [{"type": "text", "text": body.decode()}]
+                else:
+                    msg.update(stopReason="error", errorMessage=f"{code} {body.decode()}")
+                await self._event_q.put(RpcEvent({"type": "message_end", "message": msg}))
+                await self._event_q.put(RpcEvent({"type": "agent_end", "messages": [msg]}))
+            await super().send(command)
+
+    async def list_outputs(_key):
+        return {path: {"sha256": hashlib.sha256(body).hexdigest()} for path, body in files.items()}
+
+    async def fetch_output(_key, path):
+        assert transport._closed
+        return files[path]
+
+    async def write(_principal, *, title, content, kind):
+        delivered[title] = content
+        return {"artifact_id": title, "title": title, "kind": kind}
+
+    async def emit(kind, payload):
+        events.append((kind, payload))
+
+    async def not_cancelled():
+        return False
+
+    hits = _upstream(monkeypatch, relay)
+    monkeypatch.setattr(asyncio, "wait", wait)
+    monkeypatch.setattr(runner, "list_outputs", list_outputs)
+    monkeypatch.setattr(runner, "fetch_output", fetch_output)
+    monkeypatch.setenv("PICO_RUN_RESUME_MAX", str(resume_max))
+    transport = WorkspaceTransport(bash_outputs=[
+        '{"files": [], "names": ["report.md", "appendix.md"]}'
+    ])
+    result = await runtime.run_true_pi_agent(
+        prompt="做一份长报告",
+        principal=SimpleNamespace(school_id="s", membership_id="m", scopes=["ai:run"]),
+        emit=emit,
+        is_cancelled=not_cancelled,
+        caps=RunCaps(min_artifacts=1, max_seconds=600),
+        transport=transport,
+        run_id=run_id,
+        artifact_store=SimpleNamespace(write=write),
+    )
+
+    resumes = [p for k, p in events if k == "run.resume"]
+    waits = [p["wait_seconds"] for p in resumes]
+    assert waits == expected_waits
+    assert relay_times == [0, *(sum(waits[:i]) for i in range(1, len(waits) + 1))]
+    assert len(hits) == 9 + 1 + len(expected_waits)
+    assert upstream.run_state(run_id).spare == 0
+    assert sum(c["type"] == "prompt" for c in transport.sent) == 1 + len(expected_waits)
+    assert delivered["report.md"] == b"# Report\n"
+    if elapsed >= recovers_at:
+        assert result.status == "succeeded", result.error
+        assert delivered == {"report.md": b"# Report\n", "appendix.md": b"# Appendix\n"}
+        assert not any(k == "run.error" for k, _ in events)
+    else:
+        assert result.status == "failed"
+        assert delivered == {"report.md": b"# Report\n"}
+    assert all(f"{int(p['wait_seconds'])} 秒后接着做" in p["text"] for p in resumes)
+
+
+@pytest.mark.asyncio
 async def test_proxy_relay_403_is_noted_and_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def handler(_req, _n):
-        return httpx.Response(403, content=b"")  # bare relay 403, no words
+    async def handler(_req, n):
+        return httpx.Response(403 if n == 1 else 200, content=b"")  # no error text
 
     hits = _upstream(monkeypatch, handler)
     assert (await _proxy_step("run-403"))[0] == 403
@@ -289,6 +420,8 @@ async def test_proxy_relay_403_is_noted_and_not_retried(monkeypatch: pytest.Monk
     assert brain_ha.should_failover(failed, relay=relay)
     assert not brain_ha.should_failover(failed, relay=upstream.upstream_error("run-other"))
     assert not brain_ha.is_model_dead('{"ok": false, "code": "proxy.no_run"}')
+    assert (await _proxy_step("run-403"))[0] == 200
+    assert upstream.upstream_error("run-403") == ""
 
 
 # --- review #1283: pauses and every road through the door ----------------------
