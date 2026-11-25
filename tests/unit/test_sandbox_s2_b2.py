@@ -103,7 +103,7 @@ class MemoryArtifactStore:
 
     async def list(self, principal: P, *, limit: int) -> list[dict[str, Any]]:
         return [
-            {k: v for k, v in row.items() if k != "content"}
+            {k: v for k, v in row.items() if k not in {"content", "content_base64"}}
             for row in list(reversed(self._rows(principal)))[:limit]
         ]
 
@@ -272,6 +272,77 @@ async def test_browser_screenshot_can_name_artifacts_and_avoid_duplicates(
     }
     assert list_titles.await_count == 4
     read.assert_not_awaited()
+
+
+async def test_screenshot_numbering_queries_only_metadata_with_500_files(
+    embedded_runtime,
+) -> None:
+    from app.artifact_store import LedgerArtifactStore, encode_artifact_payload
+    from app.db import ArtifactRow, Base, TaskRow
+    from sqlalchemy import event
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    owner = P("school-a", "member-a", ["ai:run"])
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    store = LedgerArtifactStore(factory, task_id="task-b2")
+    png = _viewport_png(1)
+    inline, encoding, size, digest = encode_artifact_payload(png)
+    queries: list[str] = []
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def record_artifact_select(_conn, _cursor, statement, _params, _context, _executemany):
+        if statement.startswith("SELECT") and "FROM artifacts" in statement:
+            queries.append(statement)
+
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with factory.begin() as session:
+            task = TaskRow(
+                id="task-b2", school_id=owner.school_id, membership_id=owner.membership_id
+            )
+            task.artifacts = [
+                ArtifactRow(
+                    kind="image",
+                    title=f"Example Domain-{n}.png",
+                    inline=inline,
+                    content_encoding=encoding,
+                    byte_size=size if n == 1 else 0,
+                    content_sha256=digest if n == 1 else "",
+                )
+                for n in range(1, 501)
+            ]
+            session.add(task)
+
+        rows = await store.list(owner, limit=500)
+        assert len(rows) == 500
+        assert len(queries) == 1
+        assert "artifacts.inline" not in queries[0]
+        assert all("content" not in row and "content_base64" not in row for row in rows)
+        by_title = {row["title"]: row for row in rows}
+        current = by_title["Example Domain-1.png"]
+        assert current["size"] == current["byte_size"] == size
+        assert current["content_sha256"] == digest
+        legacy = by_title["Example Domain-500.png"]
+        assert legacy["size"] == legacy["byte_size"] == 0
+        assert legacy["content_sha256"] == ""
+
+        gateway = build_default_gateway(store)
+        await gateway.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
+        queries.clear()
+        result = await gateway.invoke(owner, "sandbox_browser_screenshot", {})
+        assert result["screenshot"]["title"] == "Example Domain-501.png"
+        assert len(queries) == 1
+        assert "artifacts.inline" not in queries[0]
+
+        original = await store.read(owner, artifact_id=legacy["artifact_id"], title=None)
+        assert original is not None
+        assert original["content_base64"] == inline
+        assert original["size"] == original["byte_size"] == size
+        assert original["content_sha256"] == digest
+    finally:
+        await engine.dispose()
 
 
 async def test_browser_screenshot_reports_artifact_write_failure(

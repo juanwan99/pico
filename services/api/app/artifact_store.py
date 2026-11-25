@@ -11,6 +11,7 @@ from typing import Any
 from pico_orchestrator.gateway import Principal, ToolError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import defer
 
 from app.db import (
     ArtifactRow,
@@ -278,7 +279,7 @@ class LedgerArtifactStore:
     def _artifact_dict(artifact: ArtifactRow, *, content: bool) -> dict[str, Any]:
         encoding = getattr(artifact, "content_encoding", None) or ENCODING_UTF8
         byte_size = int(getattr(artifact, "byte_size", 0) or 0)
-        if byte_size <= 0:
+        if content and byte_size <= 0:
             # Legacy rows before byte_size column.
             if encoding == ENCODING_BASE64:
                 try:
@@ -288,7 +289,7 @@ class LedgerArtifactStore:
             else:
                 byte_size = len((artifact.inline or "").encode("utf-8"))
         digest = getattr(artifact, "content_sha256", None) or ""
-        if not digest:
+        if content and not digest:
             try:
                 digest = hashlib.sha256(
                     decode_artifact_payload(artifact.inline, encoding)
@@ -351,8 +352,10 @@ class LedgerArtifactStore:
         *,
         limit: int,
     ) -> list[dict[str, Any]]:
-        statement = self._owned_artifacts(principal).order_by(
-            ArtifactRow.created_at.desc()
+        statement = (
+            self._owned_artifacts(principal)
+            .options(defer(ArtifactRow.inline, raiseload=True))
+            .order_by(ArtifactRow.created_at.desc())
         )
         async with self._factory() as session:
             result = await session.execute(statement.limit(limit))
