@@ -103,7 +103,7 @@ key 只显示 sha256 的前 8 位。进程重启后清零（`since` 是起点）
 
 ## 沙箱实时画面（pico#1446）
 
-Playwright 1.63.0 通过 Chromium CDP 取 JPEG。DPR 大于 1 的会话使用 Chromium 原生虚拟显示器，标签页随当前沙箱的 DPR 切换显示器，关桌时移除。用一次 `Emulation.setDeviceMetricsOverride` 提交 CSS 尺寸和 DPR。同一标签调整 CSS 尺寸或 DPR 时沿用 CDP 投屏，Chromium 捕获新的合成画面。换标签时才重新挂捕获。标签页尺寸适配失败时记录原因，画面回到现有 PNG 轮询。worker 核对帧的 CDP metadata 与 JPEG 像素尺寸，两者均允许 1 像素的舍入差，再按 CSS 尺寸发帧。重复画面在 worker 丢弃。Chromium 用 `--disable-lcd-text` 绘制灰阶文字，减轻 JPEG 色度采样带来的字体边缘模糊。[CDP Emulation](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/) · [Chromium 投屏和截图源码](https://chromium.googlesource.com/chromium/src/+/refs/tags/153.0.8010.12/content/browser/devtools/protocol/page_handler.cc)
+Playwright 1.63.0 通过 Chromium CDP 取 JPEG。DPR 大于 1 的会话使用 Chromium 原生虚拟显示器，标签页随当前沙箱的 DPR 切换显示器，关桌时移除。用一次 `Emulation.setDeviceMetricsOverride` 提交 CSS 尺寸和 DPR。同一标签调整 CSS 尺寸或 DPR 时沿用 CDP 投屏，Chromium 捕获新的合成画面。换标签时才重新挂捕获。标签页尺寸适配失败时记录原因，画面回到现有 PNG 轮询。worker 丢弃时间戳早于最近一次改尺寸的帧，再按 Chromium 的 float32 取整核对 CDP metadata 与 JPEG 像素尺寸（不留容差），然后按 CSS 尺寸发帧；同一视口代次内重复画面才丢，每代首帧必送。Chromium 用 `--disable-lcd-text` 绘制灰阶文字，减轻 JPEG 色度采样带来的字体边缘模糊。[CDP Emulation](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/) · [Chromium 投屏和截图源码](https://chromium.googlesource.com/chromium/src/+/refs/tags/153.0.8010.12/content/browser/devtools/protocol/page_handler.cc)
 
 PNG 在持有 DPR 的 CDP 会话通过 `Page.captureScreenshot` 读取当前窗口，不裁剪或改变窗口布局。worker 将 PNG 像素缩回 CSS 尺寸，保留当前滚动位置。真 Chromium 回归覆盖滚动 500 px 后按图点击、投屏期间连截三次 PNG、非整数 DPR 切换及不同会话并用和关桌回收。
 
