@@ -625,6 +625,13 @@ async def _guard_route(route: Any) -> None:
     await route.continue_()
 
 
+@dataclass
+class _ViewportCommit:
+    size: tuple[int, int]
+    scale: float
+    frames: dict[Callable[[dict[str, Any]], None], dict[str, Any]]
+
+
 class PlaywrightPage:
     """One Chromium context. Login is saved to the teacher's own disk, not host HOME."""
 
@@ -641,8 +648,8 @@ class PlaywrightPage:
         self._viewport_changed_at = 0.0
         self._viewport_lock = asyncio.Lock()
         self._viewport_task: asyncio.Task[None] | None = None
-        # Present only during a viewport commit, with one pending event per cast.
-        self._resize_frames: dict[Callable[[dict[str, Any]], None], dict[str, Any]] | None = None
+        # Present only during a resize, with one validated frame per cast.
+        self._viewport_commit: _ViewportCommit | None = None
         self._metrics: dict[Any, Any] = {}
         self._screen_cdp: Any = None
         self._screen: dict[str, Any] | None = None
@@ -780,7 +787,7 @@ class PlaywrightPage:
         async with self._viewport_lock:
             if size != self._viewport or scale != self._device_scale:
                 task = self._viewport_task
-                self._resize_frames = pending_frames = {}
+                self._viewport_commit = commit = _ViewportCommit(size, scale, {})
                 try:
                     changed_at = await self._apply_metrics(self._page, size, scale)
                     # Publish the whole viewport generation without yielding to frame callbacks.
@@ -791,8 +798,8 @@ class PlaywrightPage:
                     if self._viewport_task is task:
                         self._viewport_task = None
                 finally:
-                    self._resize_frames = None
-                for check_frame, event in pending_frames.items():
+                    self._viewport_commit = None
+                for check_frame, event in commit.frames.items():
                     check_frame(event)
         return size
 
@@ -1443,15 +1450,10 @@ class PlaywrightPage:
             timestamp = meta.get("timestamp", 0.0)
             if timestamp < max(last_frame_at, self._viewport_changed_at):
                 return
-            resize_frames = self._resize_frames
-            if resize_frames is not None:
-                # Chromium can paint the new layout before the metrics command returns.
-                pending = resize_frames.get(check_frame)
-                if pending is None or timestamp >= pending["metadata"].get("timestamp", 0.0):
-                    resize_frames[check_frame] = event
-                return
-            width, height = self._viewport
-            scale = c_float(max(1.0, self._device_scale)).value
+            commit = self._viewport_commit
+            width, height = commit.size if commit is not None else self._viewport
+            scale = commit.scale if commit is not None else self._device_scale
+            scale = c_float(max(1.0, scale)).value
             # Match Chromium's float32 ScaleToCeiledSize. A one-pixel margin
             # could accept the old surface while the resize is taking effect.
             native_width = math.ceil(c_float(width * scale).value)
@@ -1467,6 +1469,12 @@ class PlaywrightPage:
             with Image.open(io.BytesIO(base64.b64decode(jpeg))) as img:
                 if img.size != (native_width, native_height):
                     return
+            if commit is not None:
+                # A late bitmap from the old layout must not replace a valid new frame.
+                pending = commit.frames.get(check_frame)
+                if pending is None or timestamp >= pending["metadata"].get("timestamp", 0.0):
+                    commit.frames[check_frame] = event
+                return
             last_frame_at = timestamp
             if self.page_token == last_page_token and jpeg == last_jpeg:
                 return
@@ -1487,8 +1495,8 @@ class PlaywrightPage:
         async def stop() -> None:
             nonlocal active
             active = False
-            if self._resize_frames is not None:
-                self._resize_frames.pop(check_frame, None)
+            if self._viewport_commit is not None:
+                self._viewport_commit.frames.pop(check_frame, None)
             try:
                 with CancelScope(shield=True):
                     await cdp.detach()

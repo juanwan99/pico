@@ -35,6 +35,13 @@ from sandbox_worker.runtime import RUNTIME, SandboxRuntime, SandboxSession, Sand
 from test_sandbox_live_pane import CastSurface, StillSurface, live_runtime  # noqa: F401
 
 
+def _jpeg_data(size: tuple[int, int], color: str) -> str:
+    buf = io.BytesIO()
+    with Image.new("RGB", size, color) as jpeg:
+        jpeg.save(buf, format="JPEG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 @pytest.mark.asyncio
 async def test_failed_tab_fit_falls_back_to_png(
     live_runtime,  # noqa: F811
@@ -93,7 +100,7 @@ async def test_failed_tab_fit_falls_back_to_png(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("outcome", ["new-layout", "old-layout", "metrics-error"])
+@pytest.mark.parametrize("outcome", ["new-layout", "late-old-bitmap", "old-layout", "metrics-error"])
 async def test_screencast_checks_pending_frame_after_viewport_commit(
     tmp_path, monkeypatch, outcome,
 ) -> None:
@@ -107,24 +114,27 @@ async def test_screencast_checks_pending_frame_after_viewport_commit(
     stop = await surface.screencast(push)
     on_frame = cdp.on.call_args.args[1]
 
+    new_viewport = (480, 620)
+    new_pixels = (720, 930)
+    old_viewport = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+    valid_jpeg = _jpeg_data(new_pixels, "blue")
+    old_jpeg = _jpeg_data(old_viewport, "red")
+
     async def apply_metrics(_page, viewport, _scale):
-        nonlocal latest_jpeg
         changed_at = time.time()
         if outcome == "new-layout":
-            layouts = [(viewport, "lime"), (viewport, "blue")]
+            frames = [(_jpeg_data(new_pixels, "lime"), viewport), (valid_jpeg, viewport)]
+        elif outcome == "late-old-bitmap":
+            frames = [(valid_jpeg, viewport), (old_jpeg, viewport)]
         else:
-            layouts = [((VIEWPORT_WIDTH, VIEWPORT_HEIGHT), "red")]
-        for session_id, (size, color) in enumerate(layouts, start=1):
-            buf = io.BytesIO()
-            with Image.new("RGB", size, color) as jpeg:
-                jpeg.save(buf, format="JPEG")
-            latest_jpeg = base64.b64encode(buf.getvalue()).decode()
+            frames = [(old_jpeg, old_viewport)]
+        for session_id, (jpeg, (width, height)) in enumerate(frames, start=1):
             await on_frame({
-                "data": latest_jpeg,
+                "data": jpeg,
                 "sessionId": session_id,
                 "metadata": {
-                    "deviceWidth": size[0],
-                    "deviceHeight": size[1],
+                    "deviceWidth": width,
+                    "deviceHeight": height,
                     "timestamp": changed_at + session_id,
                 },
             })
@@ -134,22 +144,21 @@ async def test_screencast_checks_pending_frame_after_viewport_commit(
             raise RuntimeError("metrics failed")
         return changed_at
 
-    latest_jpeg = None
     monkeypatch.setattr(surface, "_apply_metrics", apply_metrics)
     try:
         if outcome == "metrics-error":
             with pytest.raises(RuntimeError, match="metrics failed"):
-                await surface.set_viewport(480, 620)
-            assert surface._resize_frames is None
+                await surface.set_viewport(*new_viewport, 1.5)
+            assert surface._viewport_commit is None
             assert surface.page_token == 0
             push.assert_not_called()
             return
-        assert await surface.set_viewport(480, 620) == (480, 620)
-        if outcome == "new-layout":
+        assert await surface.set_viewport(*new_viewport, 1.5) == new_viewport
+        if outcome in ("new-layout", "late-old-bitmap"):
             push.assert_called_once()
             frame = push.call_args.args[0]
             assert (frame.width, frame.height, frame.page_token) == (480, 620, 1)
-            assert frame.jpeg == latest_jpeg
+            assert frame.jpeg == valid_jpeg
         else:
             push.assert_not_called()
     finally:
@@ -495,28 +504,44 @@ async def test_real_chromium_screencast_accepts_float32_dpr_rounding(tmp_path, c
 
 
 @pytest.mark.asyncio
-async def test_real_chromium_delivers_identical_jpeg_for_new_viewport(tmp_path, chromium) -> None:
+async def test_screencast_delivers_identical_jpeg_for_new_viewport(tmp_path, monkeypatch) -> None:
     from sandbox_worker.browser import PlaywrightPage
 
-    context = await chromium.new_context()
-    page = await context.new_page()
+    cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
+    page = MagicMock()
+    context = MagicMock(pages=[page], new_cdp_session=AsyncMock(return_value=cdp))
     surface = PlaywrightPage(context, page, tmp_path / "profile")
+    monkeypatch.setattr(surface, "_place_on_screen", AsyncMock())
+    await surface.set_viewport(720, 700, 1.5)
+    push = MagicMock()
+    stop = await surface.screencast(push)
+    on_frame = cdp.on.call_args.args[1]
+    jpeg = _jpeg_data((1080, 1050), "blue")
+
+    async def emit(width: int, height: int) -> None:
+        await on_frame({
+            "data": jpeg,
+            "sessionId": 1,
+            "metadata": {"deviceWidth": width, "deviceHeight": height, "timestamp": time.time()},
+        })
+
     try:
-        await surface.set_viewport(720, 700, 1.5)
-        frames = asyncio.Queue()
-        stop = await surface.screencast(frames.put_nowait)
-        try:
-            first = await asyncio.wait_for(frames.get(), 2)
-            assert (first.width, first.height) == (720, 700)
-            await surface.set_viewport(1080, 1050)
-            resized = await asyncio.wait_for(frames.get(), 2)
-            assert (resized.width, resized.height) == (1080, 1050)
-            assert resized.jpeg == first.jpeg
-            assert resized.page_token == first.page_token + 1
-        finally:
-            await stop()
+        await emit(720, 700)
+        await emit(720, 700)
+        push.assert_called_once()
+        first = push.call_args.args[0]
+
+        await surface.set_viewport(1080, 1050)
+        await emit(1080, 1050)
+        await emit(1080, 1050)
+        assert push.call_count == 2
+        resized = push.call_args.args[0]
+        assert (first.width, first.height) == (720, 700)
+        assert (resized.width, resized.height) == (1080, 1050)
+        assert resized.jpeg == first.jpeg == jpeg
+        assert resized.page_token == first.page_token + 1
     finally:
-        await surface.close()
+        await stop()
 
 
 @pytest.mark.asyncio
