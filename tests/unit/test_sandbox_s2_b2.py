@@ -222,13 +222,26 @@ async def test_browser_open_public_page_and_view_copy(embedded_runtime) -> None:
     assert "可以直接在画面里操作" in html
 
 
-@pytest.mark.parametrize("name", ["Login success", "Login success.png"])
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("1-登录成功", ["1-登录成功.png", "1-登录成功-2.png"]),
+        ("1-登录成功.png", ["1-登录成功.png", "1-登录成功-2.png"]),
+        ("1-/登录\\成功\x00\x1f", ["1-登录成功.png", "1-登录成功-2.png"]),
+        ("长" * 128, ["长" * 124 + ".png", "长" * 122 + "-2.png"]),
+    ],
+)
 async def test_browser_screenshot_can_name_artifacts_and_avoid_duplicates(
-    embedded_runtime, name, monkeypatch
+    embedded_runtime, name, expected, monkeypatch
 ) -> None:
     store = MemoryArtifactStore(run_id="run-b2")
     gw = build_default_gateway(store)
     owner = P("school-a", "member-a", ["ai:run"])
+
+    async def chinese_page_title(self):
+        return "登录 页面"
+
+    monkeypatch.setattr(FakeChromiumPage, "title", chinese_page_title)
     await gw.invoke(owner, "sandbox_browser_open", {"url": "https://example.com/"})
     for gateway in (gw, build_default_gateway(store)):
         await gateway.invoke(owner, "sandbox_browser_screenshot", {"name": name})
@@ -245,10 +258,9 @@ async def test_browser_screenshot_can_name_artifacts_and_avoid_duplicates(
         build_default_gateway(store).invoke(owner, "sandbox_browser_screenshot", {}),
     )
     assert [row["title"] for row in store.rows[("school-a", "member-a")]] == [
-        "Login_success.png",
-        "Login_success-2.png",
-        "Example_Domain-1.png",
-        "Example_Domain-2.png",
+        *expected,
+        "登录 页面-1.png",
+        "登录 页面-2.png",
     ]
 
 

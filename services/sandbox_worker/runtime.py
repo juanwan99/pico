@@ -214,6 +214,11 @@ def redact_secrets(payload: dict[str, Any], secret_fields: set[str] | None = Non
     return out
 
 
+def _loading_meta(surface: BrowserPage) -> dict[str, str]:
+    note = getattr(surface, "loading_note", "")
+    return {"note": note} if note else {}
+
+
 class SandboxRuntime:
     """Process-local Chromium session table. Not LibreChat. Not pico-api."""
 
@@ -437,6 +442,7 @@ class SandboxRuntime:
                 f"已在 sidecar Chromium 打开公开页。{HUMAN_LOGIN_COPY}"
                 "登录一次后存在你的老师盘上，下次打开自动带上。"
             ),
+            **_loading_meta(page),
         )
 
     async def open_files_desk(
@@ -546,16 +552,19 @@ class SandboxRuntime:
             if item.kind == "browser":
                 sess.focused_id = item.window_id
                 copy = "已切回 sidecar Chromium。"
+                loading: dict[str, str] = {}
                 # A new address goes to the open window; the same one just switches back.
                 go = getattr(item.surface, "navigate", None)
                 if callable(go) and url.rstrip("/") != item.surface.url.rstrip("/"):
                     await go(url)
                     copy = "已在 sidecar Chromium 打开公开页。"
+                    loading = _loading_meta(item.surface)
                 await self._sync(sess)
-                return self._public_meta(sess, message=f"{copy}{HUMAN_LOGIN_COPY}")
+                return self._public_meta(sess, message=f"{copy}{HUMAN_LOGIN_COPY}", **loading)
         page = await self._open_browser(
             url, login_state=self._login_path(sess.school_id, sess.membership_id)
         )
+        loading = _loading_meta(page)
         try:
             parse_public_http_url(page.url)
             win = SandboxWindow(window_id="win_" + secrets.token_hex(6), kind="browser", surface=page)
@@ -569,6 +578,7 @@ class SandboxRuntime:
         return self._public_meta(
             sess,
             message=f"已在 sidecar Chromium 打开公开页。{HUMAN_LOGIN_COPY}",
+            **loading,
         )
 
     async def _attach_office(
@@ -769,6 +779,9 @@ class SandboxRuntime:
             await hands.press_key(key)
         elif verb == "wait_for":
             await hands.wait_for(text=text, text_gone=text_gone, seconds=float(seconds or 0))
+        extra: dict[str, Any] = (
+            _loading_meta(window.surface) if verb in {"navigate", "navigate_back"} else {}
+        )
         full, delta = window.refs.update(
             await hands.snapshot(), page=getattr(hands, "page_token", 0)
         )
@@ -779,8 +792,8 @@ class SandboxRuntime:
         dialogs = hands.take_dialogs()
         if dialogs:
             message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)
+            extra["dialogs"] = dialogs
         tabs = await hands.tabs("list", 0)
-        extra: dict[str, Any] = {"dialogs": dialogs} if dialogs else {}
         if page_file_meta:
             extra.update(page_file_meta)
         if verb == "page_fn":

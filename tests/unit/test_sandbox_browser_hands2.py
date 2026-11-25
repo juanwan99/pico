@@ -25,7 +25,9 @@ sys.path.insert(0, str(ROOT / "services" / "api"))
 os.environ.setdefault("PICO_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
 
 import sandbox_worker.browser as browser_mod
+import sandbox_worker.runtime as runtime_mod
 from pico_orchestrator.gateway import ToolError
+from pico_orchestrator.tools_builtin import build_default_gateway
 from sandbox_worker.browser import VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 
 SITE = "https://site.example"
@@ -75,33 +77,74 @@ def navigation_page(monkeypatch, tmp_path):
     return page, context, surface
 
 
-@pytest.mark.parametrize("action", ["open", "navigate", "back"])
+@pytest.mark.parametrize("action", ["open", "from_files", "reopen", "navigate", "back"])
 async def test_committed_navigation_survives_dom_timeout(
-    action, navigation_page, monkeypatch, caplog
+    action, navigation_page, monkeypatch, caplog, tmp_path
 ) -> None:
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-    page, context, surface = navigation_page
+    page, context, _ = navigation_page
+
+    async def commit(url: str, **_):
+        page.url = url
+        return SimpleNamespace(status=200)
+
+    async def go_back(**kwargs):
+        return await commit(SITE + "/a", **kwargs)
+
+    page.goto.side_effect = commit
+    page.go_back.side_effect = go_back
+    page.title = AsyncMock(return_value="慢页面")
+    page.aria_snapshot = AsyncMock(return_value='- heading "慢页面"')
+    page.frames = [page]
+    page.evaluate = AsyncMock(return_value=[])
+    page.screenshot = AsyncMock(return_value=browser_mod.PNG_MAGIC)
+    page.is_closed.return_value = False
+    context.storage_state = AsyncMock(return_value={})
+
+    runtime = runtime_mod.SandboxRuntime()
+    monkeypatch.setattr(runtime_mod, "RUNTIME", runtime)
+    monkeypatch.setenv("PICO_SANDBOX_URL", "embedded")
+    monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disk"))
+    gateway = build_default_gateway()
+    owner = SimpleNamespace(school_id="school-a", membership_id="member-a", scopes=["ai:run"])
+    if action == "from_files":
+        await runtime.open_files_desk(
+            school_id=owner.school_id, membership_id=owner.membership_id, run_id=None,
+        )
+    elif action in {"reopen", "navigate", "back"}:
+        initial = SITE + ("/b" if action == "back" else "/a")
+        opened = await gateway.invoke(owner, "sandbox_browser_open", {"url": initial})
+        assert "note" not in opened
+        page.goto.reset_mock()
+        page.wait_for_load_state.reset_mock()
+
+    target = SITE + ("/b" if action in {"reopen", "navigate"} else "/a")
     page.wait_for_load_state.side_effect = PlaywrightTimeoutError("fixture DOM wait expired")
     monkeypatch.setattr(browser_mod, "time", SimpleNamespace(
         monotonic=Mock(side_effect=[100.0, 125.0]),
     ))
-    with caplog.at_level("INFO", logger=browser_mod.__name__):
-        if action == "open":
-            surface = await browser_mod.open_chromium(page.url)
-        elif action == "navigate":
-            await surface.navigate(page.url)
+    try:
+        with caplog.at_level("INFO", logger=browser_mod.__name__):
+            if action == "navigate":
+                result = await gateway.invoke(owner, "sandbox_browser_navigate", {"url": target})
+            elif action == "back":
+                result = await gateway.invoke(owner, "sandbox_browser_navigate_back", {})
+            else:
+                result = await gateway.invoke(owner, "sandbox_browser_open", {"url": target})
+        if action == "back":
+            page.go_back.assert_awaited_once_with(wait_until="commit", timeout=60_000)
         else:
-            await surface.navigate_back()
-    if action == "back":
-        page.go_back.assert_awaited_once_with(wait_until="commit", timeout=60_000)
-    else:
-        page.goto.assert_awaited_once_with(page.url, wait_until="commit", timeout=60_000)
-    page.wait_for_load_state.assert_awaited_once_with("domcontentloaded", timeout=35_000)
-    assert surface.url == SITE + "/a"
-    assert surface.loading_note == "页面还在加载，可稍后再取快照 / 截图。"
-    assert "fixture DOM wait expired" in caplog.text
-    context.close.assert_not_awaited()
+            page.goto.assert_awaited_once_with(target, wait_until="commit", timeout=60_000)
+        page.wait_for_load_state.assert_awaited_once_with("domcontentloaded", timeout=35_000)
+        assert result["ok"] is True
+        assert result["url"] == target
+        assert result["note"] == "页面还在加载，可稍后再取快照 / 截图。"
+        assert "fixture DOM wait expired" in caplog.text
+        context.close.assert_not_awaited()
+    finally:
+        for sid in list(runtime._sessions):
+            await runtime.destroy(sid)
 
 
 @pytest.mark.parametrize(
