@@ -18,6 +18,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -139,6 +140,22 @@ async def test_committed_navigation_survives_dom_timeout(
         page.wait_for_load_state.reset_mock()
 
     target = SITE + ("/b" if action in {"reopen", "navigate"} else "/a")
+    if action == "reopen":
+        previous = page
+        previous.close = AsyncMock()
+        page = Mock(
+            url="about:blank",
+            goto=previous.goto,
+            wait_for_load_state=previous.wait_for_load_state,
+            title=previous.title,
+            aria_snapshot=previous.aria_snapshot,
+            evaluate=previous.evaluate,
+            close=AsyncMock(),
+        )
+        page.frames = [page]
+        page.is_closed.return_value = False
+        context.new_page = AsyncMock(return_value=page)
+        context.pages.append(page)
     page.wait_for_load_state.side_effect = PlaywrightTimeoutError("fixture DOM wait expired")
     if capture_timeout:
         async def wait_forever(*args, **kwargs):
@@ -237,6 +254,96 @@ async def test_back_reports_http_error_before_waiting_for_dom(navigation_page) -
     with pytest.raises(ToolError, match="HTTP 503"):
         await surface.navigate_back()
     page.wait_for_load_state.assert_not_awaited()
+
+
+@pytest.fixture
+async def dns_error_desk(monkeypatch, tmp_path):
+    from sandbox_worker import app as worker
+
+    bad_url = "https://no-such-host.invalid/unreachable"
+    fail = asyncio.Event()
+    started = asyncio.Event()
+    good_url = SITE + "/start"
+
+    async def route_request(route) -> None:
+        if route.request.url == bad_url:
+            started.set()
+            await fail.wait()
+            await route.abort("namenotresolved")
+        else:
+            await route.fulfill(status=200, content_type="text/html", body="<h1>Original</h1>")
+
+    monkeypatch.setattr(browser_mod, "PROFILE_ROOT", tmp_path)
+    monkeypatch.setattr(browser_mod, "_guard_route", route_request)
+    monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disk"))
+    runtime = runtime_mod.SandboxRuntime()
+    monkeypatch.setattr(worker, "RUNTIME", runtime)
+    try:
+        try:
+            await browser_mod._ensure_browser()
+        except ToolError as exc:
+            pytest.skip(f"Chromium unavailable: {exc.__cause__}")
+        identity = {"school_id": "school-a", "membership_id": "member-a"}
+        opened = await runtime.open_session(**identity, run_id=None, url=good_url)
+        async with AsyncClient(
+            transport=ASGITransport(app=worker.app), base_url="http://sidecar",
+        ) as client:
+            yield runtime, opened, client, identity, good_url, bad_url, started, fail
+    finally:
+        fail.set()
+        for sid in list(runtime._sessions):
+            await runtime.destroy(sid)
+        await browser_mod.shutdown_browser()
+
+
+async def test_open_dns_failure_returns_400_without_switching_tabs(dns_error_desk) -> None:
+    runtime, opened, client, identity, good_url, bad_url, started, fail = dns_error_desk
+    session = runtime.get(opened["session_id"])
+    original = session.browser
+    previous_focus = session.focused_id
+    request = asyncio.create_task(client.post(
+        "/v1/internal/sessions/open", json={**identity, "url": bad_url},
+    ))
+    try:
+        await asyncio.wait_for(started.wait(), 5)
+        assert original.url == good_url
+        assert len(await original.tabs("list", 0)) == 1
+    finally:
+        fail.set()
+        response = await request
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "sandbox.fetch_failed"
+    assert bad_url in response.json()["detail"]["message"]
+    assert "ERR_NAME_NOT_RESOLVED" in response.json()["detail"]["message"]
+    assert original.url == session.url == good_url
+    assert session.focused_id == previous_focus
+    assert len(await original.tabs("list", 0)) == 1
+
+
+async def test_snapshot_and_navigate_report_chromium_error(dns_error_desk) -> None:
+    runtime, opened, client, identity, _, bad_url, _, fail = dns_error_desk
+    fail.set()
+    sid = opened["session_id"]
+    path = f"/v1/internal/sessions/{sid}/act"
+    original = runtime.get(sid).browser
+    page = original._page
+    async with page.expect_event(
+        "framenavigated",
+        predicate=lambda frame: frame is page.main_frame
+        and frame.url == browser_mod.CHROMIUM_ERROR_PAGE,
+        timeout=5000,
+    ):
+        await page.evaluate("(url) => { location.href = url; }", bad_url)
+    snapshot = await client.post(path, json={**identity, "action": "snapshot"})
+    navigation = await client.post(path, json={**identity, "action": "navigate", "url": bad_url})
+    for response in (navigation, snapshot):
+        assert response.status_code == 400
+        detail = response.json()["detail"]
+        assert detail["code"] == "sandbox.fetch_failed"
+        assert bad_url in detail["message"]
+        assert "ERR_NAME_NOT_RESOLVED" in detail["message"]
+        assert "无法解析该公开页的域名" in detail["message"]
 
 
 async def test_real_chromium_open_keeps_original_page_during_popup(monkeypatch, tmp_path) -> None:

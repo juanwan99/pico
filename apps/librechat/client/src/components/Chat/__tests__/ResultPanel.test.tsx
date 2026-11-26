@@ -610,6 +610,47 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(message);
   });
 
+  it('keeps a failed website open to one attempt per user message during streaming', async () => {
+    mockOpenBrowser.mockRejectedValue(new Error('DNS failure'));
+    const panel = (messageId: string, assistantText: string) => (
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          messages={[
+            {
+              messageId,
+              conversationId: 'c1',
+              parentMessageId: null,
+              isCreatedByUser: true,
+              text: '打开 https://example.com',
+            },
+            {
+              messageId: `reply-${messageId}`,
+              conversationId: 'c1',
+              parentMessageId: messageId,
+              isCreatedByUser: false,
+              text: assistantText,
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+    const { rerender } = render(panel('u1', ''));
+    const error = await screen.findByTestId('artifact-action-error');
+    expect(error).toHaveTextContent('打开网页失败，请稍后重试');
+
+    rerender(panel('u1', '正在'));
+    rerender(panel('u1', '正在查看'));
+    rerender(panel('u1', '正在查看网页'));
+    expect(mockOpenBrowser).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('artifact-action-error')).toBe(error);
+
+    rerender(panel('u2', ''));
+    expect(mockOpenBrowser).toHaveBeenCalledTimes(2);
+    expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(
+      '打开网页失败，请稍后重试',
+    );
+  });
+
   it('S1b: 打开浏览器 resolves a default page and opens Chromium', async () => {
     mockOpenBrowser.mockResolvedValue({
       session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',

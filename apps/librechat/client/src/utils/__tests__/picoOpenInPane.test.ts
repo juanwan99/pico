@@ -97,6 +97,18 @@ describe('picoOpenInPane', () => {
     expect(detectOpenWebsiteIntent('打开一份 Word')).toBeNull();
   });
 
+  it.each([
+    ['先登录。再打开 https://example.com中文说明', 'https://example.com/'],
+    ['打开 example.com。看完告诉我', 'https://example.com/'],
+    [
+      '打开 https://example.com/search?q=a%20b&sort=1#top，看看结果',
+      'https://example.com/search?q=a%20b&sort=1#top',
+    ],
+    ['https://example.com/path!）', 'https://example.com/path'],
+  ])('takes only the URL in %s', (message, url) => {
+    expect(detectOpenWebsiteIntent(message)).toBe(url);
+  });
+
   it('R1a/R1d: default 480, drag floor 340, 390 viewport cannot overflow', () => {
     expect(RESULT_PANE_DEFAULT_WIDTH).toBeGreaterThanOrEqual(480);
     expect(RESULT_PANE_MIN_WIDTH).toBeGreaterThanOrEqual(340);

@@ -323,6 +323,7 @@ export default function ResultPanel({
   const [websiteError, setWebsiteError] = useState<string | null>(null);
   const [chromeOpen, setChromeOpen] = useState(false);
   const openedWebsiteRef = useRef<string | null>(null);
+  const autoWebsiteAttemptRef = useRef<{ messageId: string; url: string } | null>(null);
   const [paneWidth, setPaneWidth] = useState(() =>
     readStoredResultPaneWidth(
       typeof window === 'undefined' ? null : window.localStorage,
@@ -350,6 +351,7 @@ export default function ResultPanel({
     setLocalSandbox(null);
     setLastRunSandbox(null);
     openedWebsiteRef.current = null;
+    autoWebsiteAttemptRef.current = null;
     openedOfficeRef.current = null;
     setWebsiteError(null);
   }, [conversationId]);
@@ -473,13 +475,21 @@ export default function ResultPanel({
     setPreviewArtifactId(null);
   };
 
-  const openWebsiteInPane = async (rawUrl: string) => {
+  const openWebsiteInPane = async (rawUrl: string, messageId?: string) => {
     const url = rawUrl.trim();
+    const attempt = autoWebsiteAttemptRef.current;
+    if (attempt && attempt.messageId === messageId && attempt.url === url) {
+      return;
+    }
     if (!url || openedWebsiteRef.current === url) {
       if (url && sandboxSession) {
         setView('web');
       }
       return;
+    }
+    const autoAttempt = messageId === undefined ? null : { messageId, url };
+    if (autoAttempt) {
+      autoWebsiteAttemptRef.current = autoAttempt;
     }
     openedWebsiteRef.current = url;
     setWebsiteError(null);
@@ -498,8 +508,13 @@ export default function ResultPanel({
         humanCopy: String(meta.human_copy || '这是你的隔离浏览器，可以直接在画面里操作'),
         kind: String(meta.kind || 'browser'),
       });
+      if (autoWebsiteAttemptRef.current === autoAttempt) {
+        autoWebsiteAttemptRef.current = null;
+      }
     } catch (err) {
-      openedWebsiteRef.current = null;
+      if (openedWebsiteRef.current === url) {
+        openedWebsiteRef.current = null;
+      }
       const message = err instanceof Error ? err.message : String(err);
       setWebsiteError(
         message.includes('web.denied') || message.includes('denied')
@@ -562,6 +577,9 @@ export default function ResultPanel({
       void openOfficeInPane(office);
       return;
     }
+    const messageId = site
+      ? messages?.slice().reverse().find((message) => message?.isCreatedByUser)?.messageId
+      : undefined;
     if (ledgerSandbox) {
       if (site) {
         let already = false;
@@ -574,13 +592,13 @@ export default function ResultPanel({
         if (already) {
           return;
         }
-        void openWebsiteInPane(site);
+        void openWebsiteInPane(site, messageId);
         return;
       }
       return;
     }
     if (site) {
-      void openWebsiteInPane(site);
+      void openWebsiteInPane(site, messageId);
       return;
     }
     setWebsiteError((prev) =>

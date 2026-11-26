@@ -596,16 +596,16 @@ class SandboxRuntime:
     async def _attach_browser(self, sess: SandboxSession, url: str) -> dict[str, Any]:
         for item in sess.windows:
             if item.kind == "browser":
-                sess.focused_id = item.window_id
-                copy = "已切回 sidecar Chromium。"
-                loading: dict[str, str] = {}
-                # A new address goes to the open window; the same one just switches back.
-                go = getattr(item.surface, "navigate", None)
-                if callable(go) and url.rstrip("/") != item.surface.url.rstrip("/"):
-                    await go(url)
-                    copy = "已在 sidecar Chromium 打开公开页。"
-                    loading = _loading_meta(item.surface)
-                await self._sync_after_navigation(sess, loading)
+                async with sess.act_lock:
+                    copy = "已切回 sidecar Chromium。"
+                    loading: dict[str, str] = {}
+                    go = getattr(item.surface, "open_url", None)
+                    if callable(go) and url.rstrip("/") != item.surface.url.rstrip("/"):
+                        await go(url)
+                        copy = "已在 sidecar Chromium 打开公开页。"
+                        loading = _loading_meta(item.surface)
+                    sess.focused_id = item.window_id
+                    await self._sync_after_navigation(sess, loading)
                 return self._public_meta(sess, message=f"{copy}{HUMAN_LOGIN_COPY}", **loading)
         page = await self._open_browser(
             url, login_state=self._login_path(sess.school_id, sess.membership_id)
