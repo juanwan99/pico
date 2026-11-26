@@ -477,15 +477,9 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
             )
             await runtime.apply_input(sess, click_x=60, click_y=60)
             assert await page.get_attribute("button", "data-hit") == "1"
-            started_at = time.monotonic()
+            # Reset the scroll position for the next resize. The resize's first
+            # native frame checks the composed page, independent of a scroll-reset frame.
             await page.evaluate("scrollTo(0, 0)")
-            # Let Chromium display the scroll reset before changing the viewport again.
-            while True:
-                returned = await next_frame(started_at)
-                with Image.open(io.BytesIO(base64.b64decode(returned["jpeg"]))) as jpeg:
-                    red, green, blue = jpeg.getpixel((jpeg.width - 20, 40))
-                    if green > 240 and red < 15 and blue < 15:
-                        break
 
             pixel = await first_resized_pixel((900, 700), (1350, 1050), (1300, 40))
             red, green, blue = pixel
@@ -691,17 +685,30 @@ async def test_real_chromium_drops_late_frame_from_one_pixel_smaller_viewport(
         cdp = await context.new_cdp_session(page)
         listen = MagicMock(wraps=cdp.on)
         monkeypatch.setattr(cdp, "on", listen)
-        monkeypatch.setattr(context, "new_cdp_session", AsyncMock(return_value=cdp))
-        frames = asyncio.Queue()
-        push = MagicMock(side_effect=frames.put_nowait)
-        stop = await surface.screencast(push)
-        try:
-            old = io.BytesIO()
-            with Image.new("RGB", (719, 700), "red") as jpeg:
-                jpeg.save(old, format="JPEG")
+        cast = surface.screencast
+        push = MagicMock()
+
+        async def observe_cast(send_frame):
+            push.side_effect = send_frame
+            # Keep the runtime's resize capture on a separate CDP session.
+            with monkeypatch.context() as cast_patch:
+                cast_patch.setattr(context, "new_cdp_session", AsyncMock(return_value=cdp))
+                return await cast(push)
+
+        monkeypatch.setattr(surface, "screencast", observe_cast)
+        runtime = SandboxRuntime()
+        win = SandboxWindow("win_browser", "browser", surface)
+        sess = SandboxSession(
+            "sbox_fit", "school-a", "member-a", "_norun", "ws", page.url, "", "", b"",
+            time.time(), windows=[win], focused_id=win.window_id,
+        )
+        runtime._sessions[sess.session_id] = sess
+        async with aclosing(runtime.stream(sess)) as stream:
+            initial = await anext(stream)
+            assert (initial["width"], initial["height"]) == (719, 700)
             await surface.set_viewport(720, 700)
             stale = {
-                "data": base64.b64encode(old.getvalue()).decode(),
+                "data": _jpeg_data((719, 700), "red"),
                 "sessionId": 0,
                 "metadata": {
                     "deviceWidth": 719,
@@ -710,20 +717,19 @@ async def test_real_chromium_drops_late_frame_from_one_pixel_smaller_viewport(
                 },
             }
             on_frame = listen.call_args.args[1]
-            # PNG capture can hold the viewport lock while the stream keeps painting.
-            async with asyncio.timeout(3), surface._viewport_lock:
-                push.reset_mock()
-                await on_frame(stale)
-                assert all(call.args[0].jpeg != stale["data"] for call in push.call_args_list)
-                await page.evaluate("document.body.textContent = 'Repaint the resized layout'")
-                resized = await frames.get()
-                while resized.page_token != surface.page_token:
-                    resized = await frames.get()
-            assert (resized.width, resized.height) == (720, 700)
-            with Image.open(io.BytesIO(base64.b64decode(resized.jpeg))) as jpeg:
+            async with asyncio.timeout(3):
+                # PNG capture can hold the viewport lock while the stream keeps painting.
+                async with surface._viewport_lock:
+                    push.reset_mock()
+                    await on_frame(stale)
+                    assert all(call.args[0].jpeg != stale["data"] for call in push.call_args_list)
+                # Wait for the frame the pane uses to display the resized static page.
+                resized = await anext(stream)
+            assert (resized["width"], resized["height"]) == (720, 700)
+            with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
                 assert jpeg.size == (720, 700)
-        finally:
-            await stop()
+                red, green, blue = jpeg.getpixel((360, 350))
+                assert red < 20 and green < 20 and blue > 235, (red, green, blue)
     finally:
         await surface.close()
 
