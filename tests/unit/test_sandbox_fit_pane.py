@@ -726,6 +726,39 @@ async def test_current_after_closing_one_of_two_owner_desks(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("transport", ["http", "embedded"])
+async def test_destroy_current_closes_the_resolved_desk(
+    live_runtime, monkeypatch, transport,  # noqa: F811
+) -> None:
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+    from sandbox_worker import app as sidecar
+
+    monkeypatch.delenv("PICO_SANDBOX_TOKEN", raising=False)
+    runtime, _ = live_runtime
+    owner = {"school_id": "school-a", "membership_id": "member-a"}
+    opened = await runtime.open_session(**owner, run_id=None, url="https://example.com/")
+    route = "/v1/internal/sessions/current"
+    if transport == "http":
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=sidecar.app), base_url="http://sidecar"
+        ) as client:
+            destroyed = await client.post(f"{route}/destroy", params=owner)
+            assert destroyed.status_code == 200
+            result = destroyed.json()
+            missing = await client.get(route, params=owner)
+            assert missing.status_code == 404
+            assert missing.json()["detail"]["code"] == "sandbox.session_not_found"
+    else:
+        result = await sidecar_json("POST", f"{route}/destroy", params=owner)
+        with pytest.raises(ToolError) as missing:
+            await sidecar_json("GET", route, params=owner)
+        assert missing.value.code == "sandbox.session_not_found"
+    assert result["destroyed"] is True
+    assert result["session_id"] == opened["session_id"]
+
+
+@pytest.mark.asyncio
 async def test_api_relays_dpr_and_frame_ack_to_worker(live_runtime, monkeypatch) -> None:  # noqa: F811
     from app.auth import issue_test_token
     from app.main import app

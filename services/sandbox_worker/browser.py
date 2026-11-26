@@ -938,12 +938,15 @@ class PlaywrightPage:
 
     async def screenshot_png(self) -> bytes:
         async with self._viewport_lock:
-            cdp = await self._page_metrics(self._page)
-            layout = (await cdp.send("Page.getLayoutMetrics"))["cssLayoutViewport"]
-            viewport = (layout["clientWidth"], layout["clientHeight"])
-            # A window snapshot reads the current compositor surface. A surface
-            # screenshot with emulation or a clip temporarily resizes the live view.
-            screenshot = await cdp.send("Page.captureScreenshot", {"fromSurface": False})
+            cdp = await self._context.new_cdp_session(self._page)
+            try:
+                layout = (await cdp.send("Page.getLayoutMetrics"))["cssLayoutViewport"]
+                viewport = (layout["clientWidth"], layout["clientHeight"])
+                # Surface capture works without a screencast. A session with no
+                # emulation override and no clip leaves the live viewport alone.
+                screenshot = await cdp.send("Page.captureScreenshot", {"fromSurface": True})
+            finally:
+                await cdp.detach()
         png = base64.b64decode(screenshot["data"])
         if not png.startswith(PNG_MAGIC):
             raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能截取 viewport")

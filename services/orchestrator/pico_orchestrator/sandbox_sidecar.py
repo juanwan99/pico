@@ -200,8 +200,8 @@ async def _embedded_call(
                 kind=str(body.get("kind") or ""),
             )
         if method == "POST" and path.endswith("/destroy"):
-            await RUNTIME.destroy(session_id)
-            return {"ok": True, "destroyed": True, "session_id": session_id}
+            await RUNTIME.destroy(sess.session_id)
+            return {"ok": True, "destroyed": True, "session_id": sess.session_id}
         if method == "GET":
             return await RUNTIME.pane_meta(sess)
     raise ToolError("sandbox.unavailable", "隔离沙箱内部路径未知")
