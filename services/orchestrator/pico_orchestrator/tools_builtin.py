@@ -2769,6 +2769,9 @@ def build_default_gateway(
                 "Denies intranet, loopback, metadata, pico-api 18765, and pico.aivia.asia. "
                 "Passwords and verification codes the teacher gives you are typed like any "
                 "other value. The teacher's login is kept for next time. "
+                "Before reporting that the login form is open, check the snapshot and, if "
+                "has_password_input is false, find and click a Login or Sign up entry and confirm "
+                "a password field appears. "
                 "Args: url."
             ),
             handler=browser_open,

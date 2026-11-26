@@ -14,6 +14,10 @@ import { ROOT, goNewChat, loadPlaywright, loginWithEdu, sendPrompt, shot, writeJ
 
 const STOP = '[data-testid="stop-generation-button"], [data-testid="task-stop-button"]';
 const ROUND_TIMEOUT = 6 * 60 * 1000;
+const ROUNDS = [
+  'template', 'bad_address',
+  'template_no_preopen_1', 'template_no_preopen_2', 'template_no_preopen_3', 'template_no_preopen_4',
+];
 
 export function templateTargetHost(template) {
   const url = template.match(/(?:打开|\bopen\b)\s*(?:(?:一下|下)\s*)?(https?:\/\/[^\s。！，、；：？]+)/i)?.[1];
@@ -90,7 +94,7 @@ export function roundAssertions(round, {
     sandbox_open_requests_settled: openRequestsSettled,
     sandbox_open_4xx_at_most_one: Number.isInteger(open4xx) && open4xx <= 1,
   };
-  if (round === 'template') {
+  if (round !== 'bad_address') {
     assertions.no_browser_shortcut = browserOpens === 0;
     assertions.ai_opens_once = aiBrowserOpens === 1;
     assertions.sandbox_web_pane_shown = paneSeen;
@@ -127,8 +131,14 @@ function watchRound(stopSelector) {
 }
 
 export async function runRound(page, base, out, round, prompt, result, targetHost, headers) {
+  const isTemplate = round !== 'bad_address';
   result.assertions.sandbox_open_requests_settled = 'PASS';
   await goNewChat(page, base);
+  if (round.startsWith('template_no_preopen_')) {
+    result.sandbox_before_send_status = await closeDesks(
+      `${base}/api/pico/v1/sandbox/sessions/current`, headers,
+    );
+  }
   await page.evaluate(watchRound, STOP);
   let open4xx = 0;
   let browserOpens = 0;
@@ -156,7 +166,7 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
     if (pendingRequests.delete(request) && !pendingRequests.size) onRequestsDrained?.();
   };
   const onRequestFinished = (request) => {
-    if (round === 'template' &&
+    if (isTemplate &&
       (isPaneMetadata(request) || isSandboxOpen(request.method(), request.url()))) {
       metadataRequests.push(request);
     }
@@ -200,7 +210,7 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
       finished = true;
 
       const pane = page.getByTestId('sandbox-web-pane');
-      if (round === 'template') {
+      if (isTemplate) {
         await pane.getByTestId('sandbox-web-viewport').waitFor({ timeout: remaining() });
         // Take a fresh metadata sample from the visible pane after the turn.
         const samplingStarted = Date.now();
@@ -291,11 +301,11 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
     finalPane,
   });
 
-  // Capture the right rail alone so the user's template stays out of the first image.
+  // Capture the right rail alone so the user's template stays out of the images.
   const file = path.join(out, `${round}.png`);
   const panel = page.getByTestId('result-panel');
-  const shotTarget = round === 'template' ? panel : page;
-  if (round !== 'template' || await panel.isVisible()) {
+  const shotTarget = isTemplate ? panel : page;
+  if (!isTemplate || await panel.isVisible()) {
     result.screenshot = (await shot(shotTarget, file, { allowSmall: true })).filePath;
   }
 }
@@ -310,7 +320,7 @@ async function main() {
   });
   const out = path.resolve(args.out);
   const report = { card: 1464, verdict: 'FAIL', sessions_current_status: null, rounds: {} };
-  for (const round of ['template', 'bad_address']) {
+  for (const round of ROUNDS) {
     report.rounds[round] = { assertions: roundAssertions(round), sandbox_open_4xx: null, screenshot: null };
   }
   let stage = 'read_template';
@@ -353,10 +363,8 @@ async function main() {
       }
 
       stage = 'run_rounds';
-      for (const [round, prompt] of [
-        ['template', template],
-        ['bad_address', '打开 https://no-such-host.invalid'],
-      ]) {
+      for (const round of ROUNDS) {
+        const prompt = round === 'bad_address' ? '打开 https://no-such-host.invalid' : template;
         const result = report.rounds[round];
         try {
           await runRound(page, base, out, round, prompt, result, targetHost, headers);
