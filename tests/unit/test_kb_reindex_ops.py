@@ -337,7 +337,14 @@ async def test_meili_rebuild_waits_for_a_slow_task(monkeypatch: pytest.MonkeyPat
             return 200, {"status": next(states)}
 
     sleep = AsyncMock()
-    monkeypatch.setattr(meili_kb, "asyncio", SimpleNamespace(to_thread=asyncio.to_thread, sleep=sleep))
+    monkeypatch.setattr(
+        meili_kb,
+        "asyncio",
+        SimpleNamespace(
+            to_thread=asyncio.to_thread, sleep=sleep, create_task=asyncio.create_task,
+            shield=asyncio.shield, CancelledError=asyncio.CancelledError,
+        ),
+    )
     index = meili_kb.MeiliIndex(SlowMeili())
     monkeypatch.setattr(index, "ensure", lambda: None)
 
@@ -345,6 +352,53 @@ async def test_meili_rebuild_waits_for_a_slow_task(monkeypatch: pytest.MonkeyPat
     await index.upsert_rebuild_batch([{"chunk_id": "upload_0000"}])
     assert calls == ["GET", "GET", "POST", *(["GET"] * 63)]
     assert sleep.await_count == 63
+
+
+@pytest.mark.parametrize("during_submission", [True, False])
+async def test_rebuild_cancellation_waits_only_for_submission(
+    monkeypatch: pytest.MonkeyPatch, during_submission: bool,
+) -> None:
+    from app.kb_rebuild import _Pace
+    from pico_orchestrator.meili_kb import MeiliIndex
+
+    posting = Event()
+    allow_post = Event()
+    polling = Event()
+    allow_success = Event()
+
+    class BusyMeili:
+        def request(self, method, url, **_):
+            if method == "POST":
+                assert url.endswith("/documents")
+                posting.set()
+                assert allow_post.wait(5)
+                return 202, {"taskUid": 42}
+            assert method == "GET" and url.endswith("/tasks/42")
+            polling.set()
+            return 200, {"status": "succeeded" if allow_success.is_set() else "processing"}
+
+    index = MeiliIndex(BusyMeili())
+    monkeypatch.setattr(index, "ensure", lambda: None)
+    push = asyncio.create_task(_Pace(per_min=600).push(index, [{"chunk_id": "doc_0"}]))
+    try:
+        assert await asyncio.to_thread(posting.wait, 2)
+        if not during_submission:
+            allow_post.set()
+            assert await asyncio.to_thread(polling.wait, 2)
+        push.cancel()
+        if during_submission:
+            await asyncio.sleep(0)
+            assert not push.done()
+            allow_post.set()
+        done, _ = await asyncio.wait({push}, timeout=1)
+        assert push in done, "cancellation waited for Meili task success"
+        with pytest.raises(asyncio.CancelledError):
+            await push
+        assert polling.is_set() is not during_submission
+    finally:
+        allow_post.set()
+        allow_success.set()
+        await asyncio.gather(push, return_exceptions=True)
 
 
 async def test_reindex_all_force_ack_and_health_while_meili_is_busy(

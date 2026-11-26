@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "services" / "orchestrator"))
 
@@ -96,6 +98,18 @@ def test_remember_and_pass_url() -> None:
     assert "/internal/llm-pass/run-1/v1" in pass_base_url("run-1", port="18765")
     forget_turn_files("run-1")
     assert not has_turn_files("run-1")
+
+
+@pytest.mark.parametrize("backend_port", [None, "18769", "18770"])
+def test_pass_url_uses_the_process_listener(monkeypatch, backend_port: str | None) -> None:
+    monkeypatch.setenv("PICO_API_PORT", "18765")
+    monkeypatch.delenv("PICO_API_BACKEND_PORT", raising=False)
+    if backend_port is not None:
+        monkeypatch.setenv("PICO_API_BACKEND_PORT", backend_port)
+
+    assert pass_base_url("run-1") == (
+        f"http://127.0.0.1:{backend_port or '18765'}/internal/llm-pass/run-1/v1"
+    )
 
 
 def test_turn_files_key_is_exact_run_id() -> None:

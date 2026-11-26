@@ -1049,7 +1049,14 @@ class MeiliIndex:
             await asyncio.sleep(1)
 
     async def upsert_rebuild_batch(self, docs: list[dict[str, Any]]) -> None:
-        task_uid = await asyncio.to_thread(self._submit_rebuild_batch, docs)
+        submission = asyncio.create_task(asyncio.to_thread(self._submit_rebuild_batch, docs))
+        try:
+            task_uid = await asyncio.shield(submission)
+        except asyncio.CancelledError:
+            # Finish the POST before yielding the rebuild lock. The next owner
+            # waits on pending Meili tasks before reading or writing the index.
+            await submission
+            raise
         while await asyncio.to_thread(self._task_status, task_uid) != "succeeded":
             await asyncio.sleep(1)
 

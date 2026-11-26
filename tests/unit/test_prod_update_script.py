@@ -82,7 +82,9 @@ def _fake_runtime(
     first_asset_fails: bool = False,
     old_api_port: str | None = None,
     candidate_health: str = "current",
+    candidate_logs_fail: bool = False,
     listener_wrong_sha: bool = False,
+    listener_stale_polls: int = 0,
     api_unchanged: bool = False,
 ) -> Path:
     """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w).
@@ -117,6 +119,8 @@ def _fake_runtime(
         (bin_dir / "old-api-port").write_text(old_api_port)
     if listener_wrong_sha:
         (bin_dir / "listener-wrong-sha").touch()
+    if listener_stale_polls:
+        (bin_dir / "listener-stale-polls").write_text(f"{listener_stale_polls}\n")
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
         'here="$(cd "$(dirname "$0")" && pwd)"\n'
@@ -153,6 +157,8 @@ def _fake_runtime(
         '    : >"$here/candidate-created"\n'
         '    exit 0 ;;\n'
         '  "kill --signal HUP listener") echo hup >>"$here/listener-reloads"; exit 0 ;;\n'
+        '  "logs --tail 30 new-api")\n'
+        f'    exit {1 if candidate_logs_fail else 0} ;;\n'
         '  "exec new-api curl "*)\n'
         '    sha="$PICO_GIT_SHA"\n'
         f'    case "{candidate_health}" in\n'
@@ -258,6 +264,16 @@ def _fake_runtime(
         "      fi\n"
         "    fi\n"
         '    sha="$PICO_GIT_SHA"\n'
+        '    if [ "$url" = http://127.0.0.1:18765/health ] && [[ "$*" = "-fsS "* ]]; then\n'
+        '      echo "verify listener health" >>"$here/docker-commands"\n'
+        '      if [ -f "$here/listener-stale-polls" ] && [ -f "$here/listener-reloads" ]; then\n'
+        '        read -r left <"$here/listener-stale-polls"\n'
+        '        if [ "$left" -gt 0 ]; then\n'
+        '          sha=previous\n'
+        '          echo "$((left - 1))" >"$here/listener-stale-polls"\n'
+        '        fi\n'
+        '      fi\n'
+        '    fi\n'
         '    if [ -f "$here/listener-wrong-sha" ] && [ -f "$here/listener-reloads" ]; then\n'
         '      sha=previous\n'
         '    fi\n'
@@ -401,6 +417,7 @@ def test_prod_update_switches_healthy_candidate_then_drains_and_stops_old(tmp_pa
         "start new-api",
         "exec new-api curl -fsS --max-time 2 http://127.0.0.1:18770/health",
         "kill --signal HUP listener",
+        "verify listener health",
         "exec listener sh -c ",
         "stop old-api",
         "rm old-api",
@@ -414,12 +431,27 @@ def test_prod_update_switches_healthy_candidate_then_drains_and_stops_old(tmp_pa
     assert "PICO_API_BACKEND_PORT=18770" in (production / ".env").read_text().splitlines()
 
 
+def test_prod_update_waits_for_new_sha_after_async_reload(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, old_api_port="18769", listener_stale_polls=1)
+    result = _run_prod_update(production, sha, bin_dir)
+
+    assert result.returncode == 0, result.stderr
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    probes = [i for i, command in enumerate(commands) if command == "verify listener health"]
+    assert len(probes) == 2 and probes[-1] < commands.index("exec listener sh -c ")
+
+
 @pytest.mark.parametrize(("candidate_health", "exit_code"), [("down", 4), ("wrong-sha", 5)])
+@pytest.mark.parametrize("candidate_logs_fail", [False, True])
 def test_prod_update_keeps_old_when_candidate_is_unhealthy(
-    tmp_path: Path, candidate_health: str, exit_code: int,
+    tmp_path: Path, candidate_health: str, exit_code: int, candidate_logs_fail: bool,
 ) -> None:
     production, sha = _production_checkout(tmp_path)
-    bin_dir = _fake_runtime(tmp_path, old_api_port="18770", candidate_health=candidate_health)
+    bin_dir = _fake_runtime(
+        tmp_path, old_api_port="18770", candidate_health=candidate_health,
+        candidate_logs_fail=candidate_logs_fail,
+    )
     result = _run_prod_update(production, sha, bin_dir)
 
     assert result.returncode == exit_code
@@ -430,11 +462,14 @@ def test_prod_update_keeps_old_when_candidate_is_unhealthy(
     assert "kill --signal HUP listener" not in commands
 
 
+@pytest.mark.parametrize("candidate_logs_fail", [False, True])
 def test_prod_update_first_migration_restores_legacy_container_if_candidate_fails(
-    tmp_path: Path,
+    tmp_path: Path, candidate_logs_fail: bool,
 ) -> None:
     production, sha = _production_checkout(tmp_path)
-    bin_dir = _fake_runtime(tmp_path, old_api_port="", candidate_health="down")
+    bin_dir = _fake_runtime(
+        tmp_path, old_api_port="", candidate_health="down", candidate_logs_fail=candidate_logs_fail,
+    )
     result = _run_prod_update(production, sha, bin_dir)
 
     assert result.returncode == 4
@@ -453,6 +488,8 @@ def test_prod_update_restores_listener_when_new_route_fails(tmp_path: Path) -> N
     commands = (bin_dir / "docker-commands").read_text().splitlines()
     reloads = [i for i, command in enumerate(commands) if command == "kill --signal HUP listener"]
     assert len(reloads) == 2 and reloads[1] < commands.index("stop new-api")
+    assert reloads[0] < commands.index("verify listener health") < reloads[1]
+    assert "exec listener sh -c " not in commands[:reloads[1]]
     assert commands.index("stop new-api") < commands.index("rm new-api")
     assert "stop old-api" not in commands
     assert "proxy_pass 127.0.0.1:18770;" in (

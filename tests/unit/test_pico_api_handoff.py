@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import socket
 import subprocess
@@ -15,6 +16,7 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parents[2]
+logger = logging.getLogger(__name__)
 
 
 def _serve(port: int, events_file: Path) -> None:
@@ -135,7 +137,8 @@ def test_two_processes_recover_only_the_retired_owners_runs(tmp_path: Path) -> N
                 assert proc.poll() is None, (tmp_path / f"{sha}.log").read_text()
                 try:
                     response = client.get("/health")
-                except httpx.ConnectError:
+                except httpx.ConnectError as exc:
+                    logger.debug("API %s is not accepting connections yet: %s", sha, exc)
                     return False
                 return response.raise_for_status().json()["git_sha"] == sha
 

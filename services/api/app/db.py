@@ -484,7 +484,11 @@ def _migrate_sqlite_sync(conn) -> None:
 def _scrub_usage_events_sync(conn) -> None:
     from app.usage_ledger import scrub_dirty_usage_events_sync
 
+    # SQLite's user_version records the completed historical ledger cleanup.
+    if conn.exec_driver_sql("PRAGMA user_version").scalar_one() >= 1:
+        return
     stats = scrub_dirty_usage_events_sync(conn)
+    conn.exec_driver_sql("PRAGMA user_version=1")
     if stats.get("estimated") or stats.get("ui_lane"):
         logger.info("usage_events scrub %s", stats)
 
@@ -504,7 +508,7 @@ async def init_db() -> None:
     global _engine, _Session, _engine_url
     settings = get_settings()
     url = _normalize_url(settings.pico_database_url)
-    # 建表 / 迁移 / 清账本整表扫一个进程只跑一次。每次对话都重跑会抢 sqlite 写锁排队：
+    # 建表 / 迁移每个进程只跑一次。每次对话都重跑会抢 sqlite 写锁排队：
     # 11-01 考试阅卷一次 DeepSeek 1–2 秒，经 Pico 要 30–100 秒（edu-core#4503）。
     if _Session is not None and _engine_url == url:
         return
@@ -523,9 +527,6 @@ async def init_db() -> None:
         event.listen(_engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
     _Session = async_sessionmaker(_engine, expire_on_commit=False)
     async with _engine.begin() as conn:
-        if "sqlite" in url:
-            # Serialize schema checks and writes across overlapping API starts.
-            await conn.exec_driver_sql("BEGIN IMMEDIATE")
         await conn.run_sync(Base.metadata.create_all)
         if "sqlite" in url:
             await conn.run_sync(_migrate_sqlite_sync)

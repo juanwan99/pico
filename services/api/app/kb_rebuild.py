@@ -6,7 +6,6 @@ import asyncio
 import logging
 import os
 import time
-from asyncio import CancelledError, create_task, shield
 from datetime import datetime
 from typing import Any
 
@@ -43,13 +42,7 @@ class _Pace:
         if wait > 0:
             await asyncio.sleep(wait)
         started_at = time.monotonic()
-        batch = create_task(index.upsert_rebuild_batch(docs))
-        try:
-            await shield(batch)
-        except CancelledError:
-            # Complete this submission before the rebuild yields its process lock.
-            await batch
-            raise
+        await index.upsert_rebuild_batch(docs)
         completed_at = time.monotonic()
         self.next_push_at = completed_at + max(
             len(docs) * 60.0 / self.per_min, completed_at - started_at

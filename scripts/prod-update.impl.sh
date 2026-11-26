@@ -271,7 +271,7 @@ if [ "$inflight" -gt 0 ]; then
 fi
 
 health_at() {
-  local port="$1" sha
+  local port="$1" sha status=4
   shift
   for _ in $(seq 1 40); do
     if "$@" curl -fsS --max-time 2 "http://127.0.0.1:$port/health" >"$HEALTH_FILE"; then
@@ -286,13 +286,18 @@ print(body.get("git_sha", "") if body.get("ok") is True else "")
         echo "[pico] health.git_sha exact match: $sha (port $port)"
         return 0
       fi
-      echo "[pico] FATAL: port $port health.git_sha mismatch got=$sha want=$CURRENT_SHA" >&2
-      return 5
+      status=5
+      # HUP is asynchronous. Only the shared listener can still serve the old SHA.
+      if [ "$#" -ne 0 ]; then break; fi
     fi
     sleep 1
   done
-  echo "[pico] FATAL: port $port /health did not become ready" >&2
-  return 4
+  if [ "$status" -eq 5 ]; then
+    echo "[pico] FATAL: port $port health.git_sha mismatch got=$sha want=$CURRENT_SHA" >&2
+  else
+    echo "[pico] FATAL: port $port /health did not become ready" >&2
+  fi
+  return "$status"
 }
 
 write_listener_config() {
@@ -314,15 +319,22 @@ EOF
   mv "$file" "$LISTENER_DIR/$2"
 }
 
+reload_api_listener() {
+  mv "$LISTENER_DIR/nginx.next.conf" "$LISTENER_DIR/nginx.conf" || return
+  docker kill --signal HUP "$1"
+}
+
 switch_api_listener() {
   local listener="$1" port="$2" workers
   if [ -z "$listener" ]; then
     write_listener_config "$port" nginx.conf || return
-    docker compose -f "$COMPOSE_FILE" up -d --no-deps pico-api-listener
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps pico-api-listener || return
   else
     workers="$(docker exec "$listener" cat /proc/1/task/1/children)" || return
-    mv "$LISTENER_DIR/nginx.next.conf" "$LISTENER_DIR/nginx.conf" || return
-    docker kill --signal HUP "$listener" || return
+    reload_api_listener "$listener" || return
+  fi
+  health_at 18765 || return
+  if [ -n "$listener" ]; then
     # The old workers still own already accepted TCP connections after HUP.
     # Wait for those sessions to drain before stopping their upstream.
     timeout 65 docker exec "$listener" sh -c '
@@ -392,19 +404,19 @@ print(json.load(sys.stdin)["services"]["pico-api"]["image"])
   fi
   docker start "$new_api" && health_at "$new_port" docker exec "$new_api" || candidate_status=$?
   if [ "$candidate_status" -ne 0 ]; then
-    docker logs --tail 30 "$new_api"
+    docker logs --tail 30 "$new_api" || true
     docker rm -f "$new_api"
     if [ "$legacy" = "1" ]; then docker start "$old_api"; fi
     exit "$candidate_status"
   fi
 
   candidate_status=0
-  switch_api_listener "$listener" "$new_port" && health_at 18765 || candidate_status=$?
+  switch_api_listener "$listener" "$new_port" || candidate_status=$?
   if [ "$candidate_status" -ne 0 ]; then
     echo "[pico] FATAL: 18765 did not switch to the candidate" >&2
     if [ -n "$listener" ]; then
       write_listener_config "$old_port" nginx.next.conf
-      switch_api_listener "$listener" "$old_port"
+      reload_api_listener "$listener"
     else
       docker compose -f "$COMPOSE_FILE" stop pico-api-listener
       if [ "$legacy" = "1" ]; then docker start "$old_api"; fi
