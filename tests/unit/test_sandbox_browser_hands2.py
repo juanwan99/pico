@@ -249,6 +249,35 @@ async def test_back_reports_http_error_before_waiting_for_dom(navigation_page) -
     page.wait_for_load_state.assert_not_awaited()
 
 
+async def test_failed_back_preserves_original_dns_error(navigation_page, caplog) -> None:
+    from playwright.async_api import Error
+
+    page, _, surface = navigation_page
+    bad_url = "https://no-such-host.invalid/unreachable"
+
+    async def fail_navigation(*args, **kwargs):
+        page.url = browser_mod.CHROMIUM_ERROR_PAGE
+        raise Error(f"Page.goto: net::ERR_NAME_NOT_RESOLVED at {bad_url}")
+
+    page.goto.side_effect = fail_navigation
+    page.wait_for_url = AsyncMock()
+    page.go_back.side_effect = Error(
+        "Page.go_back: Protocol error (Page.getNavigationHistory): Not attached to an active page"
+    )
+    with pytest.raises(ToolError, match="ERR_NAME_NOT_RESOLVED") as failure:
+        await surface.navigate(bad_url)
+
+    assert failure.value.code == "sandbox.fetch_failed"
+    assert "DNS 失败" in failure.value.message
+    assert bad_url in failure.value.message
+    page.wait_for_url.assert_awaited_once_with(
+        browser_mod.CHROMIUM_ERROR_PAGE, wait_until="domcontentloaded", timeout=1_000,
+    )
+    page.go_back.assert_awaited_once()
+    assert "Chromium could not return to the previous page" in caplog.text
+    assert "Not attached to an active page" in caplog.text
+
+
 @pytest.fixture
 async def dns_error_desk(monkeypatch, tmp_path):
     from sandbox_worker import app as worker
@@ -284,25 +313,32 @@ async def dns_error_desk(monkeypatch, tmp_path):
         await browser_mod.shutdown_browser()
 
 
-async def test_open_dns_failure_returns_400_without_switching_tabs(dns_error_desk) -> None:
+async def test_repeated_open_dns_failures_keep_the_same_tab_usable(dns_error_desk) -> None:
     runtime, opened, client, identity, good_url, bad_url = dns_error_desk
     session = runtime.get(opened["session_id"])
     original = session.browser
     page = original._page
     previous_focus = session.focused_id
     await page.evaluate("sessionStorage.setItem('test', 'original')")
-    response = await client.post(
-        "/v1/internal/sessions/open", json={**identity, "url": bad_url},
-    )
+    open_path = "/v1/internal/sessions/open"
+    for _ in range(2):
+        response = await client.post(open_path, json={**identity, "url": bad_url})
+        assert response.status_code == 400
+        detail = response.json()["detail"]
+        assert detail["code"] == "sandbox.fetch_failed"
+        assert bad_url in detail["message"]
+        assert "ERR_NAME_NOT_RESOLVED" in detail["message"]
+        assert original.url == session.url == good_url
+        assert original._page is page
+        assert session.focused_id == previous_focus
 
-    assert response.status_code == 400
-    assert response.json()["detail"]["code"] == "sandbox.fetch_failed"
-    assert bad_url in response.json()["detail"]["message"]
-    assert "ERR_NAME_NOT_RESOLVED" in response.json()["detail"]["message"]
-    assert original.url == session.url == good_url
-    assert original._page is page
     assert await page.evaluate("sessionStorage.getItem('test')") == "original"
-    assert session.focused_id == previous_focus
+    target = SITE + "/next"
+    response = await client.post(open_path, json={**identity, "url": target})
+    assert response.status_code == 200
+    assert response.json()["session_id"] == opened["session_id"]
+    assert response.json()["url"] == original.url == target
+    assert original._page is page
     assert len(await original.tabs("list", 0)) == 1
 
 
