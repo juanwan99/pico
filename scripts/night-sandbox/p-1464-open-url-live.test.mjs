@@ -1,8 +1,72 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isSandboxOpen4xx, loginFailureDetails, roundAssertions } from './p-1464-open-url-live.mjs';
+import {
+  closeDesks,
+  countAiBrowserOpens,
+  isSandboxOpen4xx,
+  loginFailureDetails,
+  roundAssertions,
+  templateTargetHost,
+} from './p-1464-open-url-live.mjs';
 
 const sessions = 'https://pico.test/api/pico/v1/sandbox/sessions';
+const currentUrl = `${sessions}/current`;
+const headers = { authorization: 'Bearer test-teacher' };
+
+test('reads the target host from the open instruction in a long template', () => {
+  const template = '先参考 https://example.org。\n打开 https://example.com/home。未登录就停在登录页。';
+  assert.equal(templateTargetHost(template), 'example.com');
+});
+
+test('counts AI opens from the conversation ledger without counting tool results', async (t) => {
+  const responses = new Map([
+    ['https://pico.test/api/pico/v1/tasks?conversation_id=chat_1', {
+      tasks: [{ latest_run: { id: 'run_1' } }],
+    }],
+    ['https://pico.test/api/pico/v1/runs/run_1/events', {
+      events: [
+        { type: 'tool.call', payload: { tool: 'sandbox_browser_open' } },
+        { type: 'tool.result', payload: { tool: 'sandbox_browser_open', ok: true } },
+        { type: 'tool.call', payload: { tool: 'sandbox_browser_act' } },
+      ],
+    }],
+  ]);
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    assert.deepEqual(init.headers, headers);
+    assert.ok(responses.has(url));
+    return Response.json(responses.get(url));
+  });
+  assert.equal(await countAiBrowserOpens('https://pico.test', 'chat_1', headers), 1);
+});
+
+test('cleans up every current desk and confirms the final GET returns 404', async (t) => {
+  let desks = 2;
+  const methods = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    assert.equal(url, currentUrl);
+    assert.deepEqual(init.headers, headers);
+    const method = init.method ?? 'GET';
+    methods.push(method);
+    if (method === 'DELETE') desks--;
+    return method === 'GET' && desks === 0
+      ? Response.json({ detail: { code: 'sandbox.session_not_found' } }, { status: 404 })
+      : Response.json({ ok: true });
+  });
+  assert.equal(await closeDesks(currentUrl, headers), 404);
+  assert.deepEqual(methods, ['GET', 'DELETE', 'GET', 'DELETE', 'GET']);
+  methods.length = 0;
+  assert.equal(await closeDesks(currentUrl, headers), 404);
+  assert.deepEqual(methods, ['GET']);
+});
+
+test('cleanup reports unexpected GET and failed DELETE', async (t) => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => Response.json({}, { status: 404 }));
+  await assert.rejects(closeDesks(currentUrl, headers), /sandbox current HTTP 404/);
+  fetch.mock.mockImplementation(async (_url, init) => init.method === 'DELETE'
+    ? Response.json({}, { status: 503 })
+    : Response.json({ ok: true }));
+  await assert.rejects(closeDesks(currentUrl, headers), /sandbox cleanup HTTP 503/);
+});
 
 test('counts only 4xx responses to sandbox session creation', () => {
   const responses = [
@@ -24,6 +88,8 @@ test('template round passes with a pane, a completed reply, and no browser error
     chromeErrorSeen: false,
     open4xx: 0,
     openRequestsSettled: true,
+    browserOpens: 0,
+    aiBrowserOpens: 1,
     targetHost: 'example.com',
     finalPane: { url: 'https://example.com/login', has_password_input: true },
     viewportVisible: true,
@@ -32,6 +98,8 @@ test('template round passes with a pane, a completed reply, and no browser error
     finished: 'PASS',
     sandbox_open_requests_settled: 'PASS',
     sandbox_open_4xx_at_most_one: 'PASS',
+    no_browser_shortcut: 'PASS',
+    ai_opens_once: 'PASS',
     sandbox_web_pane_shown: 'PASS',
     no_chrome_error: 'PASS',
     pane_stops_at_target_login: 'PASS',
@@ -46,11 +114,15 @@ test('template round reports each observed failure and never passes an absent re
     chromeErrorSeen: true,
     open4xx: 2,
     openRequestsSettled: false,
+    browserOpens: 2,
+    aiBrowserOpens: 0,
     reply: '平台异常，请稍后重试',
   }), {
     finished: 'FAIL',
     sandbox_open_requests_settled: 'FAIL',
     sandbox_open_4xx_at_most_one: 'FAIL',
+    no_browser_shortcut: 'FAIL',
+    ai_opens_once: 'FAIL',
     sandbox_web_pane_shown: 'FAIL',
     no_chrome_error: 'FAIL',
     pane_stops_at_target_login: 'FAIL',
@@ -58,6 +130,15 @@ test('template round reports each observed failure and never passes an absent re
   });
   assert.equal(roundAssertions('template').reply_stops_at_login, 'FAIL');
   assert.equal(roundAssertions('template').sandbox_open_4xx_at_most_one, 'FAIL');
+});
+
+test('template rejects a successful shortcut POST or repeated AI opens', () => {
+  const assertions = roundAssertions('template', { open4xx: 0, browserOpens: 1, aiBrowserOpens: 2 });
+  assert.equal(assertions.sandbox_open_4xx_at_most_one, 'PASS');
+  assert.equal(assertions.no_browser_shortcut, 'FAIL');
+  assert.equal(assertions.ai_opens_once, 'FAIL');
+  assert.equal(roundAssertions('template').no_browser_shortcut, 'FAIL');
+  assert.equal(roundAssertions('template').ai_opens_once, 'FAIL');
 });
 
 test('template round rejects replies that say the login page failed', () => {
@@ -123,7 +204,8 @@ test('bad address round requires the DNS explanation independently in the pane a
   assert.equal(assertions.run_card_explains_dns, 'PASS');
 
   for (const text of [
-    '', 'ERR_NAME_NOT_RESOLVED', `${expected}。请稍后重试。`, `${expected}。不是你的问题写错。`,
+    '', 'ERR_NAME_NOT_RESOLVED', '正在解析域名', `${expected}。请稍后重试。`,
+    `${expected}。不是你的问题写错。`,
   ]) {
     const wrongPane = roundAssertions('bad_address', { paneError: text, runCard: expected });
     assert.equal(wrongPane.pane_error_explains_dns, 'FAIL');

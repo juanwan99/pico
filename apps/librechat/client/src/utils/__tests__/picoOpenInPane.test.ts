@@ -83,36 +83,61 @@ describe('picoOpenInPane', () => {
     expect(detectOpenOfficeIntent('打开一个 word 文档在沙箱')?.filename).toBeUndefined();
   });
 
-  it('T5/T9: 打开 example.com is a website intent; 打开 file.md is not', () => {
-    expect(detectOpenWebsiteIntent('打开 https://example.com')).toBe('https://example.com/');
-    expect(detectOpenWebsiteIntent('打开 example.com')).toBe('https://example.com/');
-    expect(detectOpenWebsiteIntent('open https://example.com/')).toBe('https://example.com/');
-    expect(detectOpenWebsiteIntent('https://example.com')).toBe('https://example.com/');
-    expect(detectOpenWebsiteIntent('打开 课程总结.md')).toBeNull();
-    expect(detectOpenWebsiteIntent('打开 报告.docx')).toBeNull();
-    expect(detectOpenWebsiteIntent('打开浏览器')).toBe('https://example.com/');
-    expect(detectOpenWebsiteIntent('打开一下浏览器')).toBe('https://example.com/');
-    expect(detectOpenWebsiteIntent('打开腾讯官网')).toBe('https://www.qq.com/');
-    expect(detectOpenWebsiteIntent('你好')).toBeNull();
-    expect(detectOpenWebsiteIntent('打开一份 Word')).toBeNull();
-  });
-
   it.each([
-    ['先登录。再打开 https://example.com中文说明', 'https://example.com/'],
-    ['打开 example.com。看完告诉我', 'https://example.com/'],
-    ['打开 https://example.com/index.html。查看首页', 'https://example.com/index.html'],
-    ['打开 https://example.com/guide.pdf，查看手册', 'https://example.com/guide.pdf'],
+    ['https://example.com/a', 'https://example.com/a'],
+    ['打开 https://example.com', 'https://example.com/'],
+    ['打开 https://no-such-host.invalid', 'https://no-such-host.invalid/'],
+    ['打开一下 example.com', 'https://example.com/'],
+    ['open www.example.com', 'https://www.example.com/'],
+    ['open https://example.com/', 'https://example.com/'],
+    ['  打开https://example.com。  ', 'https://example.com/'],
+    ['https://example.com/path!）', 'https://example.com/path'],
+    ['打开 https://example.com/guide.pdf.', 'https://example.com/guide.pdf'],
     [
-      '打开 https://example.com/search?q=a%20b&sort=1#top，看看结果',
+      '打开 https://example.com/search?q=a%20b&sort=1#top！',
       'https://example.com/search?q=a%20b&sort=1#top',
     ],
-    ['https://example.com/path!）', 'https://example.com/path'],
-  ])('takes only the URL in %s', (message, url) => {
+    ['打开浏览器', 'https://example.com/'],
+    ['打开一下浏览器', 'https://example.com/'],
+    ['打开网页！', 'https://example.com/'],
+    ['打开网站!', 'https://example.com/'],
+    ['打开腾讯网。', 'https://www.qq.com/'],
+    ['打开腾讯官网', 'https://www.qq.com/'],
+  ])('opens the website shortcut %s', (message, url) => {
     expect(detectOpenWebsiteIntent(message)).toBe(url);
   });
 
-  it('still treats a filename without a URL scheme as a file', () => {
-    expect(detectOpenWebsiteIntent('打开 index.html。查看首页')).toBeNull();
+  it.each([
+    '打开 https://example.com。未登录就停在登录页',
+    '请帮我打开 https://example.com 看看首页',
+    '先阅读要求\n打开 https://example.com\n未登录就停在登录页',
+    '打开 example.com 然后截图',
+    'openai.example.com',
+    '先登录。再打开 https://example.com中文说明',
+    '打开 example.com。看完告诉我',
+    '打开 https://example.com/index.html。查看首页',
+    '打开 https://example.com/guide.pdf，查看手册',
+    '打开 https://example.com/search?q=a%20b&sort=1#top，看看结果',
+    '打开浏览器，再看首页',
+    '打开网页 然后截图',
+    '请打开腾讯网',
+    '打开腾讯网看看首页',
+    '打开 课程总结.md',
+    '打开 报告.docx',
+    '打开 index.html',
+    '你好',
+    '打开一份 Word',
+  ])('skips the website shortcut for %s', (message) => {
+    expect(detectOpenWebsiteIntent(message)).toBeNull();
+  });
+
+  it.each([
+    '打开 https://example.com。再打开报告.docx',
+    '打开 www.example.com 的表格',
+    '先读 http://example.com 的说明，再打开 Word',
+  ])('skips the office shortcut for a message with a URL: %s', (message) => {
+    expect(detectOpenWebsiteIntent(message)).toBeNull();
+    expect(detectOpenOfficeIntent(message)).toBeNull();
   });
 
   it('R1a/R1d: default 480, drag floor 340, 390 viewport cannot overflow', () => {
