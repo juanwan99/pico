@@ -10,6 +10,7 @@ from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import ColumnElement
 
 from app.artifact_store import LedgerArtifactStore
 from app.auth import Principal, payer_for
@@ -80,9 +81,11 @@ async def drain_inflight_runs(*, timeout_s: float = 45.0) -> dict[str, int]:
     if not pending:
         return {"waited": 0, "remaining": 0, "timed_out": 0}
     done, still = await asyncio.wait(pending, timeout=max(0.0, timeout_s))
-    # Best-effort: cancel leftovers so lifespan can finish; reconcile will mark ledger.
+    # Let cancellation finish writing checkpoints before another process takes over.
     for t in still:
         t.cancel()
+    if still:
+        await asyncio.gather(*still, return_exceptions=True)
     return {
         "waited": len(done),
         "remaining": len(still),
@@ -394,7 +397,9 @@ async def cancel_active_runs_for_conversation(
     return out
 
 
-async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
+async def reconcile_orphaned_runs(
+    session: AsyncSession, *conditions: ColumnElement[bool]
+) -> dict[str, int]:
     """Finalize non-terminal runs whose in-process owner was lost on restart.
 
     Thin adapter: in-process asyncio owners die with the API process. We cannot
@@ -408,7 +413,7 @@ async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
     active = (
         await session.execute(
             select(RunRow).where(
-                RunRow.status.in_(("queued", "preparing", "running"))
+                RunRow.status.in_(("queued", "preparing", "running")), *conditions
             )
         )
     ).scalars().all()

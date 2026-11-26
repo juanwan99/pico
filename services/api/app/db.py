@@ -44,6 +44,9 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
+RUN_OWNER_ID = new_id()
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -92,6 +95,7 @@ class RunRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_usage_json: Mapped[str] = mapped_column(Text, default="{}")
     cancel_requested: Mapped[int] = mapped_column(Integer, default=0)
+    owner_id: Mapped[str | None] = mapped_column(String(36), default=RUN_OWNER_ID)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
@@ -383,6 +387,10 @@ def _normalize_url(url: str) -> str:
 
 
 def _migrate_sqlite_sync(conn) -> None:
+    run_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(runs)")}
+    if "owner_id" not in run_columns:
+        conn.exec_driver_sql("ALTER TABLE runs ADD COLUMN owner_id VARCHAR(36)")
+
     try:
         rows = conn.execute(text("PRAGMA table_info(tasks)")).fetchall()
     except Exception:  # noqa: BLE001
@@ -515,6 +523,9 @@ async def init_db() -> None:
         event.listen(_engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
     _Session = async_sessionmaker(_engine, expire_on_commit=False)
     async with _engine.begin() as conn:
+        if "sqlite" in url:
+            # Serialize schema checks and writes across overlapping API starts.
+            await conn.exec_driver_sql("BEGIN IMMEDIATE")
         await conn.run_sync(Base.metadata.create_all)
         if "sqlite" in url:
             await conn.run_sync(_migrate_sqlite_sync)
@@ -534,6 +545,12 @@ def session_factory() -> async_sessionmaker[AsyncSession]:
     if _Session is None:
         raise RuntimeError("DB not initialized — call init_db() first")
     return _Session
+
+
+async def lock_sqlite_writer(session: AsyncSession) -> None:
+    # A recovery scan reads status before writing it. Serialize it with live cancels.
+    if session.get_bind().dialect.name == "sqlite":
+        await session.execute(text("BEGIN IMMEDIATE"))
 
 
 async def append_event(

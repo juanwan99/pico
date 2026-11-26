@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import mimetypes
 import re
+import signal
 import sys
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from urllib.parse import quote
 
@@ -43,7 +45,17 @@ from app.auth import (
     require_scoped_principal,
     require_service_token,
 )
-from app.db import EventRow, RunRow, WorkspaceRow, get_session, init_db, new_id
+from app.background_lock import lock_path, try_lock, wait_lock
+from app.db import (
+    RUN_OWNER_ID,
+    EventRow,
+    RunRow,
+    WorkspaceRow,
+    get_session,
+    init_db,
+    lock_sqlite_writer,
+    new_id,
+)
 from app.edu_files import router as edu_files_router
 from app.edu_kb_ingest import router as edu_kb_ingest_router
 from app.edu_school import router as edu_school_router
@@ -59,6 +71,8 @@ from app.openai_compat import router as openai_compat_router
 from app.rate_limit import ChatRateLimitMiddleware, get_chat_admission
 from app.settings import Settings, get_settings
 from app.ws_proxy_router import router as ws_proxy_router
+
+logger = logging.getLogger(__name__)
 
 
 def _sync_settings_to_environ() -> None:
@@ -104,44 +118,76 @@ def _sync_settings_to_environ() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app import automation_service, run_resume
+
     get_settings().validate_production()
     _sync_settings_to_environ()
     await init_db()
     factory = run_service.session_factory()
-    async with factory() as session:
-        await run_service.reconcile_orphaned_runs(session)
-    from app import run_resume
+    path = lock_path("background")
+    owner_lock = try_lock(path)
+    takeover = None
 
-    resumed = await run_resume.resume_orphaned_runs()
-    if resumed:
-        print(f"[pico] restart resume runs={resumed}", flush=True)
-    from app import automation_service
+    async def start_background() -> None:
+        # This process can already have HTTP runs when the old owner exits.
+        previous_runs = RunRow.owner_id.is_distinct_from(RUN_OWNER_ID)
+        async with factory() as session:
+            await lock_sqlite_writer(session)
+            await run_service.reconcile_orphaned_runs(session, previous_runs)
+        resumed = await run_resume.resume_orphaned_runs(previous_runs)
+        if resumed:
+            print(f"[pico] restart resume runs={resumed}", flush=True)
+        automation_service.start_scheduler()
 
-    automation_service.start_scheduler()
+    async def take_over_background() -> None:
+        nonlocal owner_lock
+        try:
+            owner_lock = await wait_lock(path)
+            await start_background()
+        except Exception:
+            logger.exception("pico-api background startup failed")
+            signal.raise_signal(signal.SIGTERM)
+            raise
+
     try:
+        if owner_lock is None:
+            takeover = asyncio.create_task(take_over_background())
+        else:
+            await start_background()
         yield
     finally:
-        reindex = getattr(_app.state, "kb_reindex_task", None)
-        if reindex is not None and not reindex.done():
-            reindex.cancel()
-            await asyncio.gather(reindex, return_exceptions=True)
-        await automation_service.stop_scheduler()
-        # Owners cancelled from here on leave resumable runs for the next process.
-        run_resume.mark_shutting_down()
-        # B1 soft drain: give in-process owners a short window before hard kill
-        # (docker stop_grace_period must be ≥ this). Then reconcile leftovers.
-        drain = await run_service.drain_inflight_runs(timeout_s=45.0)
         try:
-            async with factory() as session:
-                recon = await run_service.reconcile_orphaned_runs(session)
-        except Exception as exc:  # noqa: BLE001 — shutdown must not block process exit
-            recon = {"error": 1, "type": type(exc).__name__}
-        # Structured one-liner for deploy logs (no secrets).
-        print(
-            f"[pico] shutdown drain waited={drain.get('waited')} "
-            f"remaining={drain.get('remaining')} recon={recon}",
-            flush=True,
-        )
+            if takeover is not None:
+                if owner_lock is None:
+                    takeover.cancel()
+                with suppress(asyncio.CancelledError):
+                    await takeover
+        finally:
+            try:
+                reindex = getattr(_app.state, "kb_reindex_task", None)
+                if reindex is not None and not reindex.done():
+                    reindex.cancel()
+                    await asyncio.gather(reindex, return_exceptions=True)
+                if owner_lock is not None:
+                    await automation_service.stop_scheduler()
+                # Owners cancelled from here on leave resumable runs for the next process.
+                run_resume.mark_shutting_down()
+                drain = await run_service.drain_inflight_runs(timeout_s=45.0)
+                recon = None
+                if owner_lock is not None:
+                    async with factory() as session:
+                        await lock_sqlite_writer(session)
+                        recon = await run_service.reconcile_orphaned_runs(
+                            session, RunRow.owner_id == RUN_OWNER_ID
+                        )
+                print(
+                    f"[pico] shutdown drain waited={drain['waited']} "
+                    f"remaining={drain['remaining']} recon={recon}",
+                    flush=True,
+                )
+            finally:
+                if owner_lock is not None:
+                    owner_lock.close()
 
 
 app = FastAPI(
@@ -401,16 +447,21 @@ async def kb_reindex_all(request: Request, force: bool = False) -> dict:
     if not request_on_loopback_socket(request):
         raise HTTPException(status_code=403, detail={"code": "forbidden", "message": "loopback only"})
     state = request.app.state
-    running = getattr(state, "kb_reindex_task", None)
-    if running is not None and not running.done():
+    lock = try_lock(lock_path("kb-reindex"))
+    if lock is None:
         if not force:
             return {"ok": True, "queued": True, "mode": "incremental", "already_running": True}
         raise HTTPException(
             status_code=409,
             detail={"code": "kb.reindex_running", "message": "kb reindex already running"},
         )
+
+    def finished(task: asyncio.Task) -> None:
+        lock.close()
+        log_rebuild_result(task)
+
     task = asyncio.create_task(rebuild_materials(None, force=force))
-    task.add_done_callback(log_rebuild_result)
+    task.add_done_callback(finished)
     state.kb_reindex_task = task
     return {"ok": True, "queued": True, "mode": "full" if force else "incremental"}
 

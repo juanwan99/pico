@@ -54,6 +54,7 @@ def _production_checkout(tmp_path: Path) -> tuple[Path, str]:
     shutil.copy2(EDU_LOCK, source / "scripts" / "edu-accept-lock.sh")
     shutil.copy2(FIRST_SCREEN, source / "scripts" / FIRST_SCREEN.name)
     (source / "docker-compose.host.yml").write_text("services: {}\n")
+    (source / ".gitignore").write_text(".env\ndata/\n")
     _run("git", "add", ".", cwd=source)
     _run("git", "commit", "-m", "fixture", cwd=source)
     _run("git", "remote", "add", "origin", str(origin), cwd=source)
@@ -79,11 +80,15 @@ def _fake_runtime(
     edu_gw_down: bool = False,
     smoke_models_http: str = "200",
     first_asset_fails: bool = False,
+    old_api_port: str | None = None,
+    candidate_health: str = "current",
+    listener_wrong_sha: bool = False,
+    api_unchanged: bool = False,
 ) -> Path:
     """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w).
 
     Fake docker branches on the subcommand so the impl's own gates are exercised:
-    the pico-office unix-socket probe (``compose exec -T pico-api python3``),
+    the pico-office unix-socket probe (``docker exec <api-container> python3``),
     ``volume ls --filter label=…pico_office_sock`` and ``volume rm``.
 
     ``smoke_models_http``: status the fake ``/v1/models`` returns to the E2E
@@ -108,11 +113,17 @@ def _fake_runtime(
         (bin_dir / "edu-gw-down").write_text("1\n")
     if first_asset_fails:
         (bin_dir / "first-asset-fails").touch()
+    if old_api_port is not None:
+        (bin_dir / "old-api-port").write_text(old_api_port)
+    if listener_wrong_sha:
+        (bin_dir / "listener-wrong-sha").touch()
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
         'here="$(cd "$(dirname "$0")" && pwd)"\n'
         'args="$*"\n'
+        'printf "%s\\n" "$args" >>"$here/docker-commands"\n'
         'case "$args" in\n'
+        '  "image inspect --format "*) echo sha256:current; exit 0 ;;\n'
         '  "image inspect "*)\n'
         '    if [ -f "$here/base-image-missing" ]; then exit 1; fi\n'
         "    exit 0 ;;\n"
@@ -122,8 +133,35 @@ def _fake_runtime(
         "    exit 0 ;;\n"
         '  "compose "*" build "*)\n'
         '    : >"$here/built"\n'
+        '    if [ -e "$here/candidate-created" ]; then unlink "$here/candidate-created"; fi\n'
         "    exit 0 ;;\n"
-        '  *" exec -T pico-api "*)\n'
+        '  "compose "*" ps --all --quiet pico-api")\n'
+        '    if [ -f "$here/old-api-port" ]; then echo old-api; fi\n'
+        '    if [ -f "$here/candidate-created" ]; then echo new-api; fi\n'
+        '    exit 0 ;;\n'
+        '  "compose "*" ps --quiet pico-api-listener")\n'
+        '    if [ -s "$here/old-api-port" ]; then echo listener; fi\n'
+        '    exit 0 ;;\n'
+        '  "compose "*" config --format json pico-api")\n'
+        '    echo \'{"services":{"pico-api":{"image":"pico-api:fixture"}}}\'; exit 0 ;;\n'
+        '  "compose "*" config --hash pico-api") echo "pico-api current"; exit 0 ;;\n'
+        '  "inspect --format "*"pico.api.port"*" old-api") cat "$here/old-api-port"; exit 0 ;;\n'
+        '  "inspect --format {{.Name}} old-api") echo /pico-pico-api-1; exit 0 ;;\n'
+        '  "inspect --format "*"config-hash"*" old-api")\n'
+        f'    echo "true sha256:current {"current" if api_unchanged else "previous"}"; exit 0 ;;\n'
+        '  "compose "*" up --no-start "*" pico-api")\n'
+        '    : >"$here/candidate-created"\n'
+        '    exit 0 ;;\n'
+        '  "kill --signal HUP listener") echo hup >>"$here/listener-reloads"; exit 0 ;;\n'
+        '  "exec new-api curl "*)\n'
+        '    sha="$PICO_GIT_SHA"\n'
+        f'    case "{candidate_health}" in\n'
+        '      down) exit 7 ;;\n'
+        '      wrong-sha) sha=previous ;;\n'
+        '    esac\n'
+        '    printf \'{"ok":true,"git_sha":"%s","true_pi_binary_available":true}\' "$sha"\n'
+        '    exit 0 ;;\n'
+        '  "exec "*" python3 -c "*)\n'
         '    if [ -f "$here/office-down" ]; then exit 1; fi\n'
         "    exit 0 ;;\n"
         # edu-pico-gw gate: `docker run --rm -i --network edu-core_default alpine/socat… - TCP:edu-pico-gw:18765`
@@ -219,10 +257,14 @@ def _fake_runtime(
         "        inflight_field='\"inflight_runs\":0,'\n"
         "      fi\n"
         "    fi\n"
+        '    sha="$PICO_GIT_SHA"\n'
+        '    if [ -f "$here/listener-wrong-sha" ] && [ -f "$here/listener-reloads" ]; then\n'
+        '      sha=previous\n'
+        '    fi\n'
         "    health_body=\"$(printf '{\"ok\":true,\"service\":\"pico-api\",\"git_sha\":\"%s\",%s"
         "\"true_pi_binary_available\":true,"
         "\"true_pi_package_pin\":\"@earendil-works/pi-coding-agent@0.84.4\"}' "
-        "\"$PICO_GIT_SHA\" \"$inflight_field\")\"\n"
+        "\"$sha\" \"$inflight_field\")\"\n"
         # impl reads /health from stdout; the smoke gate uses `-o file -w %{http_code}`.
         "    if [ -n \"$out_file\" ]; then printf '%s' \"$health_body\" >\"$out_file\"; printf '200'; "
         "else printf '%s' \"$health_body\"; fi ;;\n"
@@ -343,6 +385,89 @@ def test_prod_update_deploys_exact_clean_main_sha(tmp_path: Path) -> None:
     assert "smoke 12/12 PASS (prod)" in result.stdout
     assert "[pico] e2e smoke ok" in result.stdout
     assert "[pico] done" in result.stdout
+
+
+def test_prod_update_switches_healthy_candidate_then_drains_and_stops_old(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    (production / ".env").write_text("PICO_API_BACKEND_PORT=18769\n")
+    bin_dir = _fake_runtime(tmp_path, old_api_port="18769")
+    result = _run_prod_update(production, sha, bin_dir)
+
+    assert result.returncode == 0, result.stderr
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    create = "compose -f docker-compose.host.yml up --no-start --no-deps --no-recreate "
+    order = [
+        create + "--scale pico-api=2 pico-api",
+        "start new-api",
+        "exec new-api curl -fsS --max-time 2 http://127.0.0.1:18770/health",
+        "kill --signal HUP listener",
+        "exec listener sh -c ",
+        "stop old-api",
+        "rm old-api",
+        "rename new-api pico-pico-api-1",
+    ]
+    offsets = [commands.index(command) for command in order]
+    assert offsets == sorted(offsets)
+    assert "proxy_pass 127.0.0.1:18770;" in (
+        production / "data/pico-api-listener/nginx.conf"
+    ).read_text()
+    assert "PICO_API_BACKEND_PORT=18770" in (production / ".env").read_text().splitlines()
+
+
+@pytest.mark.parametrize(("candidate_health", "exit_code"), [("down", 4), ("wrong-sha", 5)])
+def test_prod_update_keeps_old_when_candidate_is_unhealthy(
+    tmp_path: Path, candidate_health: str, exit_code: int,
+) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, old_api_port="18770", candidate_health=candidate_health)
+    result = _run_prod_update(production, sha, bin_dir)
+
+    assert result.returncode == exit_code
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    assert "exec new-api curl -fsS --max-time 2 http://127.0.0.1:18769/health" in commands
+    assert "rm -f new-api" in commands
+    assert "stop old-api" not in commands
+    assert "kill --signal HUP listener" not in commands
+
+
+def test_prod_update_first_migration_restores_legacy_container_if_candidate_fails(
+    tmp_path: Path,
+) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, old_api_port="", candidate_health="down")
+    result = _run_prod_update(production, sha, bin_dir)
+
+    assert result.returncode == 4
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    assert commands.index("stop old-api") < commands.index("start new-api")
+    assert commands.index("rm -f new-api") < commands.index("start old-api")
+    assert "rm old-api" not in commands
+
+
+def test_prod_update_restores_listener_when_new_route_fails(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, old_api_port="18770", listener_wrong_sha=True)
+    result = _run_prod_update(production, sha, bin_dir)
+
+    assert result.returncode == 5
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    reloads = [i for i, command in enumerate(commands) if command == "kill --signal HUP listener"]
+    assert len(reloads) == 2 and reloads[1] < commands.index("stop new-api")
+    assert commands.index("stop new-api") < commands.index("rm new-api")
+    assert "stop old-api" not in commands
+    assert "proxy_pass 127.0.0.1:18770;" in (
+        production / "data/pico-api-listener/nginx.conf"
+    ).read_text()
+
+
+def test_prod_update_leaves_unchanged_api_running(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, old_api_port="18770", api_unchanged=True)
+    result = _run_prod_update(production, sha, bin_dir)
+
+    assert result.returncode == 0, result.stderr
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    assert not any(line.startswith(("start ", "stop ", "kill --signal HUP ")) for line in commands)
 
 
 @pytest.mark.parametrize("first_asset_fails", [False, True])
@@ -636,6 +761,8 @@ def test_prod_update_ui_readiness_honors_librechat_url_override(tmp_path: Path) 
             "PICO_DEPLOY_SHA": sha,
             "LIBRECHAT_URL": "http://127.0.0.1:19999",
             "PICO_SMOKE_KEY": "smoke-fixture-key",
+            "PICO_DEPLOY_LOCK": _bash_path(tmp_path / "deploy.lock"),
+            "PICO_EDU_ACCEPT_LOCK": _bash_path(tmp_path / "no-edu-core" / "acceptance.lock"),
         },
         capture_output=True,
         text=True,

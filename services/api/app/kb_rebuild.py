@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import time
+from asyncio import CancelledError, create_task, shield
 from datetime import datetime
 from typing import Any
 
@@ -15,12 +16,12 @@ from sqlalchemy.orm import load_only
 
 from app.artifact_store import decode_artifact_payload
 from app.auth import Principal
+from app.background_lock import lock_path, wait_lock
 from app.db import UPLOAD_TASK_PREFIX, ArtifactRow, TaskRow, is_teacher_material, session_factory
 
 logger = logging.getLogger(__name__)
 _BATCH_SIZE = 20
 _PER_MIN = 600
-_rebuild_lock = asyncio.Lock()
 
 
 def rebuild_per_min() -> int:
@@ -42,7 +43,13 @@ class _Pace:
         if wait > 0:
             await asyncio.sleep(wait)
         started_at = time.monotonic()
-        await index.upsert_rebuild_batch(docs)
+        batch = create_task(index.upsert_rebuild_batch(docs))
+        try:
+            await shield(batch)
+        except CancelledError:
+            # Complete this submission before the rebuild yields its process lock.
+            await batch
+            raise
         completed_at = time.monotonic()
         self.next_push_at = completed_at + max(
             len(docs) * 60.0 / self.per_min, completed_at - started_at
@@ -80,7 +87,8 @@ async def rebuild_materials(
     force: bool = False,
 ) -> dict[str, Any]:
     """Project ledger materials into Meili, one completed batch at a time."""
-    async with _rebuild_lock:
+    # Membership rebuilds and the ops rebuild share one Meili projection.
+    with await wait_lock(lock_path("kb-materials")):
         return await _rebuild_materials(principal, force=force)
 
 
