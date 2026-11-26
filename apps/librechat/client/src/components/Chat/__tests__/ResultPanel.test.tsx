@@ -13,6 +13,7 @@ import {
   type PicoRun,
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
+import { GENERIC_RETRY } from '~/utils/picoTeacherText';
 import ResultPanel, { formatRunTokenUsage } from '../ResultPanel';
 
 jest.mock('~/data-provider/pico/api', () => ({
@@ -639,7 +640,8 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
   });
 
   it('keeps a failed website open to one attempt per user message across streaming and remounts', async () => {
-    mockOpenBrowser.mockRejectedValue(new Error('DNS failure'));
+    const dnsError = '页面打开失败：地址 https://example.invalid/（ERR_NAME_NOT_RESOLVED，无法解析域名）';
+    mockOpenBrowser.mockRejectedValue(new Error(dnsError));
     const panel = (messageId: string, assistantText: string, clientTimestamp?: string) => (
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
@@ -650,7 +652,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
               parentMessageId: null,
               clientTimestamp,
               isCreatedByUser: true,
-              text: '打开 https://example.com',
+              text: '打开 https://example.invalid',
             },
             {
               messageId: `reply-${messageId}`,
@@ -667,7 +669,8 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     const timestamp = '2026-11-25T16:56:00';
     const { rerender, unmount } = render(panel('website-open-optimistic', '', timestamp));
     const error = await screen.findByTestId('artifact-action-error');
-    expect(error).toHaveTextContent('打开网页失败，请稍后重试');
+    expect(error).toHaveTextContent(dnsError);
+    expect(error).not.toHaveTextContent('请稍后重试');
 
     rerender(panel(messageId, '正在', timestamp));
     rerender(panel(messageId, '正在查看', timestamp));
@@ -681,6 +684,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     reopened.rerender(panel(messageId, '网页查看中'));
     expect(mockOpenBrowser).toHaveBeenCalledTimes(1);
 
+    mockOpenBrowser.mockRejectedValueOnce(new Error(GENERIC_RETRY));
     reopened.rerender(panel('website-open-failure-next-turn', ''));
     expect(mockOpenBrowser).toHaveBeenCalledTimes(2);
     expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(

@@ -47,7 +47,8 @@ const LEAK_RE = new RegExp(
   ].join('|'),
   'i',
 );
-const ENV_RE = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]{2,}\b/;
+// Env-style names, excluding Chromium ERR_ codes.
+const ENV_RE = /\b(?!ERR_)[A-Z][A-Z0-9]*_[A-Z0-9_]{2,}\b/;
 
 export function leaksToTeacher(text?: string | null): boolean {
   const s = text || '';

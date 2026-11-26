@@ -23,13 +23,13 @@ test('template round passes with a pane, a completed reply, and no browser error
     paneSeen: true,
     chromeErrorSeen: false,
     open4xx: 0,
-    reply: '请在沙箱里输入账号密码',
+    reply: '平台异常：登录页正常打开。请在沙箱里输入账号密码。',
   }), {
     finished: 'PASS',
     sandbox_open_4xx_at_most_one: 'PASS',
     sandbox_web_pane_shown: 'PASS',
     no_chrome_error: 'PASS',
-    reply_without_platform_error: 'PASS',
+    reply_stops_at_login: 'PASS',
   });
 });
 
@@ -45,10 +45,16 @@ test('template round reports each observed failure and never passes an absent re
     sandbox_open_4xx_at_most_one: 'FAIL',
     sandbox_web_pane_shown: 'FAIL',
     no_chrome_error: 'FAIL',
-    reply_without_platform_error: 'FAIL',
+    reply_stops_at_login: 'FAIL',
   });
-  assert.equal(roundAssertions('template').reply_without_platform_error, 'FAIL');
+  assert.equal(roundAssertions('template').reply_stops_at_login, 'FAIL');
   assert.equal(roundAssertions('template').sandbox_open_4xx_at_most_one, 'FAIL');
+});
+
+test('template round rejects replies that say the login page failed', () => {
+  for (const reply of ['登录页打不开', '无法访问登录页', '登录时到了异常页']) {
+    assert.equal(roundAssertions('template', { reply }).reply_stops_at_login, 'FAIL');
+  }
 });
 
 test('bad address round accepts the DNS reason from either the assistant or the pane', () => {
@@ -64,4 +70,22 @@ test('bad address round accepts the DNS reason from either the assistant or the 
     reply: '平台异常', paneError: '打开网页失败，请稍后重试',
   }).dns_error_shown, 'FAIL');
   assert.equal(roundAssertions('bad_address', { open4xx: 2 }).sandbox_open_4xx_at_most_one, 'FAIL');
+});
+
+test('bad address round requires the DNS explanation independently in the pane and run card', () => {
+  const expected = '页面打开失败：无法解析域名（ERR_NAME_NOT_RESOLVED）';
+  const assertions = roundAssertions('bad_address', { paneError: expected, runCard: expected });
+  assert.equal(assertions.pane_error_explains_dns, 'PASS');
+  assert.equal(assertions.run_card_explains_dns, 'PASS');
+
+  for (const text of [
+    '', 'ERR_NAME_NOT_RESOLVED', `${expected}。请稍后重试。`, `${expected}。不是你的问题写错。`,
+  ]) {
+    const wrongPane = roundAssertions('bad_address', { paneError: text, runCard: expected });
+    assert.equal(wrongPane.pane_error_explains_dns, 'FAIL');
+    assert.equal(wrongPane.run_card_explains_dns, 'PASS');
+    const wrongCard = roundAssertions('bad_address', { paneError: expected, runCard: text });
+    assert.equal(wrongCard.pane_error_explains_dns, 'PASS');
+    assert.equal(wrongCard.run_card_explains_dns, 'FAIL');
+  }
 });

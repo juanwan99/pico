@@ -35,6 +35,7 @@ import {
   type ResultPaneView,
 } from '~/utils/picoOpenInPane';
 import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
+import { GENERIC_RETRY, teacherSafe } from '~/utils/picoTeacherText';
 import {
   collectPicoOfficeContentBox,
   collectPicoSandboxSession,
@@ -71,6 +72,7 @@ type ArtifactAction = {
 const UNNAMED_ARTIFACT = '未命名产物';
 const UNNAMED_ATTACHMENT = '未命名附件';
 const UNKNOWN_KIND = '类型未知';
+const WEBSITE_OPEN_FAILED = '打开网页失败，请稍后重试';
 type WebsiteAttempt = { url: string; request: ReturnType<typeof openPicoSandboxBrowser> };
 const autoWebsiteAttempts = new Map<string, WebsiteAttempt>();
 
@@ -523,7 +525,7 @@ export default function ResultPanel({
       const meta = await request;
       const sessionId = String(meta.session_id || '').trim();
       if (!sessionId.startsWith('sbox_')) {
-        throw new Error('sandbox session missing');
+        throw new Error(WEBSITE_OPEN_FAILED);
       }
       setLocalSandbox({
         sessionId,
@@ -537,13 +539,8 @@ export default function ResultPanel({
         openedWebsiteRef.current = null;
       }
       const message = err instanceof Error ? err.message : String(err);
-      setWebsiteError(
-        message.includes('web.denied') || message.includes('denied')
-          ? '该地址不能在隔离网页打开'
-          : message.includes('quota') || message.includes('已满')
-            ? message
-            : '打开网页失败，请稍后重试',
-      );
+      // picoFetch may already have replaced an unsafe server message.
+      setWebsiteError(teacherSafe(message === GENERIC_RETRY ? null : message, WEBSITE_OPEN_FAILED));
     }
   };
 

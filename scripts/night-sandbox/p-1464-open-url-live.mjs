@@ -19,7 +19,7 @@ export function isSandboxOpen4xx(method, url, status) {
 }
 
 export function roundAssertions(round, {
-  finished, paneSeen, chromeErrorSeen, open4xx, reply = '', paneError = '',
+  finished, paneSeen, chromeErrorSeen, open4xx, reply = '', paneError = '', runCard = '',
 } = {}) {
   const assertions = {
     finished,
@@ -28,10 +28,13 @@ export function roundAssertions(round, {
   if (round === 'template') {
     assertions.sandbox_web_pane_shown = paneSeen;
     assertions.no_chrome_error = chromeErrorSeen === false;
-    assertions.reply_without_platform_error = reply.trim() && !reply.includes('平台异常');
+    assertions.reply_stops_at_login = reply.includes('登录') && !/打不开|无法访问|异常页/.test(reply);
   } else {
     const dns = /解析|ERR_NAME_NOT_RESOLVED/i;
+    const showsDnsReason = (text) => text.includes('解析') && !/请稍后重试|不是你的问题写错/.test(text);
     assertions.dns_error_shown = dns.test(reply) || dns.test(paneError);
+    assertions.pane_error_explains_dns = showsDnsReason(paneError);
+    assertions.run_card_explains_dns = showsDnsReason(runCard);
   }
   return Object.fromEntries(Object.entries(assertions).map(([name, passed]) => [
     name, passed ? 'PASS' : 'FAIL',
@@ -84,6 +87,14 @@ async function runRound(page, base, out, round, prompt, result) {
       finished = false;
     }
 
+    if (round === 'bad_address') {
+      const collapsedRunCard = page.locator('.agent-turn').last().locator(
+        'button[data-testid="pico-thinking-chain"][aria-expanded="false"]',
+      );
+      if (await collapsedRunCard.isVisible()) {
+        await collapsedRunCard.click();
+      }
+    }
     observed = await page.evaluate(() => {
       const { watch, sample, observer } = window.picoOpenUrlWatch;
       sample();
@@ -93,11 +104,9 @@ async function runRound(page, base, out, round, prompt, result) {
         assistant?.querySelectorAll('.message-content') ?? [],
         (part) => part.innerText,
       ).join('\n');
-      const paneError = Array.from(
-        document.querySelectorAll('[data-testid="artifact-action-error"], [data-testid="sandbox-web-error"]'),
-        (alert) => alert.innerText,
-      ).join('\n');
-      return { paneSeen: watch.paneSeen, chromeErrorSeen: watch.chromeErrorSeen, reply, paneError };
+      const paneError = document.querySelector('[data-testid="artifact-action-error"]')?.innerText;
+      const runCard = assistant?.querySelector('[data-testid="pico-thinking-chain-body"]')?.innerText;
+      return { paneSeen: watch.paneSeen, chromeErrorSeen: watch.chromeErrorSeen, reply, paneError, runCard };
     });
   } finally {
     page.off('response', onResponse);

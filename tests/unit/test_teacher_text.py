@@ -67,6 +67,17 @@ def test_every_live_raw_error_reaches_teacher_clean() -> None:
             assert not leaks(payload["user_message"]), (raw, payload)
 
 
+def test_chromium_network_error_keeps_the_browser_failure_reason() -> None:
+    reason = (
+        "页面打开失败：地址 https://example.invalid/"
+        "（ERR_NAME_NOT_RESOLVED，无法解析该公开页的域名（DNS 失败））"
+    )
+    assert teacher_safe(reason) == reason
+    assert user_message_for_error(reason, code="sandbox.fetch_failed") == f"未能完成：{reason}"
+    for env_name in ("OPENAI_API_KEY", "PICO_IMAGE_GATEWAY_URL"):
+        assert teacher_safe(f"{reason} {env_name}") == GENERIC_RETRY
+
+
 def test_preset_user_message_is_scrubbed_too() -> None:
     out = enrich_fail_payload(
         {"status": "failed", "reason": "x", "user_message": "未能完成：OpenAI API error (400)"}

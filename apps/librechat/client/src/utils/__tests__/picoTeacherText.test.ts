@@ -20,6 +20,13 @@ describe('picoTeacherText (owner 2026-10-14: never show model / vendor / plumbin
     }
   });
 
+  it('keeps Chromium network errors and still blocks environment names', () => {
+    const reason = '页面打开失败：地址 https://example.invalid/（ERR_NAME_NOT_RESOLVED，无法解析域名）';
+    expect(teacherSafe(reason)).toBe(reason);
+    expect(teacherSafe(`${reason} OPENAI_API_KEY`)).toBe(GENERIC_RETRY);
+    expect(teacherSafe(`${reason} PICO_IMAGE_GATEWAY_URL`)).toBe(GENERIC_RETRY);
+  });
+
   it('falls back instead of leaking', () => {
     expect(teacherSafe('OpenAI API error (400)')).toBe(GENERIC_RETRY);
     expect(teacherSafe('', '本次运行未能完成')).toBe('本次运行未能完成');
