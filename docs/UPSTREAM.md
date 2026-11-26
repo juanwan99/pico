@@ -150,11 +150,17 @@ Chromium 的帧到达 worker 即向 CDP 确认，worker 只留最新一帧待发
 
 最大化 <1 s 仍未达。生产俄勒冈链路、10 个会话的混合办公负载和统筹老师试用待部署后验证。
 
-对账脚本先用 `node scripts/night-sandbox/p-sandbox-latency.mjs --print-fixture` 导出测试页，将它放在沙箱可访问的 HTTPS 地址。表格加图表的模式使用测试页参数 `?chart=1`。使用专用测试老师，身份从 `PICO_E2E_EMAIL` / `PICO_E2E_PASSWORD` 读取，测试桌会被关闭。同一账号不要并发跑。脚本需要支持 CDP 虚拟显示器的 Chromium 153，可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指定可执行文件。
+对账测试页在 `scripts/night-sandbox/sandbox-latency-fixture.html`，合入后通过 GitHub HTML Preview 渲染公开仓库里的 HTML。自备 HTTPS 地址时可用 `node scripts/night-sandbox/p-sandbox-latency.mjs --print-fixture` 导出同一份页面。表格加图表模式用 `chart=1`，可加在下方现网测试页 URL 的末尾（`&chart=1`）。现网经 GitHub 加载测试页，河源侧偶尔连不上。开页返回 `sandbox.fetch_failed` 或 60 秒内未画出测试页时整轮重来，每轮最多尝试三次，报告的 `retries` 按轮记录重来次数。
+
+使用专用测试老师。同一账号不要并发跑。每次尝试先确认账号无开着的桌，再开新对话发送「打开 URL」，由对话开页并挂到右栏。收尾时，若云端任务仍在运行，先点停止并等停止按钮消失（最多 30 秒），再通过 `DELETE /v1/sandbox/sessions/current` 逐张关桌，最多删五次，直到 `GET current` 返回 404。关桌依赖 pico#1459 的 `current` 删除修复。收尾成功后才可重试。末轮收尾后额外查询一次 `current`，报告中 `currentMs` 记录这次 404 的请求耗时（毫秒）。脚本需要支持 CDP 虚拟显示器的 Chromium 153，可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指定可执行文件。
+
+本地邮箱登录使用 `PICO_E2E_EMAIL` 和 `PICO_E2E_PASSWORD`。现网用建校演练校的 `drill.*` 任课老师，`--edu-school` 必填，`--edu-base` 默认 `https://edu.weiyuji.cn`。以 `drill.t701` 为例，依次读取 `ACCEPT_PASSWORD_DRILL_T701`、`EDU_ACCEPT_PASSWORD`、`EDU_SMOKE_PASSWORD` 中首个已设置的口令。
 
 ```bash
 node scripts/night-sandbox/p-sandbox-latency.mjs --base-url http://127.0.0.1:3090 --limit --fixture-url "$FIXTURE_URL"
-node scripts/night-sandbox/p-sandbox-latency.mjs --base-url https://pico.aivia.asia --fixture-url "$FIXTURE_URL"
+node scripts/night-sandbox/p-sandbox-latency.mjs --base-url https://pico.aivia.asia \
+  --edu-login drill.t701 --edu-school dd792255-de1c-4c6e-a750-5b15c7a213c1 \
+  --fixture-url 'https://htmlpreview.github.io/?https://raw.githubusercontent.com/juanwan99/pico/main/scripts/night-sandbox/sandbox-latency-fixture.html?pico-latency=1'
 ```
 
 每次运行三轮，报告和清晰帧 JPEG 原图写到 `.gpt-out/sandbox-latency/`。连接本机时另存原生 DPR 参考 PNG，按原像素计算小字 RMS，门限为 5。连接现网时报告点击和最大化时延、滚动帧率，小字清晰度用保存的 JPEG 原图放大核对。未达自动测量阈值时命令退出 1。

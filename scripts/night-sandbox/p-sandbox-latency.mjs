@@ -13,6 +13,7 @@ import {
   limitedSandboxLink,
   loadPlaywright,
   login,
+  loginWithEdu,
   sendPrompt,
   writeJson,
 } from './lib.mjs';
@@ -26,37 +27,9 @@ const HEIGHT = 1080;
 const SCROLL_MS = 8000;
 const WINDOW = { width: 2000, height: 1210 };
 const CROP = [24, 380, 2706, 240];
+const MAX_ATTEMPTS = 3;
 
-const FIXTURE = `<!doctype html><meta charset="utf-8"><title>Sandbox latency worksheet</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#fff;font:12px "Liberation Sans",sans-serif;color:#26313d}
-header{position:sticky;top:0;height:64px;background:#eef2f7;padding:12px 16px}
-button{border:0;width:96px;height:32px;background:#3459a5;color:white}
-button.active{background:#238337}
-strong{margin-left:16px;font-size:16px}
-i{position:absolute;right:18px;top:12px;width:32px;height:20px;background:#7d3294}
-@media(min-width:1500px){i{background:#167fb3}}
-section{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));padding:0 12px}
-span{padding:4px 6px;height:40px;overflow:hidden;white-space:nowrap;border-bottom:1px solid #d9e0ea}
-span:nth-child(4n){background:#f4f7fb}
-aside{height:180px;display:flex;align-items:end;gap:16px;padding:12px 24px;background:#f0f4fa}
-aside b{flex:1;background:linear-gradient(#449cd7,#51437d)}
-output{position:absolute;top:13px;left:480px;display:flex}
-output b{width:14px;height:18px;background:#fff}
-output b[data-on]{background:#000}
-</style>
-<header><button onclick="this.classList.toggle('active')">Checked</button><strong>Class progress and attendance</strong><i></i><output></output></header>
-<main></main>
-<script>{
-const words=['Reading review','Fractions','植物的生长','Weekly practice','课堂反馈','Geometry','实验记录','Class discussion','课后练习'];
-const cells=Array.from({length:2200},(_,i)=>'<span>'+words[(i*17+(i>>4))%words.length]+' · '+(7919*i%100003)+' / '+(i%37+64)+'%</span>');
-const chart='<aside>'+Array.from({length:42},(_,i)=>'<b style="height:'+(25+i*71%125)+'px"></b>').join('')+'</aside>';
-document.querySelector('main').innerHTML=(location.search.includes('chart')?chart:'')+'<section>'+cells.join('')+'</section>';
-const bits=Array.from({length:10},()=>document.querySelector('output').appendChild(document.createElement('b')));
-addEventListener('scroll',()=>bits.forEach((b,i)=>b.toggleAttribute('data-on',(Math.floor(scrollY/12)&(1<<i))!==0)));
-}</script>
-`;
+class FixtureUnavailable extends Error {}
 
 function watchPane({ image, fullscreen }) {
   const now = () => performance.timeOrigin + performance.now();
@@ -82,6 +55,10 @@ function watchPane({ image, fullscreen }) {
       if (!body.frame_ack) requests.push({ at: now(), ...body });
     }
     const res = await fetchPage(url, opts);
+    if (url === '/api/pico/v1/sandbox/sessions' && opts?.method === 'POST' && res.status === 400) {
+      const { detail } = await res.clone().json();
+      if (detail?.code === 'sandbox.fetch_failed') window.sandboxLatency.fixtureFetchFailed = true;
+    }
     if (
       typeof url !== 'string' ||
       !url.includes('/stream?') ||
@@ -158,6 +135,7 @@ function watchPane({ image, fullscreen }) {
       height,
       scroll,
       natural: [img.naturalWidth, img.naturalHeight],
+      ready: button[2] > 140 && button[1] < 105,
       clicked: button[1] > 105 && button[2] < 95,
       wide: layout[1] > 90 && layout[0] < 45,
     });
@@ -172,14 +150,25 @@ function watchPane({ image, fullscreen }) {
 export async function measurePane(page, maximize, { out, getReference, run }) {
   const img = page.locator(IMAGE);
   const wait = { polling: 25, timeout: 15000 };
-  await page.waitForFunction(
-    () =>
-      window.sandboxLatency.frames.some(
-        (f) => f.width === 720 && f.height === 700 && f.natural[0] === 1080,
-      ),
-    null,
-    wait,
-  );
+  try {
+    const outcome = await page.waitForFunction(
+      () => {
+        const { frames, fixtureFetchFailed } = window.sandboxLatency;
+        if (fixtureFetchFailed) return 'fetch_failed';
+        return frames.some(
+          (f) => f.ready && f.width === 720 && f.height === 700 && f.natural[0] === 1080,
+        );
+      },
+      null,
+      { ...wait, timeout: 60000 },
+    );
+    if (await outcome.jsonValue() === 'fetch_failed') {
+      throw new FixtureUnavailable('sandbox open HTTP 400 (sandbox.fetch_failed)');
+    }
+  } catch (error) {
+    if (error.name !== 'TimeoutError') throw error;
+    throw new FixtureUnavailable('Sandbox test page did not render within 60 s.', { cause: error });
+  }
   await img.click({ position: { x: 30, y: 24 } });
   await page.waitForFunction(
     () =>
@@ -367,12 +356,64 @@ async function withCleanup(run, cleanup) {
   }
 }
 
-async function requireEmptyDesk(sessions, headers) {
-  const current = await fetch(`${sessions}/current`, { headers });
-  if (current.ok) throw new Error('The test teacher already has an open sandbox desk.');
-  if (current.status !== 404 || (await current.json()).detail?.code !== 'sandbox.session_not_found') {
-    throw new Error(`sandbox preflight HTTP ${current.status}`);
+async function hasOpenDesk(currentUrl, headers) {
+  const current = await fetch(currentUrl, { headers });
+  if (current.ok) return true;
+  if (current.status === 404 && (await current.json()).detail?.code === 'sandbox.session_not_found') {
+    return false;
   }
+  throw new Error(`sandbox current HTTP ${current.status}`);
+}
+
+async function requireEmptyDesk(currentUrl, headers) {
+  if (await hasOpenDesk(currentUrl, headers)) {
+    throw new Error('The test teacher already has an open sandbox desk.');
+  }
+}
+
+async function closeDesks(page, currentUrl, headers) {
+  const stop = page.getByTestId('task-stop-button');
+  // The maximized pane can cover the task bar. Trigger the mounted stop control directly.
+  await stop.evaluateAll(([button]) => button?.click());
+  await stop.waitFor({ state: 'detached', timeout: 30000 });
+  for (let count = 0; await hasOpenDesk(currentUrl, headers); count++) {
+    if (count === 5) throw new Error('A sandbox desk remains open after 5 deletes.');
+    const closed = await fetch(currentUrl, { method: 'DELETE', headers });
+    if (!closed.ok) throw new Error(`sandbox cleanup HTTP ${closed.status}`);
+  }
+}
+
+export async function measureRound({
+  page, currentUrl, headers, prepare, measure, onRetry,
+}) {
+  for (let attempt = 1; ; attempt++) {
+    await requireEmptyDesk(currentUrl, headers);
+    await prepare();
+    let cleaned = false;
+    try {
+      return await withCleanup(measure, async () => {
+        await closeDesks(page, currentUrl, headers);
+        cleaned = true;
+      });
+    } catch (error) {
+      if (!cleaned || !(error instanceof FixtureUnavailable) || attempt === MAX_ATTEMPTS) {
+        throw error;
+      }
+      onRetry(attempt, error);
+    }
+  }
+}
+
+async function loginWithEmail(page, base, { email, password }) {
+  const [loggedIn] = await Promise.all([
+    page.waitForResponse((res) =>
+      res.url() === `${base}/api/auth/login` && res.request().method() === 'POST',
+    ),
+    login(page, base, email, password),
+  ]);
+  if (!loggedIn.ok()) throw new Error(`sandbox login HTTP ${loggedIn.status()}`);
+  const { token } = await loggedIn.json();
+  return token;
 }
 
 async function main() {
@@ -380,12 +421,16 @@ async function main() {
     options: {
       'base-url': { type: 'string', default: 'http://127.0.0.1:3090' },
       'fixture-url': { type: 'string' },
+      'edu-login': { type: 'string' },
+      'edu-base': { type: 'string', default: 'https://edu.weiyuji.cn' },
+      'edu-school': { type: 'string' },
       'print-fixture': { type: 'boolean' },
       limit: { type: 'boolean' },
     },
   });
   if (args['print-fixture']) {
-    process.stdout.write(FIXTURE);
+    const fixture = await fs.readFile(new URL('./sandbox-latency-fixture.html', import.meta.url));
+    process.stdout.write(fixture);
     return;
   }
   if (!args['fixture-url']) {
@@ -394,11 +439,12 @@ async function main() {
     );
   }
   const fixture = new URL(args['fixture-url']);
-  // The chat routes bare *.html URLs to file preview unless they have a query.
-  fixture.searchParams.set('pico-latency', '1');
+  // The chat treats bare *.html URLs as files. Keep supplied query strings intact.
+  if (!fixture.search) fixture.searchParams.set('pico-latency', '1');
   const fixtureUrl = fixture.href;
-  const { email, password } = emailPass();
-  if (!email || !password)
+  const eduLogin = args['edu-login'];
+  const emailCredentials = eduLogin === undefined ? emailPass() : null;
+  if (emailCredentials && (!emailCredentials.email || !emailCredentials.password))
     throw new Error('Set PICO_E2E_EMAIL and PICO_E2E_PASSWORD.');
   const out = path.join(ROOT, '.gpt-out', 'sandbox-latency');
   await fs.mkdir(out, { recursive: true });
@@ -425,17 +471,15 @@ async function main() {
       viewport: WINDOW,
       deviceScaleFactor: DPR,
     });
-    const [loggedIn] = await Promise.all([
-      page.waitForResponse((res) =>
-        res.url() === `${base}/api/auth/login` && res.request().method() === 'POST',
-      ),
-      login(page, base, email, password),
-    ]);
-    if (!loggedIn.ok()) throw new Error(`sandbox login HTTP ${loggedIn.status()}`);
-    const { token } = await loggedIn.json();
+    const token = emailCredentials
+      ? await loginWithEmail(page, base, emailCredentials)
+      : await loginWithEdu(page, base, {
+        eduBase: args['edu-base'],
+        school: args['edu-school'],
+        loginName: eduLogin,
+      });
     const headers = { authorization: `Bearer ${token}` };
-    const sessions = `${base}/api/pico/v1/sandbox/sessions`;
-    await requireEmptyDesk(sessions, headers);
+    const currentUrl = `${base}/api/pico/v1/sandbox/sessions/current`;
 
     let reference;
     if (local) {
@@ -450,73 +494,77 @@ async function main() {
       image: IMAGE,
       fullscreen: FULLSCREEN,
     });
-    const runs = [];
-    for (let run = 1; run <= 3; run++) {
-      await goNewChat(page, base);
-      await requireEmptyDesk(sessions, headers);
-      await page.addStyleTag({
-        content: `
-        ${STAGE} { flex: none !important; width: 720px !important; height: 700px !important }
-        [data-expanded="true"] ${STAGE} {
-          width: ${WIDTH}px !important; height: ${HEIGHT}px !important
-        }
-      `,
-      });
-      // Own the desk before the chat mounts the pane. The pane can then attach
-      // to the same desk even if it requests the fixture during a remount.
-      const response = await fetch(sessions, {
-        method: 'POST',
-        headers: { ...headers, 'content-type': 'application/json' },
-        body: JSON.stringify({ url: fixtureUrl }),
-      });
-      if (!response.ok)
-        throw new Error(`sandbox open HTTP ${response.status}`);
-      const { session_id: id } = await response.json();
-      const url = `${sessions}/${id}`;
-      await withCleanup(async () => {
-        await sendPrompt(page, `打开 ${fixtureUrl}`);
-        const result = await measurePane(
+    const report = {
+      tip,
+      limited: args.limit,
+      referencePixels: local ? 'native' : undefined,
+      fixtureUrl,
+      runs: [],
+      retries: [],
+      medianFps: null,
+      pass: false,
+    };
+    await withCleanup(async () => {
+      for (let run = 1; run <= 3; run++) {
+        report.retries.push(0);
+        const result = await measureRound({
           page,
-          () => page.locator(FULLSCREEN).click(),
-          { out, getReference: local ? () => reference : undefined, run },
-        );
-        runs.push(result);
+          currentUrl,
+          headers,
+          prepare: async () => {
+            await goNewChat(page, base);
+            await page.addStyleTag({
+              content: `
+                ${STAGE} { flex: none !important; width: 720px !important; height: 700px !important }
+                [data-expanded="true"] ${STAGE} {
+                  width: ${WIDTH}px !important; height: ${HEIGHT}px !important
+                }
+              `,
+            });
+          },
+          measure: async () => {
+            await sendPrompt(page, `打开 ${fixtureUrl}`);
+            return await measurePane(
+              page,
+              () => page.locator(FULLSCREEN).click(),
+              { out, getReference: local ? () => reference : undefined, run },
+            );
+          },
+          onRetry: (retry, error) => {
+            report.retries[run - 1] = retry;
+            console.warn(`Round ${run}, retry ${retry}: ${error.message}`);
+          },
+        });
+        report.runs.push(result);
         console.log(
           JSON.stringify({
             run,
+            retries: report.retries[run - 1],
             clickMs: result.click.ms,
             maxMs: result.max.ms,
             fps: result.scroll.fps,
             smallTextRms: result.max.rms,
           }),
         );
-      }, async () => {
-        const closed = await fetch(url, { method: 'DELETE', headers });
-        if (!closed.ok)
-          throw new Error(`sandbox cleanup HTTP ${closed.status}`);
-      });
-    }
-    const medianFps = runs.map((r) => r.scroll.fps).sort((a, b) => a - b)[1];
-    const pass =
-      medianFps >= 2 &&
-      runs.every((r) => r.click.ms < 1000 && r.max.ms < 1000 && (!local || r.max.rms <= 5));
-    writeJson(path.join(out, 'report.json'), {
-      tip,
-      limited: args.limit,
-      referencePixels: local ? 'native' : undefined,
-      fixtureUrl,
-      runs,
-      medianFps,
-      pass,
-    });
-    if (!pass) process.exitCode = 1;
+      }
+      const currentStartedAt = performance.now();
+      if (await hasOpenDesk(currentUrl, headers)) {
+        throw new Error('A sandbox desk remains open after the final round.');
+      }
+      report.currentMs = performance.now() - currentStartedAt;
+      report.medianFps = report.runs.map((r) => r.scroll.fps).sort((a, b) => a - b)[1];
+      report.pass =
+        report.medianFps >= 2 &&
+        report.runs.every((r) => r.click.ms < 1000 && r.max.ms < 1000 && (!local || r.max.rms <= 5));
+      if (!report.pass) process.exitCode = 1;
+    }, () => writeJson(path.join(out, 'report.json'), report));
   }, async () => {
     link?.close();
     await browser?.close();
   });
 }
 
-export { FIXTURE, watchPane };
+export { watchPane };
 
 if (
   process.argv[1] &&
