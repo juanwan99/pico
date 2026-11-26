@@ -297,81 +297,86 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
             time.time(), windows=[win], focused_id=win.window_id,
         )
         runtime._sessions[sess.session_id] = sess
-        stream = runtime.stream(sess, ack=True)
-        first = await asyncio.wait_for(anext(stream), 1)
-        await runtime.apply_input(sess, frame_ack=first["frame_id"])
-        frame = asyncio.create_task(anext(stream))
-        await runtime.apply_input(
-            sess, viewport_width=480, viewport_height=620, device_pixel_ratio=1.5,
-        )
-        assert await page.evaluate("[innerWidth, innerHeight]") == [480, 620]
-        assert await page.evaluate("devicePixelRatio") == 1.5
-        assert await page.is_visible("#w")  # the site's own narrow layout
-        resized = await asyncio.wait_for(frame, 1)
-        async with asyncio.timeout(2):
+        async with aclosing(runtime.stream(sess, ack=True)) as stream:
+            async def next_frame() -> dict[str, Any]:
+                event = await anext(stream)
+                # A ping marks a full idle interval without the expected repaint.
+                assert "jpeg" in event, f"Expected a live frame, got {event}"
+                await runtime.apply_input(sess, frame_ack=event["frame_id"])
+                return event
+
+            await next_frame()
+            async with asyncio.TaskGroup() as viewer:
+                frame = viewer.create_task(next_frame())
+                await runtime.apply_input(
+                    sess, viewport_width=480, viewport_height=620, device_pixel_ratio=1.5,
+                )
+            assert await page.evaluate("[innerWidth, innerHeight]") == [480, 620]
+            assert await page.evaluate("devicePixelRatio") == 1.5
+            assert await page.is_visible("#w")  # the site's own narrow layout
+            resized = frame.result()
             while True:
-                await runtime.apply_input(sess, frame_ack=resized["frame_id"])
                 if resized["width"] == 480:
                     assert resized["height"] == 620
                     with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
                         if jpeg.size == (720, 930):
                             red, green, blue = jpeg.getpixel((700, 40))
-                            assert green > 240 and red < 15 and blue < 15
-                            break
-                resized = await anext(stream)
-        assert Image.open(io.BytesIO(await surface.screenshot_png())).size == (480, 620)
-        assert await page.evaluate("devicePixelRatio") == 1.5
+                            if green > 240 and red < 15 and blue < 15:
+                                break
+                resized = await next_frame()
+            assert Image.open(io.BytesIO(await surface.screenshot_png())).size == (480, 620)
+            assert await page.evaluate("devicePixelRatio") == 1.5
 
-        await runtime.apply_input(sess, scroll_dy=500)
-        await page.wait_for_function("scrollY === 500")
-        async with asyncio.timeout(2):
+            await runtime.apply_input(sess, scroll_dy=500)
+            await page.wait_for_function("scrollY === 500")
             while True:
-                scrolled = await anext(stream)
-                await runtime.apply_input(sess, frame_ack=scrolled["frame_id"])
+                scrolled = await next_frame()
                 with Image.open(io.BytesIO(base64.b64decode(scrolled["jpeg"]))) as jpeg:
                     red, green, blue = jpeg.getpixel((jpeg.width // 8, jpeg.height * 60 // 620))
                     if red > 235 and green < 20 and blue < 20:
                         assert (scrolled["width"], scrolled["height"]) == (480, 620)
                         break
-        assert Image.open(io.BytesIO(await surface.screenshot_png())).getpixel((60, 60)) == (
-            255, 0, 0
-        )
-        await runtime.apply_input(sess, click_x=60, click_y=60)
-        assert await page.get_attribute("button", "data-hit") == "1"
-        await page.evaluate("scrollTo(0, 0)")
-
-        frame = asyncio.create_task(anext(stream))
-        await runtime.apply_input(
-            sess, viewport_width=900, viewport_height=700, device_pixel_ratio=1.5,
-        )
-        async with asyncio.timeout(2):
-            resized = await frame
+            assert Image.open(io.BytesIO(await surface.screenshot_png())).getpixel((60, 60)) == (
+                255, 0, 0
+            )
+            await runtime.apply_input(sess, click_x=60, click_y=60)
+            assert await page.get_attribute("button", "data-hit") == "1"
+            await page.evaluate("scrollTo(0, 0)")
+            # Let Chromium display the scroll reset before changing the viewport again.
             while True:
-                await runtime.apply_input(sess, frame_ack=resized["frame_id"])
+                returned = await next_frame()
+                with Image.open(io.BytesIO(base64.b64decode(returned["jpeg"]))) as jpeg:
+                    red, green, blue = jpeg.getpixel((jpeg.width - 20, 40))
+                    if green > 240 and red < 15 and blue < 15:
+                        break
+
+            async with asyncio.TaskGroup() as viewer:
+                frame = viewer.create_task(next_frame())
+                await runtime.apply_input(
+                    sess, viewport_width=900, viewport_height=700, device_pixel_ratio=1.5,
+                )
+            resized = frame.result()
+            while True:
                 if resized["width"] == 900:
                     assert resized["height"] == 700
                     with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
                         if jpeg.size == (1350, 1050):
-                            break
-                resized = await anext(stream)
-        assert resized["height"] == 700
-        with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
-            assert jpeg.size == (1350, 1050)
-            red, green, blue = jpeg.getpixel((1300, 40))
-            assert blue > 100 and green < 20 and red < 20
-        await stream.aclose()
+                            red, green, blue = jpeg.getpixel((1300, 40))
+                            if blue > 100 and green < 20 and red < 20:
+                                break
+                resized = await next_frame()
 
         assert await surface.set_viewport(10, 99_999) == (VIEWPORT_MIN[0], VIEWPORT_MAX[1])
         await surface.set_viewport(900, 700, 1.5)
-        await page.click("a")
-        for _ in range(30):
-            if surface._page is not page:
-                break
-            await asyncio.sleep(0.1)
-        await asyncio.sleep(0.3)
-        assert surface._page is not page
-        assert await surface._page.evaluate("[innerWidth, innerHeight]") == [900, 700]
-        assert await surface._page.evaluate("devicePixelRatio") == 1.5
+        async with page.expect_popup() as popup:
+            await page.click("a")
+        tab = await popup.value
+        assert surface._page is tab
+        fit = surface._viewport_task
+        if fit is not None:
+            await fit
+        assert await tab.evaluate("[innerWidth, innerHeight]") == [900, 700]
+        assert await tab.evaluate("devicePixelRatio") == 1.5
     finally:
         await surface.close()
 
