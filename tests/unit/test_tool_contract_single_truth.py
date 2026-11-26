@@ -65,7 +65,15 @@ ANCHORS: dict[str, tuple[str, ...]] = {
     "publish_html_page": ("Not a Pico capability", "fails closed", "Edu"),
     "unpublish_html_page": ("Pico does not publish",),
     "sandbox_document_open": ("OOXML", "PDF"),
-    "sandbox_browser_open": ("PUBLIC", "Denies intranet"),
+    "sandbox_browser_open": (
+        "PUBLIC",
+        "Denies intranet",
+        (
+            "Before reporting that the login form is open, check the snapshot and, if "
+            "has_password_input is false, find and click a Login or Sign up entry and confirm "
+            "a password field appears."
+        ),
+    ),
     "sandbox_browser_page_file": ("__picoFile", "25 MB"),
     "sandbox_browser_page_fn": ("dotted", "eval", "cookie"),
     "workspace_read_file": ("re-upload", "png/jpg"),

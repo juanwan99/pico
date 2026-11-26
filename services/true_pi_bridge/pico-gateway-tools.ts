@@ -453,7 +453,7 @@ export default function (pi: ExtensionAPI) {
   registerTool(
     pi,
     "sandbox_browser_open",
-    "Use this to do website tasks for the teacher yourself, such as logging in, filling in forms, or looking up information, not just describe the steps. Open a PUBLIC page in the isolated sandbox browser (the teacher can also act in it directly). For HTML generated in this run, use sandbox_preview_inspect. Denies intranet/metadata/18765. Passwords and verification codes the teacher gives you are typed like any other value. The teacher's login is kept for next time.",
+    "Use this to do website tasks for the teacher yourself, such as logging in, filling in forms, or looking up information, not just describe the steps. Open a PUBLIC page in the isolated sandbox browser (the teacher can also act in it directly). For HTML generated in this run, use sandbox_preview_inspect. Denies intranet/metadata/18765. Passwords and verification codes the teacher gives you are typed like any other value. The teacher's login is kept for next time. Before reporting that the login form is open, check the snapshot and, if has_password_input is false, find and click a Login or Sign up entry and confirm a password field appears.",
     Type.Object(
       {
         url: Type.String(),
