@@ -1627,17 +1627,16 @@ def _navigation_error(url: str, error_code: str, *, timed_out: bool = False) -> 
     } or error_code.startswith("ERR_DNS_"):
         message = "无法解析该公开页的域名（DNS 失败）"
     elif error_code == "ERR_CONNECTION_REFUSED":
-        message = "连不上该公开页（连接被拒绝）"
+        message = "该公开页拒绝连接"
     elif error_code == "ERR_HTTP_RESPONSE_CODE_FAILURE":
         message = "公开页返回错误状态"
+    reason = f"{error_code}，{message}" if error_code else message
+    message = f"页面打开失败（{reason}）"
     if url:
         parts = urlsplit(url)
         # Redirect targets can include login tokens.
         safe_url = urlunsplit((parts.scheme, parts.netloc.rsplit("@", 1)[-1], parts.path, "", ""))
-        reason = f"{error_code}，{message}" if error_code else message
-        message = f"页面打开失败：地址 {safe_url}（{reason}）"
-    elif error_code:
-        message += f"（{error_code}）"
+        message += f"：地址 {safe_url}"
     return ToolError("sandbox.fetch_failed", message)
 
 

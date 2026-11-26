@@ -177,6 +177,8 @@ export async function picoAuthedPost(url: string, body?: unknown): Promise<Respo
   });
 }
 
+export class PicoHttpError extends Error {}
+
 async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api/pico${path}`, {
     credentials: 'include',
@@ -202,10 +204,10 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
             ? parsed.detail.message
             : '';
       const msg = parsed.user_message || parsed.message || detail || text;
-      throw new Error(teacherSafe(String(msg).slice(0, 200)));
+      throw new PicoHttpError(teacherSafe(String(msg).slice(0, 200)));
     } catch (err) {
       if (err instanceof SyntaxError) {
-        throw new Error(teacherSafe(text.slice(0, 200)));
+        throw new PicoHttpError(teacherSafe(text.slice(0, 200)));
       }
       throw err;
     }
