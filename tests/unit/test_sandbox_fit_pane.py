@@ -477,15 +477,9 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
             )
             await runtime.apply_input(sess, click_x=60, click_y=60)
             assert await page.get_attribute("button", "data-hit") == "1"
-            started_at = time.monotonic()
+            # Reset the scroll position for the next resize. The resize's first
+            # native frame checks the composed page, independent of a scroll-reset frame.
             await page.evaluate("scrollTo(0, 0)")
-            # Let Chromium display the scroll reset before changing the viewport again.
-            while True:
-                returned = await next_frame(started_at)
-                with Image.open(io.BytesIO(base64.b64decode(returned["jpeg"]))) as jpeg:
-                    red, green, blue = jpeg.getpixel((jpeg.width - 20, 40))
-                    if green > 240 and red < 15 and blue < 15:
-                        break
 
             pixel = await first_resized_pixel((900, 700), (1350, 1050), (1300, 40))
             red, green, blue = pixel
