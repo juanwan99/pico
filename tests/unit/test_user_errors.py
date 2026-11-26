@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 _SPEC = importlib.util.spec_from_file_location(
     "user_errors",
     Path(__file__).resolve().parents[2]
@@ -26,6 +28,30 @@ def test_timeout():
     assert "继续" in msg
     assert "【错误】" not in msg
     assert "15 分钟" not in msg
+
+
+@pytest.mark.parametrize(
+    ("error_code", "reason"),
+    [
+        ("ERR_CONNECTION_REFUSED", "该公开页拒绝连接"),
+        ("ERR_CONNECTION_TIMED_OUT", "打开公开页超时"),
+    ],
+)
+def test_sandbox_network_error_preserves_teacher_safe_reason(error_code, reason):
+    headline = f"页面打开失败（{error_code}，{reason}）"
+    long_address = f"https://example.invalid/{'a' * 300}"
+    msg = user_message_for_error(
+        f"{headline}：地址 {long_address}", code="sandbox.fetch_failed",
+    )
+    assert msg.startswith(f"未能完成：{headline}")
+    assert len(msg) <= 180
+    assert "请检查网络" not in msg
+
+    from pico_orchestrator.teacher_text import GENERIC_RETRY
+
+    assert user_message_for_error(
+        f"{headline}：地址 https://example.invalid/OPENAI_API_KEY", code="sandbox.fetch_failed",
+    ) == GENERIC_RETRY
 
 
 def test_wall_stop_copy():

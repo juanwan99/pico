@@ -54,8 +54,8 @@ _LEAK_PATTERNS = (
     r"(?<!\d)(?:4[0-2]\d|429|5\d\d)(?!\d)",
 )
 _LEAK_RE = re.compile("|".join(f"(?:{p})" for p in _LEAK_PATTERNS), re.IGNORECASE)
-# Env-style names (PICO_IMAGE_GATEWAY_URL); case-sensitive so snake_case words pass.
-_ENV_RE = re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]{2,}\b")
+# Env-style names (PICO_IMAGE_GATEWAY_URL), excluding Chromium ERR_ codes.
+_ENV_RE = re.compile(r"\b(?!ERR_)[A-Z][A-Z0-9]*_[A-Z0-9_]{2,}\b")
 
 
 def leak_terms(text: str | None) -> list[str]:
