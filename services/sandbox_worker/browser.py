@@ -272,6 +272,7 @@ class ScreencastFrame:
     height: int
     received_at: float | None = None
     page_token: int = 0
+    captured_at: float = 0.0  # CDP frame timestamp in Unix seconds.
 
     def motion_jpeg(self) -> str:
         size = (round(self.width * MOTION_SCALE), round(self.height * MOTION_SCALE))
@@ -1543,7 +1544,9 @@ class PlaywrightPage:
             if self.page_token == last_page_token and jpeg == last_jpeg:
                 return
             last_page_token, last_jpeg = self.page_token, jpeg
-            push(ScreencastFrame(jpeg, width, height, time.monotonic(), self.page_token))
+            push(ScreencastFrame(
+                jpeg, width, height, time.monotonic(), self.page_token, captured_at=timestamp,
+            ))
 
         async def on_frame(event: dict[str, Any]) -> None:
             if not active:
