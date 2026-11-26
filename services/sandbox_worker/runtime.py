@@ -983,6 +983,8 @@ class SandboxRuntime:
                 first_frame = True
                 fit_at = time.monotonic()
                 page_token = token
+                snapshot_token = token
+                snapshot_at = 0.0
                 frames: asyncio.Queue[ScreencastFrame] = asyncio.Queue(maxsize=1)
                 if callable(cast):
                     try:
@@ -1017,27 +1019,29 @@ class SandboxRuntime:
                             refine = None
                             first_frame = True
                             fit_at = now
+                            snapshot_at = 0.0
                         scroll_quiet_at = win.last_scroll_at + STREAM_REFINE_S
                         clear_at = max(refine_at, scroll_quiet_at)
                         if len(waiting) < STREAM_MAX_IN_FLIGHT:
                             if (
-                                first_frame and page_token != token
+                                page_token != snapshot_token
                                 and isinstance(win.surface, PlaywrightPage)
                             ):
                                 # A resized screencast bitmap can still show the old layout.
                                 # Ask Chromium for a redraw before sending the new coordinates.
+                                snapshot_token = page_token
                                 frame = await _capture_resized_viewport(win.surface, page_token)
                                 if (
                                     frame is None or self._alive_focus(sess) != window_id
                                     or win.surface.page_token != page_token
                                 ):
                                     continue
-                                # A bitmap queued during the redraw can predate this snapshot.
-                                if not frames.empty():
-                                    frames.get_nowait()
+                                snapshot_at = frame.captured_at
                                 first_frame = False
                             elif not frames.empty():
                                 frame = frames.get_nowait()
+                                if frame.captured_at < snapshot_at:
+                                    continue
                                 refine = None
                                 if frame.received_at is not None and frame.page_token != page_token:
                                     continue
@@ -1114,21 +1118,29 @@ def _mime_of(name: str) -> str:
 
 
 async def _capture_resized_viewport(surface: PlaywrightPage, token: int) -> ScreencastFrame | None:
+    from playwright.async_api import Error
+
     async with surface._viewport_lock:
         if surface.page_token != token:
             return None
         width, height = surface._viewport
         # As for PNG capture, use a session without a clip or emulation override.
-        cdp = await surface._context.new_cdp_session(surface._page)
         try:
-            shot = await cdp.send(
-                "Page.captureScreenshot",
-                {"fromSurface": True, "format": "jpeg", "quality": SCREENCAST_QUALITY},
-            )
-        finally:
-            with CancelScope(shield=True):
-                await cdp.detach()
-    return ScreencastFrame(shot["data"], width, height, page_token=token)
+            cdp = await surface._context.new_cdp_session(surface._page)
+            try:
+                # Compare the capture dispatch time with CDP screencast timestamps.
+                started_at = time.time()
+                shot = await cdp.send(
+                    "Page.captureScreenshot",
+                    {"fromSurface": True, "format": "jpeg", "quality": SCREENCAST_QUALITY},
+                )
+            finally:
+                with CancelScope(shield=True):
+                    await cdp.detach()
+        except Error:
+            logger.debug("resized viewport capture failed", exc_info=True)
+            return None
+    return ScreencastFrame(shot["data"], width, height, page_token=token, captured_at=started_at)
 
 
 def _keep_latest(

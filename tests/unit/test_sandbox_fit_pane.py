@@ -213,10 +213,80 @@ async def test_screencast_discards_stale_bitmap_with_new_viewport_metadata(
 
 
 @pytest.mark.asyncio
-async def test_resize_snapshot_replaces_bitmap_queued_during_redraw(
+@pytest.mark.parametrize("repaint_after_dispatch", [False, True], ids=["old-bitmap", "new-repaint"])
+async def test_resize_snapshot_filters_screencast_by_capture_time(
     live_runtime,  # noqa: F811
-    tmp_path, monkeypatch,
+    tmp_path, monkeypatch, repaint_after_dispatch,
 ) -> None:
+    from sandbox_worker.browser import PlaywrightPage
+
+    runtime, _pages = live_runtime
+    meta = await runtime.open_session(
+        school_id="school-a", membership_id="member-a", run_id=None, url="https://example.com/"
+    )
+    sess = runtime.get(meta["session_id"])
+    cast_cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
+    capture_cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
+    page = MagicMock()
+    context = MagicMock(
+        pages=[page], new_cdp_session=AsyncMock(side_effect=[cast_cdp, capture_cdp]),
+        storage_state=AsyncMock(return_value={}), close=AsyncMock(),
+    )
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
+    sess.focused().surface = surface
+    monkeypatch.setattr(surface, "_apply_metrics", AsyncMock(return_value=95.0))
+    clock = MagicMock(wraps=time)
+    clock.time.return_value = 100.0
+    monkeypatch.setattr(runtime_mod, "time", clock)
+    monkeypatch.setattr(runtime_mod, "STREAM_PING_S", 0)
+
+    async def emit(jpeg, width, height, timestamp):
+        on_frame = cast_cdp.on.call_args.args[1]
+        await on_frame({
+            "data": jpeg, "sessionId": 1,
+            "metadata": {"deviceWidth": width, "deviceHeight": height, "timestamp": timestamp},
+        })
+
+    initial = _jpeg_data((VIEWPORT_WIDTH, VIEWPORT_HEIGHT), "red")
+    stale = _jpeg_data((900, 700), "yellow")
+    fresh = _jpeg_data((900, 700), "green")
+
+    async def cast_command(method, _params):
+        if method == "Page.startScreencast":
+            await emit(initial, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, 90.0)
+
+    async def redraw(method, _params):
+        assert method == "Page.captureScreenshot"
+        jpeg, timestamp = (fresh, 101.0) if repaint_after_dispatch else (stale, 96.0)
+        await emit(jpeg, 900, 700, timestamp)
+        clock.time.return_value = 105.0
+        return {"data": "redrawn-layout"}
+
+    cast_cdp.send.side_effect = cast_command
+    capture_cdp.send.side_effect = redraw
+    async with aclosing(runtime.stream(sess)) as stream:
+        assert (await anext(stream))["jpeg"] == initial
+        await surface.set_viewport(900, 700)
+        redrawn = await anext(stream)
+        assert (redrawn["jpeg"], redrawn["width"], redrawn["height"]) == ("redrawn-layout", 900, 700)
+        if not repaint_after_dispatch:
+            assert await anext(stream) == {"ping": True}
+            # A different pre-capture bitmap can also arrive after the snapshot was sent.
+            await emit(_jpeg_data((900, 700), "navy"), 900, 700, 97.0)
+            assert await anext(stream) == {"ping": True}
+            await emit(fresh, 900, 700, 101.0)
+        assert (await anext(stream))["jpeg"] == fresh
+        assert await anext(stream) == {"ping": True}
+        capture_cdp.detach.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tab_closes", [False, True], ids=["cdp-error", "tab-closed"])
+async def test_resize_snapshot_error_keeps_stream_open(
+    live_runtime,  # noqa: F811
+    tmp_path, monkeypatch, tab_closes,
+) -> None:
+    from playwright.async_api import Error
     from sandbox_worker.browser import PlaywrightPage, ScreencastFrame
 
     runtime, _pages = live_runtime
@@ -224,35 +294,47 @@ async def test_resize_snapshot_replaces_bitmap_queued_during_redraw(
         school_id="school-a", membership_id="member-a", run_id=None, url="https://example.com/"
     )
     sess = runtime.get(meta["session_id"])
-    cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
     page = MagicMock()
+    page.is_closed.return_value = False
+    other_tab = MagicMock()
+    other_tab.is_closed.return_value = False
+    cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
     context = MagicMock(
-        pages=[page], new_cdp_session=AsyncMock(return_value=cdp),
+        pages=[other_tab, page], new_cdp_session=AsyncMock(return_value=cdp),
         storage_state=AsyncMock(return_value={}), close=AsyncMock(),
     )
     surface = PlaywrightPage(context, page, tmp_path / "profile")
     sess.focused().surface = surface
     monkeypatch.setattr(surface, "_apply_metrics", AsyncMock(return_value=time.time()))
-    monkeypatch.setattr(runtime_mod, "STREAM_PING_S", 0)
+    stop = AsyncMock()
 
     async def cast(push):
-        push(ScreencastFrame("initial", VIEWPORT_WIDTH, VIEWPORT_HEIGHT))
+        if surface.cast_token:
+            push(ScreencastFrame("other-tab", 900, 700, page_token=surface.page_token))
+        else:
+            push(ScreencastFrame("initial", VIEWPORT_WIDTH, VIEWPORT_HEIGHT))
 
-        async def redraw(method, _params):
-            assert method == "Page.captureScreenshot"
-            push(ScreencastFrame("old-layout", 900, 700, page_token=surface.page_token))
-            return {"data": "redrawn-layout"}
+            async def redraw(method, _params):
+                assert method == "Page.captureScreenshot"
+                assert cdp.send.await_count == 1
+                if tab_closes:
+                    page.is_closed.return_value = True
+                    surface._on_close(page)
+                    raise Error("Target page, context or browser has been closed")
+                push(ScreencastFrame("repaint", 900, 700, page_token=surface.page_token))
+                raise Error("Protocol error (Page.captureScreenshot)")
 
-        cdp.send.side_effect = redraw
-        return AsyncMock()
+            cdp.send.side_effect = redraw
+        return stop
 
     monkeypatch.setattr(surface, "screencast", cast)
-    async with aclosing(runtime.stream(sess, ack=True)) as stream:
+    async with aclosing(runtime.stream(sess)) as stream:
         assert (await anext(stream))["jpeg"] == "initial"
-        await surface.set_viewport(900, 700, 1.5)
-        redrawn = await anext(stream)
-        assert (redrawn["jpeg"], redrawn["width"], redrawn["height"]) == ("redrawn-layout", 900, 700)
-        assert await anext(stream) == {"ping": True}
+        await surface.set_viewport(900, 700)
+        event = await anext(stream)
+        assert event["jpeg"] == ("other-tab" if tab_closes else "repaint")
+        assert (event["width"], event["height"]) == (900, 700)
+        assert stop.await_count == int(tab_closes)
         cdp.detach.assert_awaited_once()
 
 
