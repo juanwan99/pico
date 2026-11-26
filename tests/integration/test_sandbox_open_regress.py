@@ -1,29 +1,42 @@
-"""T-SANDBOX-OPEN-REGRESS · source locks. Word stays Writer."""
+"""Exercise the LibreChat shortcut detectors with the runner's Node.js."""
 
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_open_browser_intent_resolves_default_and_tencent() -> None:
-    pane = (ROOT / "apps/librechat/client/src/utils/picoOpenInPane.ts").read_text()
-    view = (ROOT / "apps/librechat/client/src/components/Chat/ChatView.tsx").read_text()
-    assert "BROWSER_DEFAULT_URL" in pane
-    assert "https://example.com/" in pane
-    assert "腾讯官网" in pane
-    assert "https://www.qq.com/" in pane
-    assert "looksLikeOfficeOpen" in pane
-    assert "latestUserOpenWebsiteIntent" in view
-    assert "websiteIntent" in view
-    assert "回复摘要" in view
-    # Writer path is not rewritten into a webpage.
-    office = pane
-    assert "detectOpenOfficeIntent" in office
-    assert "kind: 'writer'" in office or 'kind: "writer"' in office
+def test_sandbox_open_intents() -> None:
+    subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "--eval",
+            r"""
+            import assert from 'node:assert/strict';
+            import { detectOpenWebsiteIntent, detectOpenOfficeIntent }
+              from './apps/librechat/client/src/utils/picoOpenInPane.ts';
 
+            assert.equal(detectOpenWebsiteIntent('打开 https://example.com。'), 'https://example.com/');
+            assert.equal(detectOpenWebsiteIntent('打开浏览器'), 'https://example.com/');
+            assert.equal(detectOpenWebsiteIntent('打开腾讯网'), 'https://www.qq.com/');
+            assert.equal(detectOpenWebsiteIntent('你好'), null);
 
-def test_hello_still_not_a_website_intent() -> None:
-    pane = (ROOT / "apps/librechat/client/src/utils/picoOpenInPane.ts").read_text()
-    assert "looksLikeOfficeOpen" in pane
-    # Idle chat must not match the browser aliases.
-    assert "浏览器" in pane
+            for (const message of [
+              '先读说明\n打开 https://example.com\n然后截图',
+              '打开 https://example.com。没登录就停在登录页',
+              '请先看 https://example.com，再打开 报告.docx',
+              '打开 example.com 下载数据，再打开 成绩.xlsx',
+            ]) {
+              assert.equal(detectOpenWebsiteIntent(message), null, message);
+              assert.equal(detectOpenOfficeIntent(message), null, message);
+            }
+            assert.deepEqual(detectOpenOfficeIntent('打开 备课-www.xlsx'), {
+              kind: 'calc', filename: '备课-www.xlsx',
+            });
+            assert.deepEqual(detectOpenOfficeIntent('打开 Word'), { kind: 'writer' });
+            """,
+        ],
+        cwd=ROOT,
+        check=True,
+    )

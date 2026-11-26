@@ -6,6 +6,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { detectOpenWebsiteIntent } from '../../apps/librechat/client/src/utils/picoOpenInPane.ts';
@@ -13,6 +14,12 @@ import { ROOT, goNewChat, loadPlaywright, loginWithEdu, sendPrompt, shot, writeJ
 
 const STOP = '[data-testid="stop-generation-button"], [data-testid="task-stop-button"]';
 const ROUND_TIMEOUT = 6 * 60 * 1000;
+
+export function templateTargetHost(template) {
+  const url = template.match(/(?:打开|\bopen\b)\s*(?:(?:一下|下)\s*)?(https?:\/\/[^\s。！，、；：？]+)/i)?.[1];
+  const target = url && detectOpenWebsiteIntent(url);
+  return target ? new URL(target).hostname : null;
+}
 
 function isSandboxOpen(method, url) {
   return method === 'POST' && new URL(url).pathname.endsWith('/sandbox/sessions');
@@ -27,6 +34,43 @@ function isPaneMetadata(request) {
     /\/sandbox\/sessions\/sbox_[^/]+$/.test(new URL(request.url()).pathname);
 }
 
+async function readPicoJson(url, headers, signal) {
+  const response = await fetch(url, { headers, signal });
+  if (!response.ok) throw new Error(`Pico ledger HTTP ${response.status}`);
+  return response.json();
+}
+
+export async function waitForAiBrowserOpens(base, conversationId, headers, signal) {
+  const params = new URLSearchParams({ conversation_id: conversationId });
+  for (;;) {
+    const { tasks } = await readPicoJson(`${base}/api/pico/v1/tasks?${params}`, headers, signal);
+    const run = tasks[0]?.latest_run;
+    if (['succeeded', 'failed', 'cancelled'].includes(run?.status)) {
+      const { events } = await readPicoJson(
+        `${base}/api/pico/v1/runs/${run.id}/events`, headers, signal,
+      );
+      const opens = events.filter(({ payload }) => payload.tool === 'sandbox_browser_open');
+      const calls = opens.filter(({ type }) => type === 'tool.call');
+      const returned = new Set(opens.filter(({ type }) => type === 'tool.result')
+        .map(({ payload }) => payload.call_id));
+      if (calls.every(({ payload }) => returned.has(payload.call_id))) return calls.length;
+    }
+    await delay(250, undefined, { signal });
+  }
+}
+
+export async function closeDesks(currentUrl, headers) {
+  for (;;) {
+    const current = await fetch(currentUrl, { headers });
+    if (current.status === 404 && (await current.json()).detail?.code === 'sandbox.session_not_found') {
+      return current.status;
+    }
+    if (!current.ok) throw new Error(`sandbox current HTTP ${current.status}`);
+    const closed = await fetch(currentUrl, { method: 'DELETE', headers });
+    if (!closed.ok) throw new Error(`sandbox cleanup HTTP ${closed.status}`);
+  }
+}
+
 export function loginFailureDetails(error, ssoStatus) {
   if (/^Set ACCEPT_PASSWORD_[A-Z0-9_]+, EDU_ACCEPT_PASSWORD or EDU_SMOKE_PASSWORD\.$/.test(error.message)) {
     return { reason: 'missing_password' };
@@ -38,6 +82,7 @@ export function loginFailureDetails(error, ssoStatus) {
 
 export function roundAssertions(round, {
   finished, paneSeen, chromeErrorSeen, open4xx, openRequestsSettled,
+  browserOpens, aiBrowserOpens,
   targetHost, finalPane, viewportVisible, reply = '', paneError = '', runCard = '',
 } = {}) {
   const assertions = {
@@ -46,6 +91,8 @@ export function roundAssertions(round, {
     sandbox_open_4xx_at_most_one: Number.isInteger(open4xx) && open4xx <= 1,
   };
   if (round === 'template') {
+    assertions.no_browser_shortcut = browserOpens === 0;
+    assertions.ai_opens_once = aiBrowserOpens === 1;
     assertions.sandbox_web_pane_shown = paneSeen;
     assertions.no_chrome_error = chromeErrorSeen === false;
     const url = URL.parse(finalPane?.url ?? '');
@@ -55,7 +102,7 @@ export function roundAssertions(round, {
       !/未能打开|无法打开|打不开|无法访问|异常页/.test(reply);
   } else {
     const dns = /解析|ERR_NAME_NOT_RESOLVED/i;
-    const showsDnsReason = (text) => text.includes('解析') && !/请稍后重试|不是你的问题写错/.test(text);
+    const showsDnsReason = (text) => text.includes('无法解析') && !/请稍后重试|不是你的问题写错/.test(text);
     assertions.dns_error_shown = dns.test(reply) || dns.test(paneError);
     assertions.pane_error_explains_dns = showsDnsReason(paneError);
     assertions.run_card_explains_dns = showsDnsReason(runCard);
@@ -79,15 +126,26 @@ function watchRound(stopSelector) {
   sample();
 }
 
-async function runRound(page, base, out, round, prompt, result, targetHost) {
+export async function runRound(page, base, out, round, prompt, result, targetHost, headers) {
+  result.assertions.sandbox_open_requests_settled = 'PASS';
   await goNewChat(page, base);
   await page.evaluate(watchRound, STOP);
   let open4xx = 0;
-  let onOpensDrained;
-  const pendingOpens = new Set();
+  let browserOpens = 0;
+  let chatRequest;
+  let onRequestsDrained;
+  const pendingRequests = new Set();
   const metadataRequests = [];
   const onRequest = (request) => {
-    if (isSandboxOpen(request.method(), request.url())) pendingOpens.add(request);
+    const method = request.method();
+    const url = request.url();
+    if (isSandboxOpen(method, url)) {
+      browserOpens++;
+      pendingRequests.add(request);
+    } else if (method === 'POST' && /^\/api\/agents\/chat(?:\/|$)/.test(new URL(url).pathname)) {
+      chatRequest = request;
+      pendingRequests.add(request);
+    }
   };
   const onResponse = (response) => {
     if (isSandboxOpen4xx(response.request().method(), response.url(), response.status())) {
@@ -95,14 +153,29 @@ async function runRound(page, base, out, round, prompt, result, targetHost) {
     }
   };
   const onRequestDone = (request) => {
-    if (pendingOpens.delete(request) && !pendingOpens.size) onOpensDrained?.();
+    if (pendingRequests.delete(request) && !pendingRequests.size) onRequestsDrained?.();
   };
   const onRequestFinished = (request) => {
-    if (round === 'template' && (isPaneMetadata(request) || pendingOpens.has(request))) {
+    if (round === 'template' &&
+      (isPaneMetadata(request) || isSandboxOpen(request.method(), request.url()))) {
       metadataRequests.push(request);
     }
     onRequestDone(request);
   };
+  async function waitForRequests(deadline) {
+    while (pendingRequests.size) {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error('Sandbox round requests did not return')),
+          Math.max(1, deadline - performance.now()),
+        );
+        onRequestsDrained = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+      });
+    }
+  }
   page.on('request', onRequest);
   page.on('response', onResponse);
   page.on('requestfinished', onRequestFinished);
@@ -110,13 +183,15 @@ async function runRound(page, base, out, round, prompt, result, targetHost) {
 
   let finished = false;
   let finalPane;
-  let openRequestsSettled = true;
   let observed;
+  let drainDeadline;
+  let aiOpensSettled = false;
   const deadline = performance.now() + ROUND_TIMEOUT;
   const remaining = () => Math.max(1, deadline - performance.now());
+  result.assertions.sandbox_open_requests_settled = 'FAIL';
   try {
-    await sendPrompt(page, prompt);
     try {
+      await sendPrompt(page, prompt);
       await page.waitForFunction(
         (stop) => window.picoOpenUrlWatch.watch.stopSeen && !document.querySelector(stop),
         STOP,
@@ -130,7 +205,7 @@ async function runRound(page, base, out, round, prompt, result, targetHost) {
         // Take a fresh metadata sample from the visible pane after the turn.
         const samplingStarted = Date.now();
         const request = await page.waitForEvent('requestfinished', {
-          predicate: (request) => !pendingOpens.size && isPaneMetadata(request) &&
+          predicate: (request) => !pendingRequests.size && isPaneMetadata(request) &&
             request.timing().startTime >= samplingStarted,
           timeout: remaining(),
         });
@@ -148,17 +223,20 @@ async function runRound(page, base, out, round, prompt, result, targetHost) {
     } catch (error) {
       if (error.name !== 'TimeoutError') throw error;
       result.error = error.name;
+    } finally {
+      // Let the run return its tool results before any cancellation can hide them.
+      drainDeadline = performance.now() + ROUND_TIMEOUT;
+      await waitForRequests(drainDeadline);
+      const chatResponse = await chatRequest?.response();
+      if (chatResponse?.ok()) {
+        const { conversationId } = await chatResponse.json();
+        const signal = AbortSignal.timeout(Math.max(1, Math.ceil(drainDeadline - performance.now())));
+        result.ai_browser_opens = await waitForAiBrowserOpens(base, conversationId, headers, signal);
+      }
+      await waitForRequests(drainDeadline);
+      aiOpensSettled = true;
     }
 
-    if (pendingOpens.size) {
-      openRequestsSettled = await new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve(false), remaining());
-        onOpensDrained = () => {
-          clearTimeout(timeout);
-          resolve(true);
-        };
-      });
-    }
     observed = await page.evaluate(() => {
       const { watch, sample, observer } = window.picoOpenUrlWatch;
       sample();
@@ -183,10 +261,17 @@ async function runRound(page, base, out, round, prompt, result, targetHost) {
       };
     });
   } finally {
-    page.off('request', onRequest);
-    page.off('response', onResponse);
-    page.off('requestfinished', onRequestFinished);
-    page.off('requestfailed', onRequestDone);
+    try {
+      if (aiOpensSettled) {
+        await waitForRequests(drainDeadline);
+        result.assertions.sandbox_open_requests_settled = 'PASS';
+      }
+    } finally {
+      page.off('request', onRequest);
+      page.off('response', onResponse);
+      page.off('requestfinished', onRequestFinished);
+      page.off('requestfailed', onRequestDone);
+    }
   }
   const metadata = await Promise.all(metadataRequests.map(async (request) => {
     const response = await request.response();
@@ -194,11 +279,14 @@ async function runRound(page, base, out, round, prompt, result, targetHost) {
   }));
   observed.chromeErrorSeen ||= metadata.some((meta) => /^chrome-error:/i.test(meta?.url ?? ''));
   result.sandbox_open_4xx = open4xx;
+  result.browser_open_posts = browserOpens;
   result.assertions = roundAssertions(round, {
     ...observed,
     finished,
     open4xx,
-    openRequestsSettled: openRequestsSettled && pendingOpens.size === 0,
+    browserOpens,
+    aiBrowserOpens: result.ai_browser_opens,
+    openRequestsSettled: result.assertions.sandbox_open_requests_settled === 'PASS',
     targetHost,
     finalPane,
   });
@@ -221,7 +309,7 @@ async function main() {
     },
   });
   const out = path.resolve(args.out);
-  const report = { card: 1464, verdict: 'FAIL', rounds: {} };
+  const report = { card: 1464, verdict: 'FAIL', sessions_current_status: null, rounds: {} };
   for (const round of ['template', 'bad_address']) {
     report.rounds[round] = { assertions: roundAssertions(round), sandbox_open_4xx: null, screenshot: null };
   }
@@ -230,19 +318,21 @@ async function main() {
   try {
     if (!args.template) throw new Error('--template is required');
     const template = await readFile(args.template, 'utf8');
-    const targetUrl = detectOpenWebsiteIntent(template);
-    if (!targetUrl) throw new Error('Template has no target website');
-    const targetHost = new URL(targetUrl).hostname;
+    const targetHost = templateTargetHost(template);
+    if (!targetHost) throw new Error('Template has no target website');
+    const base = new URL(args.base).origin;
+    const currentUrl = `${base}/api/pico/v1/sandbox/sessions/current`;
     stage = 'launch_browser';
     const { chromium } = loadPlaywright();
     const browser = await chromium.launch({
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
       args: ['--no-sandbox', '--disable-dev-shm-usage'],
     });
+    let headers;
+    let opensSettled = true;
     try {
       const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
       stage = 'login';
-      const base = new URL(args.base).origin;
       report.base = base;
       const onLoginResponse = (response) => {
         const url = new URL(response.url());
@@ -252,35 +342,53 @@ async function main() {
       };
       page.on('response', onLoginResponse);
       try {
-        await loginWithEdu(page, base, {
+        const token = await loginWithEdu(page, base, {
           eduBase: 'https://edu.weiyuji.cn',
           school: 'dd792255-de1c-4c6e-a750-5b15c7a213c1',
           loginName: 'drill.t701',
         });
+        headers = { authorization: `Bearer ${token}` };
       } finally {
         page.off('response', onLoginResponse);
       }
 
+      stage = 'run_rounds';
       for (const [round, prompt] of [
         ['template', template],
         ['bad_address', '打开 https://no-such-host.invalid'],
       ]) {
         const result = report.rounds[round];
         try {
-          await runRound(page, base, out, round, prompt, result, targetHost);
+          await runRound(page, base, out, round, prompt, result, targetHost, headers);
         } catch (error) {
           // Playwright errors can include the prompt passed to fill().
           result.error = error.name;
         }
+        opensSettled = result.assertions.sandbox_open_requests_settled === 'PASS';
+        if (!opensSettled) break;
       }
       stage = 'close_browser';
     } finally {
-      await browser.close();
+      try {
+        await browser.close();
+      } finally {
+        if (headers) {
+          if (opensSettled) {
+            try {
+              report.sessions_current_status = await closeDesks(currentUrl, headers);
+            } catch (error) {
+              report.cleanup_error = error.message;
+            }
+          } else {
+            report.cleanup_error = 'Sandbox session creation requests were not confirmed settled';
+          }
+        }
+      }
     }
     const allPassed = Object.values(report.rounds).every((result) =>
       !result.error && result.screenshot && Object.values(result.assertions).every((status) => status === 'PASS'),
     );
-    if (allPassed) report.verdict = 'PASS';
+    if (allPassed && report.sessions_current_status === 404) report.verdict = 'PASS';
   } catch (error) {
     report.error = {
       stage,

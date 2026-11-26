@@ -140,14 +140,8 @@ export function humanArtifactActionError(
 
 const BROWSER_DEFAULT_URL = 'https://example.com/';
 const SITE_ALIASES: Array<{ test: RegExp; url: string }> = [
-  { test: /腾讯官网|腾讯网/i, url: 'https://www.qq.com/' },
+  { test: /^(?:打开|open\b)\s*(?:腾讯官网|腾讯网)$/i, url: 'https://www.qq.com/' },
 ];
-
-function looksLikeOfficeOpen(text: string): boolean {
-  return /(?:打开|open).{0,16}(?:word|Word|WORD|docx|doc\b|文档|字处理|表格|excel|xlsx|ppt|pptx|幻灯|演示)/i.test(
-    text,
-  );
-}
 
 function canonicalizeHttpUrl(candidate: string): string | null {
   const href = /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
@@ -165,41 +159,56 @@ function canonicalizeHttpUrl(candidate: string): string | null {
   }
 }
 
-/** Public URL the teacher asked to open in the right-hand 网页 pane. */
-export function detectOpenWebsiteIntent(text: string): string | null {
-  const raw = (text || '').trim();
-  if (!raw) {
-    return null;
-  }
-  const bare = raw.match(/^(https?:\/\/[^\s]+)$/i);
-  const spoken = raw.match(
-    /(?:打开|open)\s+(?:一下|下)?\s*(https?:\/\/[^\s]+|(?:www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+[^\s]*)/i,
-  );
-  const candidate = (bare?.[1] || spoken?.[1])
-    ?.match(/^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]+/)?.[0]
-    ?.replace(/[.,;:!?)]+$/, '');
-  if (candidate) {
-    // Do not treat "打开 课程总结.md" as a website.
+function mentionedWebsite(text: string, wholeMessage = false): string | null {
+  const tokens = wholeMessage
+    ? [
+        text.match(/^(https?:\/\/\S+)$/i)?.[1],
+        text.match(
+          /^(?:打开|open\b)\s*(?:(?:一下|下)\s*)?(https?:\/\/\S+|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.[a-z0-9]\S*)$/i,
+        )?.[1],
+      ]
+    : [
+        text.match(
+          /(?:打开|open)\s+(?:一下|下)?\s*(https?:\/\/[^\s]+|(?:www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+[^\s]*)/i,
+        )?.[1],
+        ...Array.from(text.matchAll(/(?<![\w.-])((?:https?:\/\/|www\.)\S+)/gi), (match) => match[1]),
+      ];
+
+  for (const token of tokens) {
+    if (!token) {
+      continue;
+    }
+    const urlPrefix = token.match(/^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]+/)?.[0];
+    if (!urlPrefix || (wholeMessage && !/^\p{P}*$/u.test(token.slice(urlPrefix.length)))) {
+      continue;
+    }
+    const candidate = urlPrefix.replace(/[.,;:!?)]+$/, '');
     if (
       !/^https?:\/\//i.test(candidate) &&
       /\.(docx?|pptx?|xlsx?|pdf|md|txt|html?|csv|json|png|jpe?g|gif|webp)$/i.test(candidate)
     ) {
-      return null;
+      continue;
     }
-    return canonicalizeHttpUrl(candidate);
+    const url = canonicalizeHttpUrl(candidate);
+    if (url) {
+      return url;
+    }
   }
-  // Word/Excel stay on the Writer path — never alias them to a webpage.
-  if (looksLikeOfficeOpen(raw) && !/(?:https?:\/\/|www\.)/i.test(raw)) {
-    return null;
+  return null;
+}
+
+/** Public URL the teacher asked to open in the right-hand 网页 pane. */
+export function detectOpenWebsiteIntent(text: string): string | null {
+  const raw = (text || '').trim().replace(/[。.!！]$/, '').trimEnd();
+  const website = mentionedWebsite(raw, true);
+  if (website) {
+    return website;
   }
-  if (
-    /(?:打开|open).{0,10}(?:浏览器|chrome\b|chromium\b|browser\b)/i.test(raw) ||
-    /^(?:打开|open)\s*(?:一下|下)?\s*(?:网站|网页)$/i.test(raw)
-  ) {
+  if (/^(?:打开|open\b)\s*(?:(?:一下|下)\s*)?(?:浏览器|chrome|chromium|browser|网站|网页)$/i.test(raw)) {
     return BROWSER_DEFAULT_URL;
   }
   for (const alias of SITE_ALIASES) {
-    if (/(?:打开|open)/i.test(raw) && alias.test.test(raw)) {
+    if (alias.test.test(raw)) {
       return alias.url;
     }
   }
@@ -216,7 +225,7 @@ export function detectOpenOfficeIntent(text: string): OfficeOpenIntent | null {
   if (!raw) {
     return null;
   }
-  if (detectOpenWebsiteIntent(raw)) {
+  if (mentionedWebsite(raw) || detectOpenWebsiteIntent(raw)) {
     return null;
   }
   const named = raw.match(
