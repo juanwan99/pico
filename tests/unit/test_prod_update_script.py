@@ -52,6 +52,7 @@ def _production_checkout(tmp_path: Path) -> tuple[Path, str]:
     shutil.copy2(IMPL, source / "scripts" / "prod-update.impl.sh")
     shutil.copy2(SMOKE, source / "scripts" / "e2e-smoke.sh")
     shutil.copy2(EDU_LOCK, source / "scripts" / "edu-accept-lock.sh")
+    shutil.copy2(ROOT / "scripts/pico_ops_watch.py", source / "scripts/pico_ops_watch.py")
     shutil.copy2(FIRST_SCREEN, source / "scripts" / FIRST_SCREEN.name)
     (source / "docker-compose.host.yml").write_text("services: {}\n")
     (source / ".gitignore").write_text(".env\ndata/\n")
@@ -83,8 +84,11 @@ def _fake_runtime(
     old_api_port: str | None = None,
     candidate_health: str = "current",
     candidate_logs_fail: bool = False,
+    candidate_rm_fail: bool = False,
     listener_wrong_sha: bool = False,
     listener_stale_polls: int = 0,
+    same_sha: bool = False,
+    interrupted: str = "",
     api_unchanged: bool = False,
 ) -> Path:
     """Install fake docker/ss/curl. Login returns only the HTTP status body (curl -w).
@@ -121,6 +125,15 @@ def _fake_runtime(
         (bin_dir / "listener-wrong-sha").touch()
     if listener_stale_polls:
         (bin_dir / "listener-stale-polls").write_text(f"{listener_stale_polls}\n")
+    if same_sha:
+        (bin_dir / "same-sha").touch()
+    if api_unchanged:
+        (bin_dir / "api-unchanged").touch()
+    if interrupted:
+        (bin_dir / "interrupted").write_text(interrupted)
+        (bin_dir / "candidate-created").touch()
+        if interrupted == "needs-rename":
+            (bin_dir / "old-api-removed").touch()
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
         'here="$(cd "$(dirname "$0")" && pwd)"\n'
@@ -137,10 +150,10 @@ def _fake_runtime(
         "    exit 0 ;;\n"
         '  "compose "*" build "*)\n'
         '    : >"$here/built"\n'
-        '    if [ -e "$here/candidate-created" ]; then unlink "$here/candidate-created"; fi\n'
+        '    if [ ! -f "$here/interrupted" ]; then rm -f "$here/candidate-created"; fi\n'
         "    exit 0 ;;\n"
         '  "compose "*" ps --all --quiet pico-api")\n'
-        '    if [ -f "$here/old-api-port" ]; then echo old-api; fi\n'
+        '    if [ -f "$here/old-api-port" ] && [ ! -f "$here/old-api-removed" ]; then echo old-api; fi\n'
         '    if [ -f "$here/candidate-created" ]; then echo new-api; fi\n'
         '    exit 0 ;;\n'
         '  "compose "*" ps --quiet pico-api-listener")\n'
@@ -150,22 +163,35 @@ def _fake_runtime(
         '    echo \'{"services":{"pico-api":{"image":"pico-api:fixture"}}}\'; exit 0 ;;\n'
         '  "compose "*" config --hash pico-api") echo "pico-api current"; exit 0 ;;\n'
         '  "inspect --format "*"pico.api.port"*" old-api") cat "$here/old-api-port"; exit 0 ;;\n'
+        '  "inspect --format "*"pico.api.port"*" new-api")\n'
+        '    if [ "$(cat "$here/old-api-port")" = 18770 ]; then echo 18769; else echo 18770; fi\n'
+        '    exit 0 ;;\n'
         '  "inspect --format {{.Name}} old-api") echo /pico-pico-api-1; exit 0 ;;\n'
+        '  "inspect --format {{.Name}} new-api") echo /pico-pico-api-2; exit 0 ;;\n'
         '  "inspect --format "*"config-hash"*" old-api")\n'
         f'    echo "true sha256:current {"current" if api_unchanged else "previous"}"; exit 0 ;;\n'
+        '  "inspect --format "*"config-hash"*" new-api") echo "true sha256:current current"; exit 0 ;;\n'
         '  "compose "*" up --no-start "*" pico-api")\n'
         '    : >"$here/candidate-created"\n'
+        '    rm -f "$here/interrupted"\n'
         '    exit 0 ;;\n'
         '  "kill --signal HUP listener") echo hup >>"$here/listener-reloads"; exit 0 ;;\n'
         '  "logs --tail 30 new-api")\n'
         f'    exit {1 if candidate_logs_fail else 0} ;;\n'
+        '  "exec old-api curl "*)\n'
+        '    sha=previous; if [ -f "$here/same-sha" ]; then sha="$PICO_GIT_SHA"; fi\n'
+        '    port="${@: -1}"; port="${port%/health}"; port="${port##*:}"\n'
+        '    printf \'{"ok":true,"git_sha":"%s","backend_port":%s}\' "$sha" "$port"\n'
+        '    exit 0 ;;\n'
         '  "exec new-api curl "*)\n'
+        '    if [ -f "$here/interrupted" ] && [ "$(cat "$here/interrupted")" = created ]; then exit 7; fi\n'
         '    sha="$PICO_GIT_SHA"\n'
         f'    case "{candidate_health}" in\n'
         '      down) exit 7 ;;\n'
         '      wrong-sha) sha=previous ;;\n'
         '    esac\n'
-        '    printf \'{"ok":true,"git_sha":"%s","true_pi_binary_available":true}\' "$sha"\n'
+        '    port="${@: -1}"; port="${port%/health}"; port="${port##*:}"\n'
+        '    printf \'{"ok":true,"git_sha":"%s","backend_port":%s,"true_pi_binary_available":true}\' "$sha" "$port"\n'
         '    exit 0 ;;\n'
         '  "exec "*" python3 -c "*)\n'
         '    if [ -f "$here/office-down" ]; then exit 1; fi\n'
@@ -176,6 +202,11 @@ def _fake_runtime(
         '    if [ -f "$here/edu-gw-down" ]; then exit 1; fi\n'
         '    printf \'{"ok":true,"git_sha":"%s"}\' "$PICO_GIT_SHA"\n'
         "    exit 0 ;;\n"
+        '  "rm new-api"|"rm -f new-api")\n'
+        f'    if [ {int(candidate_rm_fail)} = 1 ]; then echo "candidate rm failed" >&2; exit 1; fi\n'
+        '    rm -f "$here/candidate-created"\n'
+        '    exit 0 ;;\n'
+        '  "rm old-api") touch "$here/old-api-removed"; exit 0 ;;\n'
         '  "rm -f "*)\n'
         '    printf \'%s\\n\' "${@: -1}" >>"$here/removed"\n'
         "    exit 0 ;;\n"
@@ -264,23 +295,34 @@ def _fake_runtime(
         "      fi\n"
         "    fi\n"
         '    sha="$PICO_GIT_SHA"\n'
+        '    port=18769; old_port=\'\'\n'
+        '    if [ -f "$here/old-api-port" ]; then old_port="$(cat "$here/old-api-port")"; fi\n'
+        '    if [ "$old_port" = 18769 ]; then port=18770; fi\n'
+        '    if [ -f "$here/api-unchanged" ]; then port="$old_port"; fi\n'
         '    if [ "$url" = http://127.0.0.1:18765/health ] && [[ "$*" = "-fsS "* ]]; then\n'
         '      echo "verify listener health" >>"$here/docker-commands"\n'
+        '      if [ -f "$here/interrupted" ] && [ "$(cat "$here/interrupted")" = created ]; then\n'
+        '        sha=previous; port="$old_port"\n'
+        '      fi\n'
         '      if [ -f "$here/listener-stale-polls" ] && [ -f "$here/listener-reloads" ]; then\n'
         '        read -r left <"$here/listener-stale-polls"\n'
         '        if [ "$left" -gt 0 ]; then\n'
         '          sha=previous\n'
+        '          if [ -f "$here/same-sha" ]; then sha="$PICO_GIT_SHA"; fi\n'
+        '          port="$old_port"\n'
         '          echo "$((left - 1))" >"$here/listener-stale-polls"\n'
         '        fi\n'
         '      fi\n'
         '    fi\n'
         '    if [ -f "$here/listener-wrong-sha" ] && [ -f "$here/listener-reloads" ]; then\n'
-        '      sha=previous\n'
+        '      if [ "$(wc -l < "$here/listener-reloads")" = 1 ]; then sha=bad;\n'
+        '      elif [ ! -f "$here/rollback-probed" ]; then touch "$here/rollback-probed"; sha=bad;\n'
+        '      else sha=previous; port="$old_port"; fi\n'
         '    fi\n'
-        "    health_body=\"$(printf '{\"ok\":true,\"service\":\"pico-api\",\"git_sha\":\"%s\",%s"
+        "    health_body=\"$(printf '{\"ok\":true,\"service\":\"pico-api\",\"git_sha\":\"%s\",\"backend_port\":%s,%s"
         "\"true_pi_binary_available\":true,"
         "\"true_pi_package_pin\":\"@earendil-works/pi-coding-agent@0.84.4\"}' "
-        "\"$sha\" \"$inflight_field\")\"\n"
+        "\"$sha\" \"$port\" \"$inflight_field\")\"\n"
         # impl reads /health from stdout; the smoke gate uses `-o file -w %{http_code}`.
         "    if [ -n \"$out_file\" ]; then printf '%s' \"$health_body\" >\"$out_file\"; printf '200'; "
         "else printf '%s' \"$health_body\"; fi ;;\n"
@@ -368,6 +410,8 @@ def _run_prod_update(
             "PICO_EDU_ACCEPT_LOCK": _bash_path(production.parent / "no-edu-core" / "acceptance.lock"),
             # E2E smoke gate: the host reads PICO_OPENAI_PROXY_KEY from /opt/pico/.env.
             "PICO_SMOKE_KEY": "smoke-fixture-key",
+            "PICO_OPS_ENV_TRAIL": str(production.parent / "env-trail"),
+            "PICO_OPS_ENV_SNAPSHOT": str(production.parent / "env-snapshot"),
         },
         capture_output=True,
         text=True,
@@ -429,11 +473,14 @@ def test_prod_update_switches_healthy_candidate_then_drains_and_stops_old(tmp_pa
         production / "data/pico-api-listener/nginx.conf"
     ).read_text()
     assert "PICO_API_BACKEND_PORT=18770" in (production / ".env").read_text().splitlines()
+    trail = (tmp_path / "env-trail").read_text()
+    assert "[env-set] PICO_API_BACKEND_PORT: 18769 -> 18770" in trail
+    assert f"Why: API handoff for {sha}" in trail
 
 
 def test_prod_update_waits_for_new_sha_after_async_reload(tmp_path: Path) -> None:
     production, sha = _production_checkout(tmp_path)
-    bin_dir = _fake_runtime(tmp_path, old_api_port="18769", listener_stale_polls=1)
+    bin_dir = _fake_runtime(tmp_path, old_api_port="18769", listener_stale_polls=1, same_sha=True)
     result = _run_prod_update(production, sha, bin_dir)
 
     assert result.returncode == 0, result.stderr
@@ -475,7 +522,8 @@ def test_prod_update_first_migration_restores_legacy_container_if_candidate_fail
     assert result.returncode == 4
     commands = (bin_dir / "docker-commands").read_text().splitlines()
     assert commands.index("stop old-api") < commands.index("start new-api")
-    assert commands.index("rm -f new-api") < commands.index("start old-api")
+    assert commands.index("stop new-api") < commands.index("start old-api")
+    assert commands.index("start old-api") < commands.index("rm new-api")
     assert "rm old-api" not in commands
 
 
@@ -489,12 +537,56 @@ def test_prod_update_restores_listener_when_new_route_fails(tmp_path: Path) -> N
     reloads = [i for i, command in enumerate(commands) if command == "kill --signal HUP listener"]
     assert len(reloads) == 2 and reloads[1] < commands.index("stop new-api")
     assert reloads[0] < commands.index("verify listener health") < reloads[1]
+    assert commands[reloads[1]:commands.index("stop new-api")].count("verify listener health") == 2
     assert "exec listener sh -c " not in commands[:reloads[1]]
     assert commands.index("stop new-api") < commands.index("rm new-api")
     assert "stop old-api" not in commands
     assert "proxy_pass 127.0.0.1:18770;" in (
         production / "data/pico-api-listener/nginx.conf"
     ).read_text()
+
+
+def test_prod_update_restores_legacy_before_failed_candidate_removal(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, old_api_port="", candidate_health="down", candidate_rm_fail=True)
+    result = _run_prod_update(production, sha, bin_dir)
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    assert commands.index("stop new-api") < commands.index("start old-api")
+    assert commands.index("start old-api") < commands.index("rm new-api")
+    assert "candidate rm failed" in result.stderr
+
+
+def test_prod_update_can_reap_created_candidate_on_retry(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, old_api_port="18769", interrupted="created")
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    assert commands.index("rm new-api") < commands.index("start new-api")
+    assert commands.index("start new-api") < commands.index("stop old-api")
+
+
+def test_prod_update_finishes_interrupted_cutover_on_retry(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    (production / ".env").write_text("PICO_API_BACKEND_PORT=18769\n")
+    bin_dir = _fake_runtime(tmp_path, old_api_port="18769", interrupted="switched")
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    assert commands.index("stop old-api") < commands.index("rename new-api pico-pico-api-1")
+    assert "stop new-api" not in commands
+    assert "start new-api" not in commands
+    assert "PICO_API_BACKEND_PORT=18770" in (production / ".env").read_text().splitlines()
+
+
+def test_prod_update_restores_name_after_interrupted_retirement(tmp_path: Path) -> None:
+    production, sha = _production_checkout(tmp_path)
+    bin_dir = _fake_runtime(tmp_path, old_api_port="18769", interrupted="needs-rename")
+    result = _run_prod_update(production, sha, bin_dir)
+    assert result.returncode == 0, result.stderr
+    commands = (bin_dir / "docker-commands").read_text().splitlines()
+    assert "rename new-api pico-pico-api-1" in commands
+    assert "start new-api" not in commands
 
 
 def test_prod_update_leaves_unchanged_api_running(tmp_path: Path) -> None:

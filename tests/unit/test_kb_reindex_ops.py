@@ -346,7 +346,7 @@ async def test_meili_rebuild_waits_for_a_slow_task(monkeypatch: pytest.MonkeyPat
         ),
     )
     index = meili_kb.MeiliIndex(SlowMeili())
-    monkeypatch.setattr(index, "ensure", lambda: None)
+    monkeypatch.setattr(index, "_ensure_steps", lambda: iter(()))
 
     await index.wait_until_idle()
     await index.upsert_rebuild_batch([{"chunk_id": "upload_0000"}])
@@ -378,7 +378,7 @@ async def test_rebuild_cancellation_waits_only_for_submission(
             return 200, {"status": "succeeded" if allow_success.is_set() else "processing"}
 
     index = MeiliIndex(BusyMeili())
-    monkeypatch.setattr(index, "ensure", lambda: None)
+    monkeypatch.setattr(index, "_ensure_steps", lambda: iter(()))
     push = asyncio.create_task(_Pace(per_min=600).push(index, [{"chunk_id": "doc_0"}]))
     try:
         assert await asyncio.to_thread(posting.wait, 2)
@@ -399,6 +399,45 @@ async def test_rebuild_cancellation_waits_only_for_submission(
         allow_post.set()
         allow_success.set()
         await asyncio.gather(push, return_exceptions=True)
+
+
+async def test_cancel_rebuild_during_index_settings_poll(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pico_orchestrator import meili_kb
+
+    polling = Event()
+    done = Event()
+    writes = []
+
+    class BusyMeili:
+        def request(self, method, url, **_):
+            if method == "PATCH":
+                writes.append("settings")
+                return 202, {"taskUid": 41}
+            if method == "POST":
+                writes.append("documents")
+                return 202, {"taskUid": 42}
+            assert method == "GET" and "/tasks/" in url
+            polling.set()
+            return 200, {"status": "succeeded" if done.is_set() else "processing"}
+
+    index = meili_kb.MeiliIndex(BusyMeili())
+    monkeypatch.setattr(meili_kb, "_ENSURE_CACHE", {})
+    monkeypatch.setattr(meili_kb, "new_api_embedder_spec", lambda: None)
+    monkeypatch.setattr(index, "_primary_key", lambda: meili_kb.PRIMARY_KEY)
+    monkeypatch.setattr(index, "_settings_body", dict)
+    monkeypatch.setattr(index, "live_embedder_armed", lambda: False)
+    rebuild = asyncio.create_task(index.upsert_rebuild_batch([{"chunk_id": "doc_0"}]))
+    try:
+        assert await asyncio.to_thread(polling.wait, 2)
+        rebuild.cancel()
+        finished, _ = await asyncio.wait({rebuild}, timeout=1)
+        assert rebuild in finished
+        with pytest.raises(asyncio.CancelledError):
+            await rebuild
+        assert writes == ["settings"]
+    finally:
+        done.set()
+        await asyncio.gather(rebuild, return_exceptions=True)
 
 
 async def test_reindex_all_force_ack_and_health_while_meili_is_busy(
@@ -427,7 +466,7 @@ async def test_reindex_all_force_ack_and_health_while_meili_is_busy(
             return 200, {"status": "succeeded"}
 
     index = meili_kb.MeiliIndex(SlowMeili())
-    monkeypatch.setattr(index, "ensure", lambda: None)
+    monkeypatch.setattr(index, "_ensure_steps", lambda: iter(()))
     monkeypatch.setattr(kb_rebuild, "MeiliIndex", lambda: index)
     monkeypatch.setattr(meili_kb, "MeiliIndex", lambda: index)
     monkeypatch.setenv("MEILI_MASTER_KEY", "test-key")

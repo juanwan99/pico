@@ -7,7 +7,6 @@ import json
 import logging
 import mimetypes
 import re
-import signal
 import sys
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -17,6 +16,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 from starlette.background import BackgroundTask
@@ -125,14 +125,25 @@ async def lifespan(_app: FastAPI):
     await init_db()
     factory = run_service.session_factory()
     path = lock_path("background")
-    owner_lock = try_lock(path)
-    takeover = None
+    owner_lock = None
 
     async def start_background() -> None:
-        # This process can already have HTTP runs when the old owner exits.
-        previous_runs = RunRow.owner_id.is_distinct_from(RUN_OWNER_ID)
         async with factory() as session:
             await lock_sqlite_writer(session)
+            owners = await session.scalars(
+                select(RunRow.owner_id).where(
+                    RunRow.status.in_(("queued", "preparing", "running")),
+                    RunRow.owner_id.is_not(None),
+                ).distinct()
+            )
+            retired = []
+            for owner in owners:
+                assert owner is not None
+                lock = try_lock(lock_path(f"run-owner-{owner}"))
+                if lock is not None:
+                    lock.close()
+                    retired.append(owner)
+            previous_runs = or_(RunRow.owner_id.is_(None), RunRow.owner_id.in_(retired))
             await run_service.reconcile_orphaned_runs(session, previous_runs)
         resumed = await run_resume.resume_orphaned_runs(previous_runs)
         if resumed:
@@ -141,53 +152,56 @@ async def lifespan(_app: FastAPI):
 
     async def take_over_background() -> None:
         nonlocal owner_lock
-        try:
-            owner_lock = await wait_lock(path)
-            await start_background()
-        except Exception:
-            logger.exception("pico-api background startup failed")
-            signal.raise_signal(signal.SIGTERM)
-            raise
+        while True:
+            try:
+                if owner_lock is None:
+                    owner_lock = await wait_lock(path)
+                await start_background()
+                return
+            except Exception:
+                logger.exception("pico-api background startup failed; retrying")
+                await asyncio.sleep(1)
 
     try:
-        if owner_lock is None:
+        with await wait_lock(lock_path(f"run-owner-{RUN_OWNER_ID}")):
             takeover = asyncio.create_task(take_over_background())
-        else:
-            await start_background()
-        yield
-    finally:
-        try:
-            if takeover is not None:
-                if owner_lock is None:
-                    takeover.cancel()
+            try:
+                yield
+            finally:
+                takeover.cancel()
                 with suppress(asyncio.CancelledError):
                     await takeover
-        finally:
-            try:
-                reindex = getattr(_app.state, "kb_reindex_task", None)
-                if reindex is not None and not reindex.done():
-                    reindex.cancel()
-                    await asyncio.gather(reindex, return_exceptions=True)
-                if owner_lock is not None:
-                    await automation_service.stop_scheduler()
-                # Owners cancelled from here on leave resumable runs for the next process.
-                run_resume.mark_shutting_down()
-                drain = await run_service.drain_inflight_runs(timeout_s=45.0)
-                recon = None
-                if owner_lock is not None:
-                    async with factory() as session:
-                        await lock_sqlite_writer(session)
-                        recon = await run_service.reconcile_orphaned_runs(
-                            session, RunRow.owner_id == RUN_OWNER_ID
-                        )
-                print(
-                    f"[pico] shutdown drain waited={drain['waited']} "
-                    f"remaining={drain['remaining']} recon={recon}",
-                    flush=True,
-                )
-            finally:
-                if owner_lock is not None:
-                    owner_lock.close()
+                await _stop_background(_app, owner_lock is not None)
+    finally:
+        if owner_lock is not None:
+            # The next background owner must see this process as retired.
+            owner_lock.close()
+
+
+async def _stop_background(_app: FastAPI, owns_background: bool) -> None:
+    from app import automation_service, run_resume
+
+    reindex = getattr(_app.state, "kb_reindex_task", None)
+    if reindex is not None and not reindex.done():
+        reindex.cancel()
+        await asyncio.gather(reindex, return_exceptions=True)
+    if owns_background:
+        await automation_service.stop_scheduler()
+    # Owners cancelled from here on leave resumable runs for the next process.
+    run_resume.mark_shutting_down()
+    drain = await run_service.drain_inflight_runs(timeout_s=45.0)
+    recon = None
+    if owns_background:
+        async with run_service.session_factory()() as session:
+            await lock_sqlite_writer(session)
+            recon = await run_service.reconcile_orphaned_runs(
+                session, RunRow.owner_id == RUN_OWNER_ID
+            )
+    print(
+        f"[pico] shutdown drain waited={drain['waited']} "
+        f"remaining={drain['remaining']} recon={recon}",
+        flush=True,
+    )
 
 
 app = FastAPI(
@@ -287,17 +301,19 @@ async def root_info() -> dict:
 
 
 @app.get("/health")
-async def health(settings: Settings = Depends(get_settings)) -> dict:
+async def health(request: Request, settings: Settings = Depends(get_settings)) -> dict:
     # Never echo canary principal IDs — only counts / opaque batch labels.
     pi_canary = settings.pi_agent_canary_membership_count
     pi_batch = (settings.pico_pi_agent_canary_batch or "").strip()
     kimi_canary = settings.kimi_agent_canary_membership_count
     kimi_batch = (settings.pico_kimi_agent_canary_batch or "").strip()
+    server = request.scope.get("server")
     body: dict = {
         "ok": True,
         "service": "pico-api",
         "git_sha": _resolve_git_sha(),
         "revision": _resolve_git_sha(),
+        "backend_port": server[1] if server else None,
         "edu_mode": settings.pico_edu_mode,
         # Product default multi-step kernel (HANDOFF-WB-PI / true-Pi phase-2)
         "default_runtime": _resolve_default_runtime(settings),

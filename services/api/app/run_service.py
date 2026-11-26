@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -27,6 +28,7 @@ from app.db import (
 )
 from app.settings import get_settings
 
+logger = logging.getLogger(__name__)
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
@@ -85,7 +87,9 @@ async def drain_inflight_runs(*, timeout_s: float = 45.0) -> dict[str, int]:
     for t in still:
         t.cancel()
     if still:
-        await asyncio.gather(*still, return_exceptions=True)
+        for result in await asyncio.gather(*still, return_exceptions=True):
+            if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError):
+                logger.error("in-flight run failed during shutdown cancellation", exc_info=result)
     return {
         "waited": len(done),
         "remaining": len(still),

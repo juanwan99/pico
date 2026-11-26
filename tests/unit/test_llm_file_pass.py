@@ -112,6 +112,14 @@ def test_pass_url_uses_the_process_listener(monkeypatch, backend_port: str | Non
     )
 
 
+def test_ruler_stack_overrides_inherited_backend_port() -> None:
+    stack = (ROOT / "scripts/pico-ruler-stack.sh").read_text()
+    api = stack.split('docker run -d --name "ruler-$name-api"', 1)[1]
+    api = api.split("for _ in", 1)[0]
+    assert '-e PICO_API_BACKEND_PORT="$API"' in api
+    assert '--port "$API"' in api
+
+
 def test_turn_files_key_is_exact_run_id() -> None:
     pdf = NativeFile(filename="a.pdf", data=b"%PDF")
     remember_turn_files("ledger-run", [pdf])

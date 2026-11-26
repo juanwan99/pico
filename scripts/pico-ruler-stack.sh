@@ -198,7 +198,8 @@ up() {
     -e PICO_DATABASE_URL=sqlite+aiosqlite:///./data/pico.db -e PICO_SANDBOX_URL="http://127.0.0.1:$SB" \
     -e PICO_OFFICE_URL=unix:///run/pico-office/office.sock -e PICO_RUNNER_URL="http://127.0.0.1:$CTL" \
     -e PICO_RUNNER_PROXY_URL="http://$RELAY_IP:$PX" -e PICO_HOOK_SERVICE_TOKEN= -e PICO_EDU_BASE_URL= \
-    -e PICO_EDU_SERVICE_TOKEN= -e PICO_EDU_HANDOFF_ENABLED=0 -e PICO_API_PORT="$API" -e PICO_MEILI_URL= \
+    -e PICO_EDU_SERVICE_TOKEN= -e PICO_EDU_HANDOFF_ENABLED=0 -e PICO_API_PORT="$API" \
+    -e PICO_API_BACKEND_PORT="$API" -e PICO_MEILI_URL= \
     -e MEILI_MASTER_KEY= -e PICO_SANDBOX_DISK=/var/lib/pico/teacher-disks -e PICO_GIT_SHA="ruler-$name" \
     -v "$D/data:/app/data" -v "$D/disks:/var/lib/pico/teacher-disks" -v "$D/office-sock:/run/pico-office" \
     -v "$s/api:/app/services/api:ro" -v "$s/orchestrator:/app/services/orchestrator:ro" \

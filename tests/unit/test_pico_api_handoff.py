@@ -14,6 +14,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 import httpx
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 logger = logging.getLogger(__name__)
@@ -53,6 +54,27 @@ def _serve(port: int, events_file: Path) -> None:
     automation_service._fire_due = tick
     run_resume.resume_run = resume
     main.rebuild_materials = rebuild
+    if os.environ.get("FAIL_TAKEOVER"):
+        original = main.run_service.reconcile_orphaned_runs
+
+        async def fail_once(*args):
+            if f"{sha} reconcile failed" not in events_file.read_text():
+                record("reconcile failed")
+                raise RuntimeError("fixture: transient SQLite writer error")
+            return await original(*args)
+
+        main.run_service.reconcile_orphaned_runs = fail_once
+    if os.environ.get("DEFER_TAKEOVER"):
+        original_wait = main.wait_lock
+
+        async def defer(path):
+            while path.name.endswith(".background.lock") and not events_file.with_name(
+                "allow-takeover"
+            ).exists():
+                await asyncio.sleep(0.05)
+            return await original_wait(path)
+
+        main.wait_lock = defer
 
     principal = Principal(
         school_id="school-a", membership_id="member-a", iss="edu", aud="pico",
@@ -102,7 +124,8 @@ def _eventually(check, timeout: float = 10) -> None:
     assert check()
 
 
-def test_two_processes_recover_only_the_retired_owners_runs(tmp_path: Path) -> None:
+@pytest.mark.parametrize("scenario", ["normal", "retry", "old-restarts"])
+def test_two_processes_recover_only_the_retired_owners_runs(tmp_path: Path, scenario: str) -> None:
     events_file = tmp_path / "events"
     events_file.touch()
     env = {
@@ -114,14 +137,14 @@ def test_two_processes_recover_only_the_retired_owners_runs(tmp_path: Path) -> N
     }
 
     with ExitStack() as stack:
-        def start(sha: str) -> tuple[subprocess.Popen, httpx.Client]:
+        def start(sha: str, **overrides: str) -> tuple[subprocess.Popen, httpx.Client]:
             with socket.socket() as sock:
                 sock.bind(("127.0.0.1", 0))
                 port = sock.getsockname()[1]
             log = stack.enter_context((tmp_path / f"{sha}.log").open("w"))
             proc = subprocess.Popen(
                 [sys.executable, __file__, str(port), str(events_file)],
-                env={**env, "PICO_GIT_SHA": sha},
+                env={**env, "PICO_GIT_SHA": sha, **overrides},
                 stdout=log, stderr=subprocess.STDOUT,
             )
 
@@ -148,7 +171,12 @@ def test_two_processes_recover_only_the_retired_owners_runs(tmp_path: Path) -> N
         old, old_api = start("old")
         _eventually(lambda: "old scheduler" in events_file.read_text())
         assert events_file.read_text().splitlines() == ["old scheduler"]
-        new, new_api = start("new")
+        new, new_api = start(
+            "new",
+            **{"retry": {"FAIL_TAKEOVER": "1"}, "old-restarts": {"DEFER_TAKEOVER": "1"}}.get(
+                scenario, {}
+            ),
+        )
         old_run = old_api.post("/test/run?resumable=true").raise_for_status().json()
         new_run = new_api.post("/test/run?resumable=true").raise_for_status().json()
         assert new_api.get(f"/test/run/{old_run}").json() == {"status": "running", "events": []}
@@ -158,8 +186,17 @@ def test_two_processes_recover_only_the_retired_owners_runs(tmp_path: Path) -> N
         _eventually(lambda: "old reindex" in events_file.read_text())
         assert events_file.read_text().splitlines() == ["old scheduler", "old reindex"]
 
-        old.terminate()
+        if scenario == "old-restarts":
+            old.kill()
+        else:
+            old.terminate()
         old.wait(timeout=10)
+        if scenario == "old-restarts":
+            _, restarted = start("restarted")
+            _eventually(lambda: "restarted scheduler" in events_file.read_text())
+            assert restarted.get(f"/test/run/{old_run}").json()["status"] == "succeeded"
+            assert new_api.get(f"/test/run/{new_run}").json() == {"status": "running", "events": []}
+            return
         _eventually(lambda: f"new resume {old_run}" in events_file.read_text())
         _eventually(lambda: "new scheduler" in events_file.read_text())
         assert new.poll() is None
@@ -174,6 +211,27 @@ def test_two_processes_recover_only_the_retired_owners_runs(tmp_path: Path) -> N
         assert events.count("old scheduler") == events.count("new scheduler") == 1
         assert [item for item in events if "resume" in item] == [f"new resume {old_run}"]
         assert events.count("old reindex") == events.count("new reindex") == 1
+        if scenario == "retry":
+            assert events.count("new reconcile failed") == 1
+
+
+async def test_drain_logs_a_failed_cancellation_checkpoint(caplog) -> None:
+    from app.run_service import _track_inflight, drain_inflight_runs
+
+    entered = asyncio.Event()
+
+    async def run():
+        entered.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError as exc:
+            raise RuntimeError("checkpoint write failed") from exc
+
+    task = asyncio.create_task(run())
+    _track_inflight(task)
+    await entered.wait()
+    assert (await drain_inflight_runs(timeout_s=0))["timed_out"] == 1
+    assert "checkpoint write failed" in caplog.text
 
 
 if __name__ == "__main__":

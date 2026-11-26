@@ -270,20 +270,28 @@ if [ "$inflight" -gt 0 ]; then
   fi
 fi
 
-health_at() {
-  local port="$1" sha status=4
+health_identity() {
+  local port="$1"
   shift
-  for _ in $(seq 1 40); do
-    if "$@" curl -fsS --max-time 2 "http://127.0.0.1:$port/health" >"$HEALTH_FILE"; then
-      sha="$(python3 -c '
+  "$@" curl -fsS --max-time 2 "http://127.0.0.1:$port/health" >"$HEALTH_FILE" || return
+  python3 -c '
 import json, sys
 body = json.load(sys.stdin)
-print(body.get("git_sha", "") if body.get("ok") is True else "")
-' <"$HEALTH_FILE")" || return 5
-      if [ "$sha" = "$CURRENT_SHA" ]; then
+if body.get("ok") is not True or not body.get("git_sha"):
+    sys.exit(5)
+print("{}:{}".format(body["git_sha"], body.get("backend_port", "")))
+' <"$HEALTH_FILE"
+}
+
+health_at() {
+  local port="$1" expected="$2" identity status=4
+  shift 2
+  for _ in $(seq 1 40); do
+    if identity="$(health_identity "$port" "$@")"; then
+      if [ "$identity" = "$expected" ]; then
         cat "$HEALTH_FILE"
         echo
-        echo "[pico] health.git_sha exact match: $sha (port $port)"
+        echo "[pico] health.git_sha exact match: ${identity%%:*} (port $port, backend ${identity#*:})"
         return 0
       fi
       status=5
@@ -293,7 +301,7 @@ print(body.get("git_sha", "") if body.get("ok") is True else "")
     sleep 1
   done
   if [ "$status" -eq 5 ]; then
-    echo "[pico] FATAL: port $port health.git_sha mismatch got=$sha want=$CURRENT_SHA" >&2
+    echo "[pico] FATAL: port $port health identity mismatch got=$identity want=$expected" >&2
   else
     echo "[pico] FATAL: port $port /health did not become ready" >&2
   fi
@@ -325,7 +333,7 @@ reload_api_listener() {
 }
 
 switch_api_listener() {
-  local listener="$1" port="$2" workers
+  local listener="$1" port="$2" identity="$3" workers
   if [ -z "$listener" ]; then
     write_listener_config "$port" nginx.conf || return
     docker compose -f "$COMPOSE_FILE" up -d --no-deps pico-api-listener || return
@@ -333,7 +341,7 @@ switch_api_listener() {
     workers="$(docker exec "$listener" cat /proc/1/task/1/children)" || return
     reload_api_listener "$listener" || return
   fi
-  health_at 18765 || return
+  health_at 18765 "$identity" || return
   if [ -n "$listener" ]; then
     # The old workers still own already accepted TCP connections after HUP.
     # Wait for those sessions to drain before stopping their upstream.
@@ -345,17 +353,79 @@ switch_api_listener() {
   fi
 }
 
+record_backend_port() {
+  if [ -f .env ] && ! grep -qx "PICO_API_BACKEND_PORT=$1" .env; then
+    PICO_OPS_ENV="$ROOT/.env" python3 "$ROOT/scripts/pico_ops_watch.py" env-set \
+      "PICO_API_BACKEND_PORT=$1" --card 'pico#1474' --why "API handoff for $CURRENT_SHA"
+  fi
+}
+
+api_port() {
+  docker inspect --format '{{index .Config.Labels "pico.api.port"}}' "$1"
+}
+
+recover_api_handoff() {
+  local listener="$1" id port identity active_identity active_port inactive="" inactive_name
+  shift
+  old_api=""
+  if [ -n "$listener" ]; then
+    active_identity="$(health_identity 18765)"
+  fi
+  for id do
+    port="$(api_port "$id")"
+    if { [ -z "$listener" ] && [ -z "$port" ]; } ||
+       { [ -n "$listener" ] && [ -n "$port" ] &&
+         identity="$(health_identity "$port" docker exec "$id")" &&
+         [ "$identity" = "$active_identity" ]; }; then
+      if [ -n "$old_api" ]; then
+        echo "[pico] FATAL: ambiguous live API in interrupted handoff" >&2
+        return 4
+      fi
+      old_api="$id"
+      active_port="$port"
+    else
+      inactive="$id"
+    fi
+  done
+  if [ -z "$old_api" ] || [ -z "$inactive" ]; then
+    echo "[pico] FATAL: cannot identify the live API in interrupted handoff" >&2
+    return 4
+  fi
+  inactive_name="$(docker inspect --format '{{.Name}}' "$inactive")"
+  if [ -n "$listener" ]; then
+    # Confirm the live target again and drain any workers from the interrupted reload.
+    write_listener_config "$active_port" nginx.next.conf
+    switch_api_listener "$listener" "$active_port" "$active_identity"
+    docker stop "$inactive"
+  else
+    docker stop "$inactive"
+    docker start "$old_api"
+  fi
+  docker rm "$inactive"
+  if [[ "$inactive_name" == *-1 ]]; then
+    docker rename "$old_api" "${inactive_name#/}"
+  fi
+  if [ -n "$active_port" ]; then
+    record_backend_port "$active_port"
+  fi
+}
+
 deploy_pico_api() {
   local old_api old_port="" old_name listener new_port=18769 replicas=1 legacy=0
-  local api_ids id candidate_status=0 image config current
-  old_api="$(docker compose -f "$COMPOSE_FILE" ps --all --quiet pico-api)"
-  if [[ "$old_api" == *$'\n'* ]]; then
-    echo "[pico] FATAL: multiple pico-api containers found before handoff" >&2
-    exit 4
-  fi
+  local api_ids id candidate_status=0 image config current old_identity
+  local -a containers
+  mkdir -p "$LISTENER_DIR"
   listener="$(docker compose -f "$COMPOSE_FILE" ps --quiet pico-api-listener)"
+  api_ids="$(docker compose -f "$COMPOSE_FILE" ps --all --quiet pico-api)"
+  read -r -a containers <<< "${api_ids//$'\n'/ }"
+  case "${#containers[@]}" in
+    0) old_api="" ;;
+    1) old_api="${containers[0]}" ;;
+    2) recover_api_handoff "$listener" "${containers[@]}" ;;
+    *) echo "[pico] FATAL: more than two pico-api containers before handoff" >&2; exit 4 ;;
+  esac
   if [ -n "$old_api" ]; then
-    old_port="$(docker inspect --format '{{index .Config.Labels "pico.api.port"}}' "$old_api")"
+    old_port="$(api_port "$old_api")"
     old_name="$(docker inspect --format '{{.Name}}' "$old_api")"
     replicas=2
     case "$old_port" in
@@ -376,12 +446,17 @@ print(json.load(sys.stdin)["services"]["pico-api"]["image"])
     current="$(docker inspect --format '{{.State.Running}} {{.Image}} {{index .Config.Labels "com.docker.compose.config-hash"}}' "$old_api")"
     if [ "$current" = "true $image ${config#* }" ]; then
       new_api="$old_api"
-      health_at 18765
+      health_at 18765 "$CURRENT_SHA:$old_port"
+      # An interrupted deploy can leave just the promoted container to rename.
+      if [[ "$old_name" =~ -pico-api-[0-9]+$ && "$old_name" != *-1 ]]; then
+        old_name="${old_name#/}"
+        docker rename "$old_api" "${old_name%-*}-1"
+      fi
+      record_backend_port "$old_port"
       return
     fi
   fi
 
-  mkdir -p "$LISTENER_DIR"
   if [ -n "$listener" ]; then
     write_listener_config "$new_port" nginx.next.conf
     docker exec "$listener" nginx -t -c /etc/pico-api/nginx.next.conf
@@ -402,30 +477,40 @@ print(json.load(sys.stdin)["services"]["pico-api"]["image"])
     echo "[pico] first listener migration: stopping the legacy 18765 bind"
     docker stop "$old_api"
   fi
-  docker start "$new_api" && health_at "$new_port" docker exec "$new_api" || candidate_status=$?
+  docker start "$new_api" &&
+    health_at "$new_port" "$CURRENT_SHA:$new_port" docker exec "$new_api" || candidate_status=$?
   if [ "$candidate_status" -ne 0 ]; then
     docker logs --tail 30 "$new_api" || true
-    docker rm -f "$new_api"
-    if [ "$legacy" = "1" ]; then docker start "$old_api"; fi
+    if [ "$legacy" = "1" ]; then
+      docker stop "$new_api"
+      docker start "$old_api"
+      if ! docker rm "$new_api"; then
+        echo "[pico] FATAL: could not remove stopped candidate $new_api" >&2
+      fi
+    else
+      docker rm -f "$new_api"
+    fi
     exit "$candidate_status"
   fi
 
   candidate_status=0
-  switch_api_listener "$listener" "$new_port" || candidate_status=$?
+  switch_api_listener "$listener" "$new_port" "$CURRENT_SHA:$new_port" || candidate_status=$?
   if [ "$candidate_status" -ne 0 ]; then
     echo "[pico] FATAL: 18765 did not switch to the candidate" >&2
     if [ -n "$listener" ]; then
       write_listener_config "$old_port" nginx.next.conf
       reload_api_listener "$listener"
+      old_identity="$(health_identity "$old_port" docker exec "$old_api")"
+      health_at 18765 "$old_identity"
     else
       docker compose -f "$COMPOSE_FILE" stop pico-api-listener
-      if [ "$legacy" = "1" ]; then docker start "$old_api"; fi
     fi
     docker stop "$new_api"
+    if [ "$legacy" = "1" ]; then docker start "$old_api"; fi
     docker rm "$new_api"
     exit "$candidate_status"
   fi
-  stamp_env PICO_API_BACKEND_PORT "$new_port"
+  record_backend_port "$new_port"
   if [ -n "$old_api" ]; then
     if [ "$legacy" = "0" ]; then docker stop "$old_api"; fi
     docker rm "$old_api"
