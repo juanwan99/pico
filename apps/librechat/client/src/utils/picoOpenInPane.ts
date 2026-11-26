@@ -175,10 +175,15 @@ export function detectOpenWebsiteIntent(text: string): string | null {
   const spoken = raw.match(
     /(?:打开|open)\s+(?:一下|下)?\s*(https?:\/\/[^\s]+|(?:www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+[^\s]*)/i,
   );
-  const candidate = (bare?.[1] || spoken?.[1] || '').replace(/[.,;:!?）)]+$/, '');
+  const candidate = (bare?.[1] || spoken?.[1])
+    ?.match(/^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]+/)?.[0]
+    ?.replace(/[.,;:!?)]+$/, '');
   if (candidate) {
     // Do not treat "打开 课程总结.md" as a website.
-    if (/\.(docx?|pptx?|xlsx?|pdf|md|txt|html?|csv|json|png|jpe?g|gif|webp)$/i.test(candidate)) {
+    if (
+      !/^https?:\/\//i.test(candidate) &&
+      /\.(docx?|pptx?|xlsx?|pdf|md|txt|html?|csv|json|png|jpe?g|gif|webp)$/i.test(candidate)
+    ) {
       return null;
     }
     return canonicalizeHttpUrl(candidate);
