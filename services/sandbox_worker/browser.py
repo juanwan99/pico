@@ -1062,7 +1062,7 @@ class PlaywrightPage:
         return error.message if error else None
 
     async def navigate(self, url: str) -> None:
-        from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.async_api import Error as PlaywrightError
 
         parse_public_http_url(url)
         page = self._page
@@ -1071,17 +1071,18 @@ class PlaywrightPage:
         try:
             self.loading_note = await _navigate_page(failure, url)
         except ToolError:
-            if before.startswith(("http://", "https://")):
-                if page.url == before and failure.failed:
-                    # goto can reject before Chromium commits the error document.
-                    try:
-                        await page.wait_for_url(
-                            CHROMIUM_ERROR_PAGE, wait_until="commit", timeout=1_000,
-                        )
-                    except PlaywrightTimeoutError:
-                        logger.debug("Chromium did not commit an error page", exc_info=True)
-                if page.url == CHROMIUM_ERROR_PAGE:
-                    self.loading_note = await _navigate_page(failure, None)
+            if before.startswith(("http://", "https://")) and (
+                page.url == CHROMIUM_ERROR_PAGE or (page.url == before and failure.failed)
+            ):
+                try:
+                    # The error URL can commit before its frame is active for go_back.
+                    await page.wait_for_url(
+                        CHROMIUM_ERROR_PAGE, wait_until="domcontentloaded", timeout=1_000,
+                    )
+                    if page.url == CHROMIUM_ERROR_PAGE:
+                        self.loading_note = await _navigate_page(failure, None)
+                except (PlaywrightError, ToolError):
+                    logger.warning("Chromium could not return to the previous page", exc_info=True)
             raise
         assert_http_public_or_internal(self.url)
 
