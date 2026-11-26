@@ -703,7 +703,7 @@ async def test_real_chromium_drops_late_frame_from_one_pixel_smaller_viewport(
             time.time(), windows=[win], focused_id=win.window_id,
         )
         runtime._sessions[sess.session_id] = sess
-        async with asyncio.timeout(3), aclosing(runtime.stream(sess)) as stream:
+        async with aclosing(runtime.stream(sess)) as stream:
             initial = await anext(stream)
             assert (initial["width"], initial["height"]) == (719, 700)
             await surface.set_viewport(720, 700)
@@ -717,13 +717,14 @@ async def test_real_chromium_drops_late_frame_from_one_pixel_smaller_viewport(
                 },
             }
             on_frame = listen.call_args.args[1]
-            # PNG capture can hold the viewport lock while the stream keeps painting.
-            async with surface._viewport_lock:
-                push.reset_mock()
-                await on_frame(stale)
-                assert all(call.args[0].jpeg != stale["data"] for call in push.call_args_list)
-            # Wait for the frame the pane uses to display the resized static page.
-            resized = await anext(stream)
+            async with asyncio.timeout(3):
+                # PNG capture can hold the viewport lock while the stream keeps painting.
+                async with surface._viewport_lock:
+                    push.reset_mock()
+                    await on_frame(stale)
+                    assert all(call.args[0].jpeg != stale["data"] for call in push.call_args_list)
+                # Wait for the frame the pane uses to display the resized static page.
+                resized = await anext(stream)
             assert (resized["width"], resized["height"]) == (720, 700)
             with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
                 assert jpeg.size == (720, 700)
