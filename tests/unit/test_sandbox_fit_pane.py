@@ -691,17 +691,30 @@ async def test_real_chromium_drops_late_frame_from_one_pixel_smaller_viewport(
         cdp = await context.new_cdp_session(page)
         listen = MagicMock(wraps=cdp.on)
         monkeypatch.setattr(cdp, "on", listen)
-        monkeypatch.setattr(context, "new_cdp_session", AsyncMock(return_value=cdp))
-        frames = asyncio.Queue()
-        push = MagicMock(side_effect=frames.put_nowait)
-        stop = await surface.screencast(push)
-        try:
-            old = io.BytesIO()
-            with Image.new("RGB", (719, 700), "red") as jpeg:
-                jpeg.save(old, format="JPEG")
+        cast = surface.screencast
+        push = MagicMock()
+
+        async def observe_cast(send_frame):
+            push.side_effect = send_frame
+            # Keep the runtime's resize capture on a separate CDP session.
+            with monkeypatch.context() as cast_patch:
+                cast_patch.setattr(context, "new_cdp_session", AsyncMock(return_value=cdp))
+                return await cast(push)
+
+        monkeypatch.setattr(surface, "screencast", observe_cast)
+        runtime = SandboxRuntime()
+        win = SandboxWindow("win_browser", "browser", surface)
+        sess = SandboxSession(
+            "sbox_fit", "school-a", "member-a", "_norun", "ws", page.url, "", "", b"",
+            time.time(), windows=[win], focused_id=win.window_id,
+        )
+        runtime._sessions[sess.session_id] = sess
+        async with asyncio.timeout(3), aclosing(runtime.stream(sess)) as stream:
+            initial = await anext(stream)
+            assert (initial["width"], initial["height"]) == (719, 700)
             await surface.set_viewport(720, 700)
             stale = {
-                "data": base64.b64encode(old.getvalue()).decode(),
+                "data": _jpeg_data((719, 700), "red"),
                 "sessionId": 0,
                 "metadata": {
                     "deviceWidth": 719,
@@ -711,19 +724,17 @@ async def test_real_chromium_drops_late_frame_from_one_pixel_smaller_viewport(
             }
             on_frame = listen.call_args.args[1]
             # PNG capture can hold the viewport lock while the stream keeps painting.
-            async with asyncio.timeout(3), surface._viewport_lock:
+            async with surface._viewport_lock:
                 push.reset_mock()
                 await on_frame(stale)
                 assert all(call.args[0].jpeg != stale["data"] for call in push.call_args_list)
-                await page.evaluate("document.body.textContent = 'Repaint the resized layout'")
-                resized = await frames.get()
-                while resized.page_token != surface.page_token:
-                    resized = await frames.get()
-            assert (resized.width, resized.height) == (720, 700)
-            with Image.open(io.BytesIO(base64.b64decode(resized.jpeg))) as jpeg:
+            # Wait for the frame the pane uses to display the resized static page.
+            resized = await anext(stream)
+            assert (resized["width"], resized["height"]) == (720, 700)
+            with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
                 assert jpeg.size == (720, 700)
-        finally:
-            await stop()
+                red, green, blue = jpeg.getpixel((360, 350))
+                assert red < 20 and green < 20 and blue > 235, (red, green, blue)
     finally:
         await surface.close()
 
