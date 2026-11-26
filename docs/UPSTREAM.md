@@ -105,7 +105,7 @@ key 只显示 sha256 的前 8 位。进程重启后清零（`since` 是起点）
 
 Playwright 1.63.0 通过 Chromium CDP 取 JPEG。DPR 大于 1 的会话使用 Chromium 原生虚拟显示器，标签页随当前沙箱的 DPR 切换显示器，关桌时移除。用一次 `Emulation.setDeviceMetricsOverride` 提交 CSS 尺寸和 DPR。同一标签调整 CSS 尺寸或 DPR 时沿用 CDP 投屏，Chromium 捕获新的合成画面。换标签时才重新挂捕获。标签页尺寸适配失败时记录原因，画面回到现有 PNG 轮询。worker 丢弃时间戳早于最近一次改尺寸的帧，再按 Chromium 的 float32 取整核对 CDP metadata 与 JPEG 像素尺寸（不留容差），然后按 CSS 尺寸发帧；同一视口代次内重复画面才丢，每代首帧必送。Chromium 用 `--disable-lcd-text` 绘制灰阶文字，减轻 JPEG 色度采样带来的字体边缘模糊。[CDP Emulation](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/) · [Chromium 投屏和截图源码](https://chromium.googlesource.com/chromium/src/+/refs/tags/153.0.8010.12/content/browser/devtools/protocol/page_handler.cc)
 
-PNG 在持有 DPR 的 CDP 会话通过 `Page.captureScreenshot` 读取当前窗口，不裁剪或改变窗口布局。worker 将 PNG 像素缩回 CSS 尺寸，保留当前滚动位置。真 Chromium 回归覆盖滚动 500 px 后按图点击、投屏期间连截三次 PNG、非整数 DPR 切换及不同会话并用和关桌回收。
+PNG 每次另开一个不带仿真覆盖的 CDP 会话，以 `Page.captureScreenshot(fromSurface=true)` 读合成表面（投屏停了也能回，#1459），不裁剪或改变窗口布局。worker 将 PNG 像素缩回 CSS 尺寸，保留当前滚动位置。真 Chromium 回归覆盖滚动 500 px 后按图点击、投屏期间连截三次 PNG、非整数 DPR 切换及不同会话并用和关桌回收。
 
 Chromium 的帧到达 worker 即向 CDP 确认，worker 只留最新一帧待发。新前端通过 `ack=1` 声明每路 SSE 有两帧的确认窗口。网页解码后按顺序发起确认请求，同时继续读流。确认丢失时，超过 15 秒的名额释放，有待发帧就发送最新一帧，包括页面静止前的最后一帧。未声明确认的旧前端仍连续接收。实时输入只回网址、标题、输入框标记和操作结果，登录保存按 15 秒节流。网页将滚轮增量合并，每次只挂一条滚动请求。Office、老师盘和推帧不可用时继续轮询 PNG。[CDP Page 协议](https://chromedevtools.github.io/devtools-protocol/tot/Page/) · [noVNC 的 RFB 消息](https://github.com/novnc/noVNC/blob/master/docs/rfb_notes)
 

@@ -117,7 +117,7 @@ async def test_committed_navigation_survives_dom_timeout(
             }
         return await capture(method, *args)
 
-    context.new_cdp_session = AsyncMock(return_value=Mock(send=send))
+    context.new_cdp_session = AsyncMock(return_value=Mock(send=send, detach=AsyncMock()))
     page.is_closed.return_value = False
     context.storage_state = AsyncMock(return_value={})
 

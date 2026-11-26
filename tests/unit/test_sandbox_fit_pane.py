@@ -642,6 +642,123 @@ async def test_real_chromium_displays_follow_each_desk_dpr_and_are_removed(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_current_after_closing_one_of_two_owner_desks(tmp_path, monkeypatch, chromium):
+    from sandbox_worker import app as sidecar
+    from sandbox_worker.browser import PlaywrightPage
+
+    monkeypatch.delenv("PICO_SANDBOX_TOKEN", raising=False)
+    monkeypatch.setenv("PICO_SANDBOX_DISK", str(tmp_path / "disks"))
+    owner = {"school_id": "school-a", "membership_id": "member-a"}
+    url = "https://example.com/"
+    route = "/v1/internal/sessions"
+    opening = asyncio.Barrier(2)
+
+    async def open_page(url, *, login_state):
+        await opening.wait()
+        context = await chromium.new_context(
+            viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT}
+        )
+        await context.route(url, lambda request: request.fulfill(
+            content_type="text/html",
+            body="<title>Worksheet</title><h1>Worksheet</h1><div style='height:3000px'></div>",
+        ))
+        page = await context.new_page()
+        await page.goto(url)
+        return PlaywrightPage(context, page, tmp_path / "profiles")
+
+    runtime = SandboxRuntime(open_page)
+    monkeypatch.setattr(sidecar, "RUNTIME", runtime)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=sidecar.app), base_url="http://sidecar"
+    ) as client:
+        async with asyncio.timeout(5):
+            teacher, ai = await asyncio.gather(*(
+                client.post(f"{route}/open", json={**owner, "url": url, "run_id": run_id})
+                for run_id in (None, "run-ai")
+            ))
+        assert teacher.status_code == ai.status_code == 200
+        teacher_id = teacher.json()["session_id"]
+        ai_id = ai.json()["session_id"]
+        assert teacher_id != ai_id
+        desk = runtime.require_owner(ai_id, **owner)
+        surface = desk.browser
+        started, resume = asyncio.Event(), asyncio.Event()
+        capture_started = asyncio.Event()
+        screenshot_png = surface.screenshot_png
+
+        async def wait_for_action(**_kwargs):
+            started.set()
+            await resume.wait()
+
+        async def capture_png():
+            capture_started.set()
+            return await screenshot_png()
+
+        monkeypatch.setattr(surface, "wait_for", wait_for_action)
+        monkeypatch.setattr(surface, "screenshot_png", capture_png)
+        async with asyncio.timeout(5), asyncio.TaskGroup() as tasks:
+            async with aclosing(runtime.stream(desk, ack=True)) as stream:
+                assert "jpeg" in await anext(stream)
+                assert (await client.post(f"{route}/{ai_id}/input", json={
+                    **owner, "viewport_width": 1920, "viewport_height": 1080,
+                    "device_pixel_ratio": 1.5,
+                })).status_code == 200
+                assert (await client.post(f"{route}/{ai_id}/input", json={
+                    **owner, "scroll_dy": 900,
+                })).status_code == 200
+                acted = tasks.create_task(client.post(
+                    f"{route}/{ai_id}/act", json={**owner, "action": "wait_for"},
+                ))
+                await started.wait()
+                closed = await client.post(f"{route}/{teacher_id}/destroy", params=owner)
+                assert closed.status_code == 200
+            assert desk.act_lock.locked()
+            resume.set()
+            await capture_started.wait()
+            current = await client.get(f"{route}/current", params=owner)
+            assert current.status_code == 200
+            assert current.json()["session_id"] == ai_id
+            assert (await acted).status_code == 200
+            assert (await client.post(f"{route}/{ai_id}/destroy", params=owner)).status_code == 200
+            current = await client.get(f"{route}/current", params=owner)
+            assert current.status_code == 404
+            assert current.json()["detail"]["code"] == "sandbox.session_not_found"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transport", ["http", "embedded"])
+async def test_destroy_current_closes_the_resolved_desk(
+    live_runtime, monkeypatch, transport,  # noqa: F811
+) -> None:
+    from pico_orchestrator.gateway import ToolError
+    from pico_orchestrator.sandbox_sidecar import sidecar_json
+    from sandbox_worker import app as sidecar
+
+    monkeypatch.delenv("PICO_SANDBOX_TOKEN", raising=False)
+    runtime, _ = live_runtime
+    owner = {"school_id": "school-a", "membership_id": "member-a"}
+    opened = await runtime.open_session(**owner, run_id=None, url="https://example.com/")
+    route = "/v1/internal/sessions/current"
+    if transport == "http":
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=sidecar.app), base_url="http://sidecar"
+        ) as client:
+            destroyed = await client.post(f"{route}/destroy", params=owner)
+            assert destroyed.status_code == 200
+            result = destroyed.json()
+            missing = await client.get(route, params=owner)
+            assert missing.status_code == 404
+            assert missing.json()["detail"]["code"] == "sandbox.session_not_found"
+    else:
+        result = await sidecar_json("POST", f"{route}/destroy", params=owner)
+        with pytest.raises(ToolError) as missing:
+            await sidecar_json("GET", route, params=owner)
+        assert missing.value.code == "sandbox.session_not_found"
+    assert result["destroyed"] is True
+    assert result["session_id"] == opened["session_id"]
+
+
+@pytest.mark.asyncio
 async def test_api_relays_dpr_and_frame_ack_to_worker(live_runtime, monkeypatch) -> None:  # noqa: F811
     from app.auth import issue_test_token
     from app.main import app

@@ -383,15 +383,15 @@ async def destroy_session(
 ) -> dict[str, Any]:
     _require_token(x_pico_sandbox_token)
     try:
-        RUNTIME.require_owner(session_id, school_id=school_id, membership_id=membership_id)
+        sess = RUNTIME.require_owner(session_id, school_id=school_id, membership_id=membership_id)
     except ToolError as exc:
         raise _tool_http(exc) from exc
-    await RUNTIME.destroy(session_id)
+    await RUNTIME.destroy(sess.session_id)
     return redact_secrets(
         {
             "ok": True,
             "destroyed": True,
-            "session_id": session_id,
+            "session_id": sess.session_id,
             "persist": True,
             "human_copy": PERSIST_COPY,
         }
