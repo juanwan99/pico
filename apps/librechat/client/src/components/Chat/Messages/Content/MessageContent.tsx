@@ -12,6 +12,7 @@ import { useLocalize } from '~/hooks';
 import Container from './Container';
 import Markdown from './Markdown';
 import { cn } from '~/utils';
+import { stripPicoControlMarkers } from '~/utils/picoControlMarkers';
 import store from '~/store';
 
 const ERROR_CONNECTION_TEXT = 'Error connecting to server, try refreshing the page.';
@@ -100,15 +101,7 @@ const DisplayMessage = ({ text, isCreatedByUser, message, showCursor }: TDisplay
     if (!isCreatedByUser || !text) {
       return text;
     }
-    return text
-      .replace(/【Pico-User:[^】]*】\s*/g, '')
-      .replace(/【Pico-Convo:[^】]*】\s*/g, '')
-      .replace(/【Pico-Skill:[^】]*】\s*/g, '')
-      .replace(/【工作空间：[^】]*】(?:（[^）]*）)?\s*/g, '')
-      .replace(/【权限：[^】]*】\s*/g, '')
-      .replace(/【模型偏好：[^】]*】\s*/g, '')
-      .replace(/【项目指令：[^】]*】\s*/g, '')
-      .trim();
+    return stripPicoControlMarkers(text);
   }, [isCreatedByUser, text]);
 
   const showCursorState = useMemo(

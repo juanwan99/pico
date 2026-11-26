@@ -8,6 +8,7 @@ import {
   detectOpenOfficeIntent,
   detectOpenWebsiteIntent,
   formatResultPaneZoom,
+  latestUserOpenOfficeIntent,
   latestUserOpenWebsiteIntent,
   humanArtifactActionError,
   picoUploadDownloadUrl,
@@ -187,5 +188,22 @@ describe('picoOpenInPane', () => {
         { isCreatedByUser: true, text: '改成打开 课程总结.md' },
       ]),
     ).toBeNull();
+  });
+
+  const workspacePrefix = '【工作空间：甲】（备注） 【权限：完全访问】 【模型偏好：pico-deep】\n';
+  it.each([
+    ['【Pico-Convo:pending_x】 【权限：默认沙箱】\n打开 https://example.com', 'https://example.com/'],
+    [`${workspacePrefix}https://example.com/a`, 'https://example.com/a'],
+    [`${workspacePrefix}打开 https://example.com。然后截图`, null],
+  ])('detects the website shortcut from the submitted message %s', (text, url) => {
+    expect(latestUserOpenWebsiteIntent([{ isCreatedByUser: true, text }])).toBe(url);
+  });
+
+  it('detects an office shortcut in a submitted message with control markers', () => {
+    const text = '【工作空间：甲】（参考 https://example.com） 【权限：默认沙箱】\n打开 成绩.xlsx';
+    expect(latestUserOpenOfficeIntent([{ isCreatedByUser: true, text }])).toEqual({
+      kind: 'calc',
+      filename: '成绩.xlsx',
+    });
   });
 });
