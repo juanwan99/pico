@@ -135,9 +135,17 @@ describe('picoOpenInPane', () => {
     '打开 https://example.com。再打开报告.docx',
     '打开 www.example.com 的表格',
     '先读 http://example.com 的说明，再打开 Word',
+    '打开 example.com 下载数据，再打开 成绩.xlsx',
+    '打开 example.com 下载数据，再打开 www.xlsx',
   ])('skips the office shortcut for a message with a URL: %s', (message) => {
     expect(detectOpenWebsiteIntent(message)).toBeNull();
     expect(detectOpenOfficeIntent(message)).toBeNull();
+  });
+
+  it('opens a spreadsheet whose filename contains www', () => {
+    const message = '打开 备课-www.xlsx';
+    expect(detectOpenWebsiteIntent(message)).toBeNull();
+    expect(detectOpenOfficeIntent(message)).toEqual({ kind: 'calc', filename: '备课-www.xlsx' });
   });
 
   it('R1a/R1d: default 480, drag floor 340, 390 viewport cannot overflow', () => {

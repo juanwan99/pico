@@ -159,29 +159,50 @@ function canonicalizeHttpUrl(candidate: string): string | null {
   }
 }
 
-/** Public URL the teacher asked to open in the right-hand 网页 pane. */
-export function detectOpenWebsiteIntent(text: string): string | null {
-  const raw = (text || '').trim().replace(/[。.!！]$/, '').trimEnd();
-  if (!raw) {
-    return null;
-  }
-  const bare = raw.match(/^(https?:\/\/\S+)$/i);
-  const spoken = raw.match(
-    /^(?:打开|open\b)\s*(?:(?:一下|下)\s*)?(https?:\/\/\S+|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.[a-z0-9]\S*)$/i,
-  );
-  const token = bare?.[1] || spoken?.[1] || '';
-  const urlPrefix = token.match(/^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]+/)?.[0];
-  // Truncate punctuation such as a closing bracket, but reject prose after the URL.
-  if (urlPrefix && /^\p{P}*$/u.test(token.slice(urlPrefix.length))) {
+function mentionedWebsite(text: string, wholeMessage = false): string | null {
+  const tokens = wholeMessage
+    ? [
+        text.match(/^(https?:\/\/\S+)$/i)?.[1],
+        text.match(
+          /^(?:打开|open\b)\s*(?:(?:一下|下)\s*)?(https?:\/\/\S+|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.[a-z0-9]\S*)$/i,
+        )?.[1],
+      ]
+    : [
+        text.match(
+          /(?:打开|open)\s+(?:一下|下)?\s*(https?:\/\/[^\s]+|(?:www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+[^\s]*)/i,
+        )?.[1],
+        ...Array.from(text.matchAll(/(?<![\w.-])((?:https?:\/\/|www\.)\S+)/gi), (match) => match[1]),
+      ];
+
+  for (const token of tokens) {
+    if (!token) {
+      continue;
+    }
+    const urlPrefix = token.match(/^[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]+/)?.[0];
+    if (!urlPrefix || (wholeMessage && !/^\p{P}*$/u.test(token.slice(urlPrefix.length)))) {
+      continue;
+    }
     const candidate = urlPrefix.replace(/[.,;:!?)]+$/, '');
-    // Do not treat "打开 课程总结.md" as a website.
     if (
       !/^https?:\/\//i.test(candidate) &&
       /\.(docx?|pptx?|xlsx?|pdf|md|txt|html?|csv|json|png|jpe?g|gif|webp)$/i.test(candidate)
     ) {
-      return null;
+      continue;
     }
-    return canonicalizeHttpUrl(candidate);
+    const url = canonicalizeHttpUrl(candidate);
+    if (url) {
+      return url;
+    }
+  }
+  return null;
+}
+
+/** Public URL the teacher asked to open in the right-hand 网页 pane. */
+export function detectOpenWebsiteIntent(text: string): string | null {
+  const raw = (text || '').trim().replace(/[。.!！]$/, '').trimEnd();
+  const website = mentionedWebsite(raw, true);
+  if (website) {
+    return website;
   }
   if (/^(?:打开|open\b)\s*(?:(?:一下|下)\s*)?(?:浏览器|chrome|chromium|browser|网站|网页)$/i.test(raw)) {
     return BROWSER_DEFAULT_URL;
@@ -204,7 +225,7 @@ export function detectOpenOfficeIntent(text: string): OfficeOpenIntent | null {
   if (!raw) {
     return null;
   }
-  if (detectOpenWebsiteIntent(raw) || /(?:https?:\/\/|www\.)\S+/i.test(raw)) {
+  if (mentionedWebsite(raw) || detectOpenWebsiteIntent(raw)) {
     return null;
   }
   const named = raw.match(

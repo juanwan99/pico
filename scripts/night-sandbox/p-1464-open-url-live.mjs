@@ -6,6 +6,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { detectOpenWebsiteIntent } from '../../apps/librechat/client/src/utils/picoOpenInPane.ts';
@@ -33,21 +34,29 @@ function isPaneMetadata(request) {
     /\/sandbox\/sessions\/sbox_[^/]+$/.test(new URL(request.url()).pathname);
 }
 
-async function readPicoJson(url, headers) {
-  const response = await fetch(url, { headers });
+async function readPicoJson(url, headers, signal) {
+  const response = await fetch(url, { headers, signal });
   if (!response.ok) throw new Error(`Pico ledger HTTP ${response.status}`);
   return response.json();
 }
 
-export async function countAiBrowserOpens(base, conversationId, headers) {
+export async function waitForAiBrowserOpens(base, conversationId, headers, signal) {
   const params = new URLSearchParams({ conversation_id: conversationId });
-  const { tasks } = await readPicoJson(`${base}/api/pico/v1/tasks?${params}`, headers);
-  const runId = tasks[0]?.latest_run?.id;
-  if (!runId) throw new Error('Template round has no ledger run');
-  const { events } = await readPicoJson(`${base}/api/pico/v1/runs/${runId}/events`, headers);
-  return events.filter(({ type, payload }) =>
-    type === 'tool.call' && payload.tool === 'sandbox_browser_open',
-  ).length;
+  for (;;) {
+    const { tasks } = await readPicoJson(`${base}/api/pico/v1/tasks?${params}`, headers, signal);
+    const run = tasks[0]?.latest_run;
+    if (['succeeded', 'failed', 'cancelled'].includes(run?.status)) {
+      const { events } = await readPicoJson(
+        `${base}/api/pico/v1/runs/${run.id}/events`, headers, signal,
+      );
+      const opens = events.filter(({ payload }) => payload.tool === 'sandbox_browser_open');
+      const calls = opens.filter(({ type }) => type === 'tool.call');
+      const returned = new Set(opens.filter(({ type }) => type === 'tool.result')
+        .map(({ payload }) => payload.call_id));
+      if (calls.every(({ payload }) => returned.has(payload.call_id))) return calls.length;
+    }
+    await delay(250, undefined, { signal });
+  }
 }
 
 export async function closeDesks(currentUrl, headers) {
@@ -117,18 +126,25 @@ function watchRound(stopSelector) {
   sample();
 }
 
-async function runRound(page, base, out, round, prompt, result, targetHost, headers) {
+export async function runRound(page, base, out, round, prompt, result, targetHost, headers) {
+  result.assertions.sandbox_open_requests_settled = 'PASS';
   await goNewChat(page, base);
   await page.evaluate(watchRound, STOP);
   let open4xx = 0;
   let browserOpens = 0;
-  let onOpensDrained;
-  const pendingOpens = new Set();
+  let chatRequest;
+  let onRequestsDrained;
+  const pendingRequests = new Set();
   const metadataRequests = [];
   const onRequest = (request) => {
-    if (isSandboxOpen(request.method(), request.url())) {
+    const method = request.method();
+    const url = request.url();
+    if (isSandboxOpen(method, url)) {
       browserOpens++;
-      pendingOpens.add(request);
+      pendingRequests.add(request);
+    } else if (method === 'POST' && /^\/api\/agents\/chat(?:\/|$)/.test(new URL(url).pathname)) {
+      chatRequest = request;
+      pendingRequests.add(request);
     }
   };
   const onResponse = (response) => {
@@ -137,14 +153,29 @@ async function runRound(page, base, out, round, prompt, result, targetHost, head
     }
   };
   const onRequestDone = (request) => {
-    if (pendingOpens.delete(request) && !pendingOpens.size) onOpensDrained?.();
+    if (pendingRequests.delete(request) && !pendingRequests.size) onRequestsDrained?.();
   };
   const onRequestFinished = (request) => {
-    if (round === 'template' && (isPaneMetadata(request) || pendingOpens.has(request))) {
+    if (round === 'template' &&
+      (isPaneMetadata(request) || isSandboxOpen(request.method(), request.url()))) {
       metadataRequests.push(request);
     }
     onRequestDone(request);
   };
+  async function waitForRequests(deadline) {
+    while (pendingRequests.size) {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error('Sandbox round requests did not return')),
+          Math.max(1, deadline - performance.now()),
+        );
+        onRequestsDrained = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+      });
+    }
+  }
   page.on('request', onRequest);
   page.on('response', onResponse);
   page.on('requestfinished', onRequestFinished);
@@ -152,13 +183,15 @@ async function runRound(page, base, out, round, prompt, result, targetHost, head
 
   let finished = false;
   let finalPane;
-  let openRequestsSettled = true;
   let observed;
+  let drainDeadline;
+  let aiOpensSettled = false;
   const deadline = performance.now() + ROUND_TIMEOUT;
   const remaining = () => Math.max(1, deadline - performance.now());
+  result.assertions.sandbox_open_requests_settled = 'FAIL';
   try {
-    await sendPrompt(page, prompt);
     try {
+      await sendPrompt(page, prompt);
       await page.waitForFunction(
         (stop) => window.picoOpenUrlWatch.watch.stopSeen && !document.querySelector(stop),
         STOP,
@@ -172,7 +205,7 @@ async function runRound(page, base, out, round, prompt, result, targetHost, head
         // Take a fresh metadata sample from the visible pane after the turn.
         const samplingStarted = Date.now();
         const request = await page.waitForEvent('requestfinished', {
-          predicate: (request) => !pendingOpens.size && isPaneMetadata(request) &&
+          predicate: (request) => !pendingRequests.size && isPaneMetadata(request) &&
             request.timing().startTime >= samplingStarted,
           timeout: remaining(),
         });
@@ -190,17 +223,20 @@ async function runRound(page, base, out, round, prompt, result, targetHost, head
     } catch (error) {
       if (error.name !== 'TimeoutError') throw error;
       result.error = error.name;
+    } finally {
+      // Let the run return its tool results before any cancellation can hide them.
+      drainDeadline = performance.now() + ROUND_TIMEOUT;
+      await waitForRequests(drainDeadline);
+      const chatResponse = await chatRequest?.response();
+      if (chatResponse?.ok()) {
+        const { conversationId } = await chatResponse.json();
+        const signal = AbortSignal.timeout(Math.max(1, Math.ceil(drainDeadline - performance.now())));
+        result.ai_browser_opens = await waitForAiBrowserOpens(base, conversationId, headers, signal);
+      }
+      await waitForRequests(drainDeadline);
+      aiOpensSettled = true;
     }
 
-    if (pendingOpens.size) {
-      openRequestsSettled = await new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve(false), remaining());
-        onOpensDrained = () => {
-          clearTimeout(timeout);
-          resolve(true);
-        };
-      });
-    }
     observed = await page.evaluate(() => {
       const { watch, sample, observer } = window.picoOpenUrlWatch;
       sample();
@@ -225,10 +261,17 @@ async function runRound(page, base, out, round, prompt, result, targetHost, head
       };
     });
   } finally {
-    page.off('request', onRequest);
-    page.off('response', onResponse);
-    page.off('requestfinished', onRequestFinished);
-    page.off('requestfailed', onRequestDone);
+    try {
+      if (aiOpensSettled) {
+        await waitForRequests(drainDeadline);
+        result.assertions.sandbox_open_requests_settled = 'PASS';
+      }
+    } finally {
+      page.off('request', onRequest);
+      page.off('response', onResponse);
+      page.off('requestfinished', onRequestFinished);
+      page.off('requestfailed', onRequestDone);
+    }
   }
   const metadata = await Promise.all(metadataRequests.map(async (request) => {
     const response = await request.response();
@@ -237,17 +280,13 @@ async function runRound(page, base, out, round, prompt, result, targetHost, head
   observed.chromeErrorSeen ||= metadata.some((meta) => /^chrome-error:/i.test(meta?.url ?? ''));
   result.sandbox_open_4xx = open4xx;
   result.browser_open_posts = browserOpens;
-  if (round === 'template' && finished) {
-    const conversationId = new URL(page.url()).pathname.split('/').at(-1);
-    result.ai_browser_opens = await countAiBrowserOpens(base, conversationId, headers);
-  }
   result.assertions = roundAssertions(round, {
     ...observed,
     finished,
     open4xx,
     browserOpens,
     aiBrowserOpens: result.ai_browser_opens,
-    openRequestsSettled: openRequestsSettled && pendingOpens.size === 0,
+    openRequestsSettled: result.assertions.sandbox_open_requests_settled === 'PASS',
     targetHost,
     finalPane,
   });
@@ -290,6 +329,7 @@ async function main() {
       args: ['--no-sandbox', '--disable-dev-shm-usage'],
     });
     let headers;
+    let opensSettled = true;
     try {
       const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
       stage = 'login';
@@ -324,12 +364,8 @@ async function main() {
           // Playwright errors can include the prompt passed to fill().
           result.error = error.name;
         }
-        if (result.error) {
-          // Stop a failed round's durable run before leaving its conversation.
-          const stop = page.getByTestId('task-stop-button');
-          await stop.evaluateAll(([button]) => button?.click());
-          await stop.first().waitFor({ state: 'detached', timeout: 30000 });
-        }
+        opensSettled = result.assertions.sandbox_open_requests_settled === 'PASS';
+        if (!opensSettled) break;
       }
       stage = 'close_browser';
     } finally {
@@ -337,10 +373,14 @@ async function main() {
         await browser.close();
       } finally {
         if (headers) {
-          try {
-            report.sessions_current_status = await closeDesks(currentUrl, headers);
-          } catch (error) {
-            report.cleanup_error = error.message;
+          if (opensSettled) {
+            try {
+              report.sessions_current_status = await closeDesks(currentUrl, headers);
+            } catch (error) {
+              report.cleanup_error = error.message;
+            }
+          } else {
+            report.cleanup_error = 'Sandbox session creation requests were not confirmed settled';
           }
         }
       }

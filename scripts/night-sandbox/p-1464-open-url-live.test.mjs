@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import {
   closeDesks,
-  countAiBrowserOpens,
   isSandboxOpen4xx,
   loginFailureDetails,
   roundAssertions,
+  runRound,
   templateTargetHost,
+  waitForAiBrowserOpens,
 } from './p-1464-open-url-live.mjs';
 
 const sessions = 'https://pico.test/api/pico/v1/sandbox/sessions';
@@ -21,12 +23,12 @@ test('reads the target host from the open instruction in a long template', () =>
 test('counts AI opens from the conversation ledger without counting tool results', async (t) => {
   const responses = new Map([
     ['https://pico.test/api/pico/v1/tasks?conversation_id=chat_1', {
-      tasks: [{ latest_run: { id: 'run_1' } }],
+      tasks: [{ latest_run: { id: 'run_1', status: 'succeeded' } }],
     }],
     ['https://pico.test/api/pico/v1/runs/run_1/events', {
       events: [
-        { type: 'tool.call', payload: { tool: 'sandbox_browser_open' } },
-        { type: 'tool.result', payload: { tool: 'sandbox_browser_open', ok: true } },
+        { type: 'tool.call', payload: { tool: 'sandbox_browser_open', call_id: 'open_1' } },
+        { type: 'tool.result', payload: { tool: 'sandbox_browser_open', call_id: 'open_1', ok: true } },
         { type: 'tool.call', payload: { tool: 'sandbox_browser_act' } },
       ],
     }],
@@ -36,7 +38,86 @@ test('counts AI opens from the conversation ledger without counting tool results
     assert.ok(responses.has(url));
     return Response.json(responses.get(url));
   });
-  assert.equal(await countAiBrowserOpens('https://pico.test', 'chat_1', headers), 1);
+  assert.equal(await waitForAiBrowserOpens('https://pico.test', 'chat_1', headers), 1);
+});
+
+test('a failed round drains the AI and browser opens before the desk is closed', {
+  timeout: 3000,
+}, async (t) => {
+  const base = 'https://pico.test';
+  const page = new EventEmitter();
+  const failure = new Error('Pane observation failed');
+  const round = { assertions: roundAssertions('template') };
+  const browserRequest = { method: () => 'POST', url: () => sessions };
+  t.signal.addEventListener('abort', () => page.emit('requestfinished', browserRequest), { once: true });
+  const chatRequest = {
+    method: () => 'POST',
+    url: () => base + '/api/agents/chat/Pico',
+    response: async () => ({
+      ok: () => true,
+      json: async () => ({ conversationId: 'chat_1' }),
+    }),
+  };
+  const input = {
+    count: async () => 1,
+    first: () => input,
+    waitFor: async () => {},
+    click: async () => {},
+    fill: async () => {},
+  };
+  const send = {
+    count: async () => 1,
+    first: () => send,
+    click: async () => {
+      page.emit('request', chatRequest);
+      page.emit('requestfinished', chatRequest);
+    },
+  };
+  Object.assign(page, {
+    goto: async () => {},
+    waitForTimeout: async () => {},
+    evaluate: async () => {},
+    locator: () => input,
+    getByRole: (_role, { name }) => name.test('发送') ? send : { count: async () => 0 },
+    waitForFunction: async () => { throw failure; },
+  });
+  let eventReads = 0;
+  const methods = [];
+  const call = { type: 'tool.call', payload: { tool: 'sandbox_browser_open', call_id: 'open_1' } };
+  const result = { type: 'tool.result', payload: { ...call.payload, ok: false } };
+  const earlierResult = { type: 'tool.result', payload: { ...call.payload, call_id: 'old_open' } };
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    if (url.endsWith('/tasks?conversation_id=chat_1')) {
+      return Response.json({ tasks: [{ latest_run: { id: 'run_1', status: 'failed' } }] });
+    }
+    if (url.endsWith('/runs/run_1/events')) {
+      eventReads++;
+      assert.ok(eventReads <= 2);
+      if (eventReads === 1) {
+        page.emit('request', browserRequest);
+        return Response.json({ events: [earlierResult, call] });
+      }
+      setImmediate(() => {
+        methods.push('browser response');
+        page.emit('requestfinished', browserRequest);
+      });
+      return Response.json({ events: [earlierResult, call, result] });
+    }
+    assert.equal(url, currentUrl);
+    assert.equal(eventReads, 2);
+    methods.push(init.method ?? 'GET');
+    return methods.length < 4
+      ? Response.json({ ok: true })
+      : Response.json({ detail: { code: 'sandbox.session_not_found' } }, { status: 404 });
+  });
+  await assert.rejects(
+    runRound(page, base, '', 'template', '打开 https://example.com', round, 'example.com', headers),
+    failure,
+  );
+  assert.equal(round.ai_browser_opens, 1);
+  assert.equal(round.assertions.sandbox_open_requests_settled, 'PASS');
+  assert.equal(await closeDesks(currentUrl, headers), 404);
+  assert.deepEqual(methods, ['browser response', 'GET', 'DELETE', 'GET']);
 });
 
 test('cleans up every current desk and confirms the final GET returns 404', async (t) => {
