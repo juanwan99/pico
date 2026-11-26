@@ -8,6 +8,8 @@ import json
 import logging
 import os
 import re
+from collections.abc import Iterator
+from time import monotonic
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
@@ -880,26 +882,25 @@ class MeiliIndex:
         return str(body.get("primaryKey") or "")
 
     def ensure(self, *, force: bool = False) -> None:
+        for method, path, payload, timeout, wait_s in self._ensure_steps(force=force):
+            self._accepted(method, path, payload, timeout=timeout, wait_s=wait_s)
+
+    def _ensure_steps(
+        self, *, force: bool = False,
+    ) -> Iterator[tuple[str, str, dict[str, Any] | None, float, float]]:
+        """Read current settings and yield writes in dependency order."""
         spec = new_api_embedder_spec()
         cache_key = f"{meili_url()}|{INDEX}|chunk-v2|{spec.get('url') if spec else 'off'}|{spec.get('headers') if spec else ''}"
         if not force and _ENSURE_CACHE.get(cache_key):
             return
         pk = self._primary_key()
         if pk is None:
-            self._accepted(
-                "POST",
-                "/indexes",
-                {"uid": INDEX, "primaryKey": PRIMARY_KEY},
-            )
+            yield "POST", "/indexes", {"uid": INDEX, "primaryKey": PRIMARY_KEY}, 8.0, 45.0
             _ENSURE_CACHE.pop(cache_key, None)
         elif pk != PRIMARY_KEY:
             logger.warning("meili index pk %s → %s, recreating", pk, PRIMARY_KEY)
-            self._accepted("DELETE", f"/indexes/{INDEX}")
-            self._accepted(
-                "POST",
-                "/indexes",
-                {"uid": INDEX, "primaryKey": PRIMARY_KEY},
-            )
+            yield "DELETE", f"/indexes/{INDEX}", None, 8.0, 45.0
+            yield "POST", "/indexes", {"uid": INDEX, "primaryKey": PRIMARY_KEY}, 8.0, 45.0
             _ENSURE_CACHE.pop(cache_key, None)
         want_embedders = {"default": spec} if spec else None
         # Skip PATCH when index already matches (stops reindex flooding settingsUpdate).
@@ -913,12 +914,12 @@ class MeiliIndex:
             and self._embedder_url_match(want_embedders)
             and not self._searchable_match()
         ):
-            self._accepted(
+            yield (
                 "PATCH",
                 f"/indexes/{INDEX}/settings",
                 {"searchableAttributes": SEARCHABLE, "displayedAttributes": DISPLAYED},
-                timeout=20.0,
-                wait_s=45.0,
+                20.0,
+                45.0,
             )
             _ENSURE_CACHE[cache_key] = True
             return
@@ -928,7 +929,7 @@ class MeiliIndex:
             "displayedAttributes": DISPLAYED,
             "embedders": {"default": spec} if spec else {"default": None},
         }
-        self._accepted("PATCH", f"/indexes/{INDEX}/settings", settings, timeout=20.0, wait_s=90.0)
+        yield "PATCH", f"/indexes/{INDEX}/settings", settings, 20.0, 90.0
         if (spec and self.embedder_is_new_api()) or (not spec and not self.live_embedder_armed()):
             _ENSURE_CACHE[cache_key] = True
         else:
@@ -1049,14 +1050,36 @@ class MeiliIndex:
             await asyncio.sleep(1)
 
     async def upsert_rebuild_batch(self, docs: list[dict[str, Any]]) -> None:
-        task_uid = await asyncio.to_thread(self._submit_rebuild_batch, docs)
-        while await asyncio.to_thread(self._task_status, task_uid) != "succeeded":
-            await asyncio.sleep(1)
+        steps = self._ensure_steps()
+        while (step := await asyncio.to_thread(next, steps, None)) is not None:
+            method, path, payload, timeout, wait_s = step
+            body = await self._submit_rebuild_write(method, path, payload, timeout)
+            if isinstance(body, dict) and body.get("taskUid") is not None:
+                await self._wait_rebuild_task(int(body["taskUid"]), wait_s=wait_s)
+        body = await self._submit_rebuild_write("POST", f"/indexes/{INDEX}/documents", docs, 30.0)
+        await self._wait_rebuild_task(int(body["taskUid"]))
 
-    def _submit_rebuild_batch(self, docs: list[dict[str, Any]]) -> int:
-        self.ensure()
-        body = self._submit("POST", f"/indexes/{INDEX}/documents", docs, timeout=30.0)
-        return int(body["taskUid"])
+    async def _submit_rebuild_write(self, method: str, path: str, payload: Any, timeout: float) -> Any:
+        submission = asyncio.create_task(
+            asyncio.to_thread(self._submit, method, path, payload, timeout=timeout)
+        )
+        try:
+            return await asyncio.shield(submission)
+        except asyncio.CancelledError:
+            # Finish submitting the write before yielding the rebuild lock. The next owner
+            # waits on pending Meili tasks before reading or writing the index.
+            await submission
+            raise
+
+    async def _wait_rebuild_task(self, task_uid: int, *, wait_s: float = float("inf")) -> None:
+        deadline = monotonic() + wait_s
+        state = "unknown"
+        while monotonic() < deadline:
+            state = await asyncio.to_thread(self._task_status, task_uid)
+            if state == "succeeded":
+                return
+            await asyncio.sleep(1)
+        raise RuntimeError(f"meili task {task_uid} timeout ({state})")
 
     def upsert(self, doc: dict[str, Any]) -> None:
         if not doc.get("chunk_id") and not doc.get("artifact_id"):

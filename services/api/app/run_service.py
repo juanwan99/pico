@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import ColumnElement
 
 from app.artifact_store import LedgerArtifactStore
 from app.auth import Principal, payer_for
@@ -26,6 +28,7 @@ from app.db import (
 )
 from app.settings import get_settings
 
+logger = logging.getLogger(__name__)
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
@@ -80,9 +83,13 @@ async def drain_inflight_runs(*, timeout_s: float = 45.0) -> dict[str, int]:
     if not pending:
         return {"waited": 0, "remaining": 0, "timed_out": 0}
     done, still = await asyncio.wait(pending, timeout=max(0.0, timeout_s))
-    # Best-effort: cancel leftovers so lifespan can finish; reconcile will mark ledger.
+    # Let cancellation finish writing checkpoints before another process takes over.
     for t in still:
         t.cancel()
+    if still:
+        for result in await asyncio.gather(*still, return_exceptions=True):
+            if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError):
+                logger.error("in-flight run failed during shutdown cancellation", exc_info=result)
     return {
         "waited": len(done),
         "remaining": len(still),
@@ -394,7 +401,9 @@ async def cancel_active_runs_for_conversation(
     return out
 
 
-async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
+async def reconcile_orphaned_runs(
+    session: AsyncSession, *conditions: ColumnElement[bool]
+) -> dict[str, int]:
     """Finalize non-terminal runs whose in-process owner was lost on restart.
 
     Thin adapter: in-process asyncio owners die with the API process. We cannot
@@ -408,7 +417,7 @@ async def reconcile_orphaned_runs(session: AsyncSession) -> dict[str, int]:
     active = (
         await session.execute(
             select(RunRow).where(
-                RunRow.status.in_(("queued", "preparing", "running"))
+                RunRow.status.in_(("queued", "preparing", "running")), *conditions
             )
         )
     ).scalars().all()

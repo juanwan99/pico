@@ -19,14 +19,18 @@ if [ "$CURRENT_SHA" != "$DEPLOY_SHA" ]; then
   exit 2
 fi
 
-# Preserve secrets: only stamp the public code identity into the ignored .env file.
-if [ -f .env ]; then
-  if grep -q '^PICO_GIT_SHA=' .env; then
-    sed -i "s|^PICO_GIT_SHA=.*|PICO_GIT_SHA=${CURRENT_SHA}|" .env
-  else
-    echo "PICO_GIT_SHA=${CURRENT_SHA}" >>.env
+# Preserve secrets: change only the deployment setting passed to this function.
+stamp_env() {
+  local key="$1" value="$2"
+  if [ -f .env ]; then
+    if grep -q "^$key=" .env; then
+      sed -i "s|^$key=.*|$key=$value|" .env
+    else
+      echo "$key=$value" >>.env
+    fi
   fi
-fi
+}
+stamp_env PICO_GIT_SHA "$CURRENT_SHA"
 # Runtime identity for compose environment /health. Not a Docker build-arg.
 export PICO_GIT_SHA="$CURRENT_SHA"
 
@@ -266,11 +270,262 @@ if [ "$inflight" -gt 0 ]; then
   fi
 fi
 
-# Recreate only when the image or compose config actually changed.
-# --force-recreate took the public site down 1–3 min on every SHA, including
-# no-op rebuilds. A pico-api recreate hands workspace runs to restart resume
-# (#1133); the inflight wait above stays. Do not invent a drain OS / second proxy.
-docker compose -f "$COMPOSE_FILE" up -d pico-api librechat pico-sandbox pico-office meilisearch pico-edu-gw-host edu-pico-gw
+health_identity() {
+  local port="$1"
+  shift
+  "$@" curl -fsS --max-time 2 "http://127.0.0.1:$port/health" >"$HEALTH_FILE" || return
+  python3 -c '
+import json, sys
+body = json.load(sys.stdin)
+if body.get("ok") is not True or not body.get("git_sha"):
+    sys.exit(5)
+print("{}:{}".format(body["git_sha"], body.get("backend_port", "")))
+' <"$HEALTH_FILE"
+}
+
+health_at() {
+  local port="$1" expected="$2" identity status=4
+  shift 2
+  for _ in $(seq 1 40); do
+    if identity="$(health_identity "$port" "$@")"; then
+      if [ "$identity" = "$expected" ]; then
+        cat "$HEALTH_FILE"
+        echo
+        echo "[pico] health.git_sha exact match: ${identity%%:*} (port $port, backend ${identity#*:})"
+        return 0
+      fi
+      status=5
+      # HUP is asynchronous. Only the shared listener can still serve the old SHA.
+      if [ "$#" -ne 0 ]; then break; fi
+    fi
+    sleep 1
+  done
+  if [ "$status" -eq 5 ]; then
+    echo "[pico] FATAL: port $port health identity mismatch got=$identity want=$expected" >&2
+  else
+    echo "[pico] FATAL: port $port /health did not become ready" >&2
+  fi
+  return "$status"
+}
+
+write_listener_config() {
+  local file
+  file="$(mktemp "$LISTENER_DIR/nginx.XXXXXX")" || return
+  cat >"$file" <<EOF || return
+error_log /dev/stderr notice;
+worker_shutdown_timeout 60s;
+events {}
+stream {
+    server {
+        listen 127.0.0.1:18765;
+        proxy_pass 127.0.0.1:$1;
+        proxy_half_close on;
+        proxy_timeout 6h;
+    }
+}
+EOF
+  mv "$file" "$LISTENER_DIR/$2"
+}
+
+reload_api_listener() {
+  mv "$LISTENER_DIR/nginx.next.conf" "$LISTENER_DIR/nginx.conf" || return
+  docker kill --signal HUP "$1"
+}
+
+switch_api_listener() {
+  local listener="$1" port="$2" identity="$3" workers
+  if [ -z "$listener" ]; then
+    write_listener_config "$port" nginx.conf || return
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps pico-api-listener || return
+  else
+    workers="$(docker exec "$listener" cat /proc/1/task/1/children)" || return
+    reload_api_listener "$listener" || return
+  fi
+  health_at 18765 "$identity" || return
+  if [ -n "$listener" ]; then
+    # The old workers still own already accepted TCP connections after HUP.
+    # Wait for those sessions to drain before stopping their upstream.
+    timeout 65 docker exec "$listener" sh -c '
+      for pid do
+        while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
+      done
+    ' sh $workers
+  fi
+}
+
+record_backend_port() {
+  if [ -f .env ] && ! grep -qx "PICO_API_BACKEND_PORT=$1" .env; then
+    PICO_OPS_ENV="$ROOT/.env" python3 "$ROOT/scripts/pico_ops_watch.py" env-set \
+      "PICO_API_BACKEND_PORT=$1" --card 'pico#1474' --why "API handoff for $CURRENT_SHA"
+  fi
+}
+
+api_port() {
+  docker inspect --format '{{index .Config.Labels "pico.api.port"}}' "$1"
+}
+
+recover_api_handoff() {
+  local listener="$1" id port identity active_identity active_port inactive="" inactive_name
+  shift
+  old_api=""
+  if [ -n "$listener" ]; then
+    active_identity="$(health_identity 18765)"
+  fi
+  for id do
+    port="$(api_port "$id")"
+    if { [ -z "$listener" ] && [ -z "$port" ]; } ||
+       { [ -n "$listener" ] && [ -n "$port" ] &&
+         identity="$(health_identity "$port" docker exec "$id")" &&
+         [ "$identity" = "$active_identity" ]; }; then
+      if [ -n "$old_api" ]; then
+        echo "[pico] FATAL: ambiguous live API in interrupted handoff" >&2
+        return 4
+      fi
+      old_api="$id"
+      active_port="$port"
+    else
+      inactive="$id"
+    fi
+  done
+  if [ -z "$old_api" ] || [ -z "$inactive" ]; then
+    echo "[pico] FATAL: cannot identify the live API in interrupted handoff" >&2
+    return 4
+  fi
+  inactive_name="$(docker inspect --format '{{.Name}}' "$inactive")"
+  if [ -n "$listener" ]; then
+    # Confirm the live target again and drain any workers from the interrupted reload.
+    write_listener_config "$active_port" nginx.next.conf
+    switch_api_listener "$listener" "$active_port" "$active_identity"
+    docker stop "$inactive"
+  else
+    docker stop "$inactive"
+    docker start "$old_api"
+  fi
+  docker rm "$inactive"
+  if [[ "$inactive_name" == *-1 ]]; then
+    docker rename "$old_api" "${inactive_name#/}"
+  fi
+  if [ -n "$active_port" ]; then
+    record_backend_port "$active_port"
+  fi
+}
+
+deploy_pico_api() {
+  local old_api old_port="" old_name listener new_port=18769 replicas=1 legacy=0
+  local api_ids id candidate_status=0 image config current old_identity
+  local -a containers
+  mkdir -p "$LISTENER_DIR"
+  listener="$(docker compose -f "$COMPOSE_FILE" ps --quiet pico-api-listener)"
+  api_ids="$(docker compose -f "$COMPOSE_FILE" ps --all --quiet pico-api)"
+  read -r -a containers <<< "${api_ids//$'\n'/ }"
+  case "${#containers[@]}" in
+    0) old_api="" ;;
+    1) old_api="${containers[0]}" ;;
+    2) recover_api_handoff "$listener" "${containers[@]}" ;;
+    *) echo "[pico] FATAL: more than two pico-api containers before handoff" >&2; exit 4 ;;
+  esac
+  if [ -n "$old_api" ]; then
+    old_port="$(api_port "$old_api")"
+    old_name="$(docker inspect --format '{{.Name}}' "$old_api")"
+    replicas=2
+    case "$old_port" in
+      18769) new_port=18770 ;;
+      "") legacy=1 ;;
+    esac
+  else
+    docker compose -f "$COMPOSE_FILE" up -d mongo meilisearch pico-office
+  fi
+  if [ -n "$listener" ] && [ -n "$old_port" ]; then
+    # A no-op build/config keeps the running process, as under Compose's normal up.
+    image="$(docker compose -f "$COMPOSE_FILE" config --format json pico-api | python3 -c '
+import json, sys
+print(json.load(sys.stdin)["services"]["pico-api"]["image"])
+')"
+    image="$(docker image inspect --format '{{.Id}}' "$image")"
+    config="$(PICO_API_BACKEND_PORT="$old_port" docker compose -f "$COMPOSE_FILE" config --hash pico-api)"
+    current="$(docker inspect --format '{{.State.Running}} {{.Image}} {{index .Config.Labels "com.docker.compose.config-hash"}}' "$old_api")"
+    if [ "$current" = "true $image ${config#* }" ]; then
+      new_api="$old_api"
+      health_at 18765 "$CURRENT_SHA:$old_port"
+      # An interrupted deploy can leave just the promoted container to rename.
+      if [[ "$old_name" =~ -pico-api-[0-9]+$ && "$old_name" != *-1 ]]; then
+        old_name="${old_name#/}"
+        docker rename "$old_api" "${old_name%-*}-1"
+      fi
+      record_backend_port "$old_port"
+      return
+    fi
+  fi
+
+  if [ -n "$listener" ]; then
+    write_listener_config "$new_port" nginx.next.conf
+    docker exec "$listener" nginx -t -c /etc/pico-api/nginx.next.conf
+  fi
+  PICO_API_BACKEND_PORT="$new_port" docker compose -f "$COMPOSE_FILE" up --no-start --no-deps \
+    --no-recreate --scale "pico-api=$replicas" pico-api
+  api_ids="$(docker compose -f "$COMPOSE_FILE" ps --all --quiet pico-api)"
+  new_api=""
+  for id in $api_ids; do
+    if [ "$id" != "$old_api" ]; then new_api="$id"; fi
+  done
+  if [ -z "$new_api" ]; then
+    echo "[pico] FATAL: Compose did not create a pico-api candidate" >&2
+    exit 4
+  fi
+  # The old release binds 18765 directly and has no background lock.
+  if [ "$legacy" = "1" ]; then
+    echo "[pico] first listener migration: stopping the legacy 18765 bind"
+    docker stop "$old_api"
+  fi
+  docker start "$new_api" &&
+    health_at "$new_port" "$CURRENT_SHA:$new_port" docker exec "$new_api" || candidate_status=$?
+  if [ "$candidate_status" -ne 0 ]; then
+    docker logs --tail 30 "$new_api" || true
+    if [ "$legacy" = "1" ]; then
+      docker stop "$new_api"
+      docker start "$old_api"
+      if ! docker rm "$new_api"; then
+        echo "[pico] FATAL: could not remove stopped candidate $new_api" >&2
+      fi
+    else
+      docker rm -f "$new_api"
+    fi
+    exit "$candidate_status"
+  fi
+
+  candidate_status=0
+  switch_api_listener "$listener" "$new_port" "$CURRENT_SHA:$new_port" || candidate_status=$?
+  if [ "$candidate_status" -ne 0 ]; then
+    echo "[pico] FATAL: 18765 did not switch to the candidate" >&2
+    if [ -n "$listener" ]; then
+      write_listener_config "$old_port" nginx.next.conf
+      reload_api_listener "$listener"
+      old_identity="$(health_identity "$old_port" docker exec "$old_api")"
+      health_at 18765 "$old_identity"
+    else
+      docker compose -f "$COMPOSE_FILE" stop pico-api-listener
+    fi
+    docker stop "$new_api"
+    if [ "$legacy" = "1" ]; then docker start "$old_api"; fi
+    docker rm "$new_api"
+    exit "$candidate_status"
+  fi
+  record_backend_port "$new_port"
+  if [ -n "$old_api" ]; then
+    if [ "$legacy" = "0" ]; then docker stop "$old_api"; fi
+    docker rm "$old_api"
+    # Existing operations scripts address the original Compose container name.
+    docker rename "$new_api" "${old_name#/}"
+  fi
+}
+
+HEALTH_FILE="$(mktemp)"
+trap 'rm -f "$HEALTH_FILE"' EXIT
+LISTENER_DIR="$ROOT/data/pico-api-listener"
+deploy_pico_api
+
+# Dependencies that name pico-api must not trigger a second Compose convergence.
+docker compose -f "$COMPOSE_FILE" up -d --no-deps mongo librechat pico-sandbox pico-office meilisearch pico-edu-gw-host edu-pico-gw
 if [ "$RUNNER_ON" = "1" ]; then
   # Recreates only when runner code/config changed; boxes of a restarted
   # runner are reaped and those turns fail in teacher words.
@@ -291,37 +546,12 @@ fi
 echo "[pico] ps:"
 docker compose -f "$COMPOSE_FILE" ps
 
-HEALTH_FILE="$(mktemp)"
-trap 'rm -f "$HEALTH_FILE"' EXIT
-echo "[pico] health:"
-ready=0
-for _ in $(seq 1 40); do
-  if curl -sf --max-time 2 http://127.0.0.1:18765/health >"$HEALTH_FILE"; then
-    cat "$HEALTH_FILE"
-    echo
-    ready=1
-    break
-  fi
-  sleep 1
-done
-if [ "$ready" -ne 1 ]; then
-  echo "[pico] FATAL: health endpoint did not become ready" >&2
-  exit 4
-fi
-
-HEALTH_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("git_sha", ""))' "$HEALTH_FILE")"
-if [ "$HEALTH_SHA" != "$CURRENT_SHA" ]; then
-  echo "[pico] FATAL: health.git_sha mismatch got=$HEALTH_SHA want=$CURRENT_SHA" >&2
-  exit 5
-fi
-echo "[pico] health.git_sha exact match: $HEALTH_SHA"
-
 # pico-office must answer over its unix socket, or the office write path is
 # down (pico-api fails closed; it never runs scripts in-process). Fake-green guard.
 echo "[pico] pico-office:"
 office_ready=0
 for _ in $(seq 1 30); do
-  if docker compose -f "$COMPOSE_FILE" exec -T pico-api python3 -c '
+  if docker exec "$new_api" python3 -c '
 import sys, httpx
 t = httpx.HTTPTransport(uds="/run/pico-office/office.sock")
 r = httpx.Client(transport=t, timeout=3).get("http://pico-office/health")
@@ -520,7 +750,7 @@ if [ ! -f "$SMOKE" ]; then
 fi
 if ! PICO_SMOKE_EXPECT_SHA="$CURRENT_SHA" bash "$SMOKE" --prod; then
   echo "[pico] FATAL: e2e smoke failed — deploy of $CURRENT_SHA is NOT good" >&2
-  echo "[pico] rollback: PICO_DEPLOY_SHA=${PREV_SHA:-<previous-main-sha>} bash /opt/pico/scripts/prod-update.sh" >&2
+  echo "[pico] rollback: PICO_DEPLOY_SHA=${PREV_SHA:-<previous-main-sha>} bash /opt/pico/scripts/prod-update.sh (pre-migration SHA: see docs/OPS-PICO-API-HANDOFF.md)" >&2
   exit 16
 fi
 echo "[pico] e2e smoke ok"
@@ -539,7 +769,7 @@ echo "[pico] edge cache warmup:"
 # Long-run continuity (edu-core#5337 · long-haul E1 resume / E3 stop): the last
 # 7 days of the ledger. Report only — never fails the deploy.
 echo "[pico] run continuity (7d):"
-docker compose -f "$COMPOSE_FILE" exec -T pico-api python - --days 7 <"$ROOT/scripts/run-continuity-report.py" \
+docker exec -i "$new_api" python - --days 7 <"$ROOT/scripts/run-continuity-report.py" \
   || echo "[pico] WARN run continuity report did not run" >&2
 
 echo "[pico] done — open https://pico.aivia.asia/login"

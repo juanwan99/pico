@@ -240,15 +240,10 @@ def scrub_dirty_usage_events_sync(conn) -> dict[str, int]:
     from sqlalchemy import text
 
     stats = {"estimated": 0, "ui_lane": 0, "backend_recovered": 0}
-    try:
-        tables = {
-            str(r[0])
-            for r in conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table'")
-            ).fetchall()
-        }
-    except Exception:  # noqa: BLE001 — missing sqlite catalog
-        return stats
+    tables = {
+        str(r[0])
+        for r in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+    }
     if "usage_events" not in tables:
         return stats
     rows = conn.execute(
@@ -285,17 +280,14 @@ def scrub_dirty_usage_events_sync(conn) -> dict[str, int]:
         extra.setdefault("ui_model", model_n)
         backend = None
         if have_events and run_id:
-            try:
-                ev = conn.execute(
-                    text(
-                        "SELECT payload_json FROM events "
-                        "WHERE run_id=:rid AND type='run.model' "
-                        "ORDER BY seq DESC LIMIT 1"
-                    ),
-                    {"rid": run_id},
-                ).fetchone()
-            except Exception:  # noqa: BLE001
-                ev = None
+            ev = conn.execute(
+                text(
+                    "SELECT payload_json FROM events "
+                    "WHERE run_id=:rid AND type='run.model' "
+                    "ORDER BY seq DESC LIMIT 1"
+                ),
+                {"rid": run_id},
+            ).fetchone()
             if ev:
                 backend = _backend_from_payload(ev[0])
         if backend:

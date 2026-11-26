@@ -19,9 +19,10 @@ from typing import Any
 
 from pico_orchestrator.usage_hook import use_entry_of
 from sqlalchemy import select
+from sqlalchemy.sql import ColumnElement
 
 from app.auth import Principal, payer_for
-from app.db import EventRow, RunRow, append_event, session_factory
+from app.db import RUN_OWNER_ID, EventRow, RunRow, append_event, lock_sqlite_writer, session_factory
 from app.run_service import _json_dict, _track_inflight
 from app.settings import get_settings, millipoints_for_usage
 
@@ -149,14 +150,17 @@ async def keep_for_resume(run_id: str) -> bool:
         return False
 
 
-async def resume_orphaned_runs() -> int:
+async def resume_orphaned_runs(*conditions: ColumnElement[bool]) -> int:
     """Startup: hand every resumable orphan back to the runtime."""
     limit = int(get_settings().pico_run_restart_resume_max)
     if limit <= 0:
         return 0
     picked: list[str] = []
     async with session_factory()() as session:
-        runs = (await session.execute(select(RunRow).where(RunRow.status.in_(_ACTIVE)))).scalars().all()
+        await lock_sqlite_writer(session)
+        runs = (
+            await session.execute(select(RunRow).where(RunRow.status.in_(_ACTIVE), *conditions))
+        ).scalars().all()
         for run in runs:
             if not await resumable(session, run):
                 continue
@@ -168,6 +172,7 @@ async def resume_orphaned_runs() -> int:
                 {"reason": REASON, "attempt": attempt, "max": limit, "user_message": TEACHER_NOTE},
                 commit=False,
             )
+            run.owner_id = RUN_OWNER_ID
             picked.append(run.id)
         await session.commit()
     for run_id in picked:

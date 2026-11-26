@@ -106,7 +106,9 @@ def forget_turn_files(run_id: str) -> None:
 
 
 def pass_base_url(run_id: str, *, port: str | None = None) -> str:
-    listen = (port or os.environ.get("PICO_API_PORT") or "18765").strip() or "18765"
+    listen = (
+        port or os.environ.get("PICO_API_BACKEND_PORT") or os.environ.get("PICO_API_PORT") or "18765"
+    ).strip() or "18765"
     rid = str(run_id or "").strip()
     return f"http://127.0.0.1:{listen}/internal/llm-pass/{rid}/v1"
 

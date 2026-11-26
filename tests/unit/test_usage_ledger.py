@@ -323,6 +323,50 @@ async def test_scrub_estimated_and_recover_backend_from_events(usage_db) -> None
     assert again == {"estimated": 0, "ui_lane": 0, "backend_recovered": 0}
 
 
+async def test_startup_scrubs_legacy_usage_only_once(usage_db) -> None:
+    from app import db
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    assert db._engine is not None
+    async with db._engine.begin() as conn:
+        await conn.exec_driver_sql("PRAGMA user_version=0")
+    async with db.session_factory()() as session:
+        for member in ("first", "second"):
+            session.add(
+                UsageEventRow(
+                    id=member, school_id="school", membership_id=member, kind="llm",
+                    model="pico-fast", total_tokens=20, estimated=1, idempotency_key=member,
+                )
+            )
+        await session.commit()
+
+    statements: list[str] = []
+
+    def capture(_conn, _cursor, statement, _params, _context, _executemany):
+        statements.append(statement.upper())
+
+    event.listen(Engine, "before_cursor_execute", capture)
+    try:
+        for _ in range(2):
+            assert db._engine is not None
+            await db._engine.dispose()
+            db._engine = db._Session = None
+            await db.init_db()
+    finally:
+        event.remove(Engine, "before_cursor_execute", capture)
+
+    async with db.session_factory()() as session:
+        for member in ("first", "second"):
+            row = await session.get(UsageEventRow, member)
+            assert row is not None
+            assert (row.total_tokens, row.model, row.estimated, row.tokens_unknown) == (
+                None, None, 0, 1,
+            )
+    assert sum("FROM USAGE_EVENTS" in stmt for stmt in statements) == 1
+    assert not any("BEGIN IMMEDIATE" in stmt for stmt in statements)
+
+
 @pytest.mark.asyncio
 async def test_owner_usage_today_has_no_membership_ids(usage_db) -> None:
     from app.db import session_factory

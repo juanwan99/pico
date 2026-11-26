@@ -42,10 +42,12 @@ services:
       # SHA is runtime env only (.env / environment). Never a build-arg:
       # a changing ARG busts every pip layer and re-downloads torch.
     restart: unless-stopped
-    # B1: allow uvicorn lifespan drain (~45s) before SIGKILL on deploy recreate.
+    # B1: allow uvicorn lifespan drain (~45s) before SIGKILL.
     stop_grace_period: 60s
     network_mode: host
-    # CRITICAL: host network + public IP risk — always bind loopback only
+    # prod-update alternates the backend port. The listener owns 127.0.0.1:18765.
+    labels:
+      pico.api.port: "${PICO_API_BACKEND_PORT:-18769}"
     command:
       [
         "uvicorn",
@@ -55,11 +57,12 @@ services:
         "--host",
         "127.0.0.1",
         "--port",
-        "18765",
+        "${PICO_API_BACKEND_PORT:-18769}",
       ]
     env_file:
       - .env
     environment:
+      PICO_API_BACKEND_PORT: "${PICO_API_BACKEND_PORT:-18769}"
       PICO_DATABASE_URL: sqlite+aiosqlite:///./data/pico.db
       PICO_API_HOST: "127.0.0.1"
       PICO_API_PORT: "18765"
@@ -151,6 +154,15 @@ services:
       - meilisearch
       - pico-office
     mem_limit: 3g
+
+  pico-api-listener:
+    image: nginx@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
+    restart: unless-stopped
+    network_mode: host
+    command: ["nginx", "-c", "/etc/pico-api/nginx.conf", "-g", "daemon off;"]
+    volumes:
+      - ./data/pico-api-listener:/etc/pico-api:ro
+    mem_limit: 128m
 
   meilisearch:
     image: getmeili/meilisearch:v1.13.3
@@ -377,9 +389,9 @@ services:
     mem_limit: 2g
 
   # edu → Pico bridge (#995 stage 0). edu-core containers call
-  # http://edu-pico-gw:18765 (their PICO_BASE_URL). pico-api is host-network
-  # loopback-only and container→host-gateway TCP is firewalled, so the hop is:
-  # edu network TCP → host-bind unix socket → host loopback. Two socat
+  # http://edu-pico-gw:18765 (their PICO_BASE_URL). The Pico listener binds
+  # host loopback and container→host-gateway TCP is firewalled, so the hop is:
+  # edu network TCP → host-bind unix socket → host loopback listener. Two socat
   # pass-throughs, nothing else — not a second API surface. Replaces the
   # 2026-08-16 hand-run python:3.12-slim container whose script lived in /tmp,
   # got tmpfiles-cleaned, and died on the first dockerd restart (2026-09-15).

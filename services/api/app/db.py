@@ -44,6 +44,9 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
+RUN_OWNER_ID = new_id()
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -92,6 +95,7 @@ class RunRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_usage_json: Mapped[str] = mapped_column(Text, default="{}")
     cancel_requested: Mapped[int] = mapped_column(Integer, default=0)
+    owner_id: Mapped[str | None] = mapped_column(String(36), default=RUN_OWNER_ID)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
@@ -383,6 +387,10 @@ def _normalize_url(url: str) -> str:
 
 
 def _migrate_sqlite_sync(conn) -> None:
+    run_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(runs)")}
+    if "owner_id" not in run_columns:
+        conn.exec_driver_sql("ALTER TABLE runs ADD COLUMN owner_id VARCHAR(36)")
+
     try:
         rows = conn.execute(text("PRAGMA table_info(tasks)")).fetchall()
     except Exception:  # noqa: BLE001
@@ -476,7 +484,11 @@ def _migrate_sqlite_sync(conn) -> None:
 def _scrub_usage_events_sync(conn) -> None:
     from app.usage_ledger import scrub_dirty_usage_events_sync
 
+    # SQLite's user_version records the completed historical ledger cleanup.
+    if conn.exec_driver_sql("PRAGMA user_version").scalar_one() >= 1:
+        return
     stats = scrub_dirty_usage_events_sync(conn)
+    conn.exec_driver_sql("PRAGMA user_version=1")
     if stats.get("estimated") or stats.get("ui_lane"):
         logger.info("usage_events scrub %s", stats)
 
@@ -496,7 +508,7 @@ async def init_db() -> None:
     global _engine, _Session, _engine_url
     settings = get_settings()
     url = _normalize_url(settings.pico_database_url)
-    # 建表 / 迁移 / 清账本整表扫一个进程只跑一次。每次对话都重跑会抢 sqlite 写锁排队：
+    # 建表 / 迁移每个进程只跑一次。每次对话都重跑会抢 sqlite 写锁排队：
     # 11-01 考试阅卷一次 DeepSeek 1–2 秒，经 Pico 要 30–100 秒（edu-core#4503）。
     if _Session is not None and _engine_url == url:
         return
@@ -534,6 +546,12 @@ def session_factory() -> async_sessionmaker[AsyncSession]:
     if _Session is None:
         raise RuntimeError("DB not initialized — call init_db() first")
     return _Session
+
+
+async def lock_sqlite_writer(session: AsyncSession) -> None:
+    # A recovery scan reads status before writing it. Serialize it with live cancels.
+    if session.get_bind().dialect.name == "sqlite":
+        await session.execute(text("BEGIN IMMEDIATE"))
 
 
 async def append_event(
