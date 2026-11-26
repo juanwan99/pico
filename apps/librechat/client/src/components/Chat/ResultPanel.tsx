@@ -71,6 +71,8 @@ type ArtifactAction = {
 const UNNAMED_ARTIFACT = '未命名产物';
 const UNNAMED_ATTACHMENT = '未命名附件';
 const UNKNOWN_KIND = '类型未知';
+type WebsiteAttempt = { url: string; request: ReturnType<typeof openPicoSandboxBrowser> };
+const autoWebsiteAttempts = new Map<string, WebsiteAttempt>();
 
 /** 「在等你选」contains 等待 — do not treat parked HITL as still generating files. */
 function showFilesPreparingSpinner(
@@ -323,6 +325,7 @@ export default function ResultPanel({
   const [websiteError, setWebsiteError] = useState<string | null>(null);
   const [chromeOpen, setChromeOpen] = useState(false);
   const openedWebsiteRef = useRef<string | null>(null);
+  const autoWebsiteAttemptRef = useRef<WebsiteAttempt | null>(null);
   const [paneWidth, setPaneWidth] = useState(() =>
     readStoredResultPaneWidth(
       typeof window === 'undefined' ? null : window.localStorage,
@@ -350,6 +353,7 @@ export default function ResultPanel({
     setLocalSandbox(null);
     setLastRunSandbox(null);
     openedWebsiteRef.current = null;
+    autoWebsiteAttemptRef.current = null;
     openedOfficeRef.current = null;
     setWebsiteError(null);
   }, [conversationId]);
@@ -473,8 +477,24 @@ export default function ResultPanel({
     setPreviewArtifactId(null);
   };
 
-  const openWebsiteInPane = async (rawUrl: string) => {
+  const openWebsiteInPane = async (rawUrl: string, message?: TMessage) => {
     const url = rawUrl.trim();
+    const key = message ? JSON.stringify([message.messageId, url]) : null;
+    // The SSE created event replaces the optimistic ID and carries over clientTimestamp.
+    const pendingKey = message?.clientTimestamp
+      ? JSON.stringify([message.parentMessageId, message.clientTimestamp, url])
+      : null;
+    let attempt = key ? autoWebsiteAttempts.get(key) : undefined;
+    if (!attempt && key && pendingKey) {
+      attempt = autoWebsiteAttempts.get(pendingKey);
+      if (attempt) {
+        autoWebsiteAttempts.set(key, attempt);
+        autoWebsiteAttempts.delete(pendingKey);
+      }
+    }
+    if (attempt && autoWebsiteAttemptRef.current === attempt) {
+      return;
+    }
     if (!url || openedWebsiteRef.current === url) {
       if (url && sandboxSession) {
         setView('web');
@@ -486,7 +506,21 @@ export default function ResultPanel({
     clearFilePreview();
     setView('web');
     try {
-      const meta = await openPicoSandboxBrowser(url);
+      const request = attempt?.request ?? openPicoSandboxBrowser(url);
+      if (key) {
+        if (!attempt) {
+          attempt = { url, request };
+          autoWebsiteAttempts.set(key, attempt);
+          if (pendingKey) {
+            autoWebsiteAttempts.set(pendingKey, attempt);
+          }
+        }
+        autoWebsiteAttemptRef.current = attempt;
+      } else if (autoWebsiteAttemptRef.current?.url === url) {
+        // An explicit reopen can replace the expired session for this turn.
+        autoWebsiteAttemptRef.current.request = request;
+      }
+      const meta = await request;
       const sessionId = String(meta.session_id || '').trim();
       if (!sessionId.startsWith('sbox_')) {
         throw new Error('sandbox session missing');
@@ -499,7 +533,9 @@ export default function ResultPanel({
         kind: String(meta.kind || 'browser'),
       });
     } catch (err) {
-      openedWebsiteRef.current = null;
+      if (openedWebsiteRef.current === url) {
+        openedWebsiteRef.current = null;
+      }
       const message = err instanceof Error ? err.message : String(err);
       setWebsiteError(
         message.includes('web.denied') || message.includes('denied')
@@ -562,6 +598,9 @@ export default function ResultPanel({
       void openOfficeInPane(office);
       return;
     }
+    const userMessage = site
+      ? messages?.slice().reverse().find((message) => message?.isCreatedByUser)
+      : undefined;
     if (ledgerSandbox) {
       if (site) {
         let already = false;
@@ -574,13 +613,13 @@ export default function ResultPanel({
         if (already) {
           return;
         }
-        void openWebsiteInPane(site);
+        void openWebsiteInPane(site, userMessage);
         return;
       }
       return;
     }
     if (site) {
-      void openWebsiteInPane(site);
+      void openWebsiteInPane(site, userMessage);
       return;
     }
     setWebsiteError((prev) =>

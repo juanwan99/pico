@@ -18,7 +18,7 @@ import os
 import secrets
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -599,16 +599,16 @@ class SandboxRuntime:
     async def _attach_browser(self, sess: SandboxSession, url: str) -> dict[str, Any]:
         for item in sess.windows:
             if item.kind == "browser":
-                sess.focused_id = item.window_id
-                copy = "已切回 sidecar Chromium。"
-                loading: dict[str, str] = {}
-                # A new address goes to the open window; the same one just switches back.
-                go = getattr(item.surface, "navigate", None)
-                if callable(go) and url.rstrip("/") != item.surface.url.rstrip("/"):
-                    await go(url)
-                    copy = "已在 sidecar Chromium 打开公开页。"
-                    loading = _loading_meta(item.surface)
-                await self._sync_after_navigation(sess, loading)
+                async with self._act_lock(sess):
+                    copy = "已切回 sidecar Chromium。"
+                    loading: dict[str, str] = {}
+                    go = getattr(item.surface, "navigate", None)
+                    if callable(go) and url.rstrip("/") != item.surface.url.rstrip("/"):
+                        await go(url)
+                        copy = "已在 sidecar Chromium 打开公开页。"
+                        loading = _loading_meta(item.surface)
+                    sess.focused_id = item.window_id
+                    await self._sync_after_navigation(sess, loading)
                 return self._public_meta(sess, message=f"{copy}{HUMAN_LOGIN_COPY}", **loading)
         page = await self._open_browser(
             url, login_state=self._login_path(sess.school_id, sess.membership_id)
@@ -801,6 +801,17 @@ class SandboxRuntime:
             "这路沙箱没有浏览器窗口。先调用 sandbox_browser_open 打开一个公开页。",
         )
 
+    @asynccontextmanager
+    async def _act_lock(self, session: SandboxSession) -> AsyncGenerator[None, None]:
+        try:
+            await asyncio.wait_for(session.act_lock.acquire(), ACT_LOCK_TIMEOUT_S)
+        except TimeoutError as exc:
+            raise ToolError("browser.busy", "上一个浏览器操作还没做完，稍后再试") from exc
+        try:
+            yield
+        finally:
+            session.act_lock.release()
+
     async def act(
         self,
         session: SandboxSession,
@@ -833,11 +844,7 @@ class SandboxRuntime:
         await self._purge()
         # Playwright changes the current tab and refreshes aria refs on snapshot.
         # Keep each action and its snapshot together on this teacher's desk.
-        try:
-            await asyncio.wait_for(session.act_lock.acquire(), ACT_LOCK_TIMEOUT_S)
-        except TimeoutError as exc:
-            raise ToolError("browser.busy", "上一个浏览器操作还没做完，稍后再试") from exc
-        try:
+        async with self._act_lock(session):
             self.require_owner(
                 session.session_id, school_id=session.school_id, membership_id=session.membership_id
             )
@@ -883,29 +890,25 @@ class SandboxRuntime:
                     _loading_meta(window.surface) if verb in {"navigate", "navigate_back"} else {}
                 )
                 extra: dict[str, Any] = {}
+                snapshot: str | None = None
                 timeout = asyncio.timeout(LOADING_SNAPSHOT_TIMEOUT_S if loading else None)
                 try:
                     async with timeout:
                         snapshot = await hands.snapshot()
+                        snapshot_page = getattr(hands, "page_token", 0)
                 except TimeoutError:
                     if not timeout.expired():
                         raise
                     logger.info("Chromium snapshot timed out while loading", exc_info=True)
                     loading["note"] += "本次未能及时取得快照。"
-                else:
-                    full, delta = window.refs.update(snapshot, page=getattr(hands, "page_token", 0))
-                    whole = verb == "snapshot" or delta is None
-                    extra.update(snapshot=full if whole else delta, snapshot_mode="full" if whole else "delta")
                 await self._sync_after_navigation(session, loading)
 
-                message = HANDS_COPY.get(verb, APPLIED_COPY)
                 timeout = asyncio.timeout(LOADING_METADATA_TIMEOUT_S if loading else None)
                 try:
                     async with timeout:
                         await self._save_login(session)
                         dialogs = hands.take_dialogs()
                         if dialogs:
-                            message += "".join(f"页面弹窗「{d}」，已点确定。" for d in dialogs)
                             extra["dialogs"] = dialogs
                         tabs = await hands.tabs("list", 0)
                 except TimeoutError:
@@ -917,6 +920,20 @@ class SandboxRuntime:
                     if len(tabs) > 1 or verb == "tabs":
                         # A new tab opened (or the AI asked): it is already the current page.
                         extra["tabs"] = tabs
+                # A redirect can fail after snapshot capture. Read the current tab at return.
+                page_error = hands.navigation_error() if isinstance(hands, PlaywrightPage) else None
+                if page_error:
+                    snapshot = page_error
+                    snapshot_page = getattr(hands, "page_token", 0)
+                    extra["url"] = window.surface.url
+                if snapshot is not None:
+                    full, delta = window.refs.update(snapshot, page=snapshot_page)
+                    whole = verb == "snapshot" or page_error is not None or delta is None
+                    extra.update(snapshot=full if whole else delta, snapshot_mode="full" if whole else "delta")
+                message = HANDS_COPY.get(verb, APPLIED_COPY)
+                if page_error and verb in {"navigate", "navigate_back"}:
+                    message = page_error
+                message += "".join(f"页面弹窗「{d}」，已点确定。" for d in extra.get("dialogs", []))
                 if page_file_meta:
                     extra.update(page_file_meta)
                 if verb == "page_fn":
@@ -930,8 +947,6 @@ class SandboxRuntime:
                 )
             finally:
                 session.last_used = time.time()
-        finally:
-            session.act_lock.release()
 
     def _upload_payload(
         self,

@@ -148,6 +148,54 @@ export async function login(page, base, email, password) {
   return { already: false };
 }
 
+export async function loginWithEdu(page, base, { eduBase, school, loginName }) {
+  if (!school) throw new Error('--edu-school is required with --edu-login.');
+  if (school !== 'dd792255-de1c-4c6e-a750-5b15c7a213c1' || !loginName.startsWith('drill.')) {
+    throw new Error('Use a drill.* teacher from 建校演练校 for the edu latency test.');
+  }
+  const key = `ACCEPT_PASSWORD_${loginName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+  const password = process.env[key] || process.env.EDU_ACCEPT_PASSWORD || process.env.EDU_SMOKE_PASSWORD;
+  if (!password) throw new Error(`Set ${key}, EDU_ACCEPT_PASSWORD or EDU_SMOKE_PASSWORD.`);
+
+  const loginResponse = await fetch(new URL('/api/v1/auth/login', eduBase), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ login_name: loginName, password }),
+  });
+  if (!loginResponse.ok) throw new Error(`edu login HTTP ${loginResponse.status}`);
+  const { access_token: eduToken } = await loginResponse.json();
+  if (!eduToken) throw new Error('edu login did not return an access token.');
+
+  const ticketResponse = await fetch(new URL(`/api/v1/schools/${school}/pico/web-ticket`, eduBase), {
+    method: 'POST',
+    headers: { authorization: `Bearer ${eduToken}`, accept: 'application/json' },
+  });
+  if (!ticketResponse.ok) throw new Error(`edu web-ticket HTTP ${ticketResponse.status}`);
+  const { ticket } = await ticketResponse.json();
+  if (!ticket) throw new Error('edu web-ticket did not return a ticket.');
+
+  const ssoUrl = new URL('/api/auth/edu-sso', base);
+  ssoUrl.searchParams.set('ticket', ticket);
+  const [refreshed] = await Promise.all([
+    page.waitForResponse((res) =>
+      res.url() === `${base}/api/auth/refresh` && res.request().method() === 'POST',
+    ),
+    (async () => {
+      // Playwright navigation errors include the URL. Keep the one-time ticket out of logs.
+      const landing = await page.goto(ssoUrl.href, { waitUntil: 'domcontentloaded' }).catch((error) => {
+        throw new Error(`Pico edu SSO navigation failed (${error.name}).`);
+      });
+      if (landing?.url() !== `${base}/c/new` || !landing.ok()) {
+        throw new Error('Pico edu SSO did not reach /c/new.');
+      }
+    })(),
+  ]);
+  if (!refreshed.ok()) throw new Error(`Pico edu session refresh HTTP ${refreshed.status()}`);
+  const { token } = await refreshed.json();
+  if (!token) throw new Error('Pico edu session refresh did not return an access token.');
+  return token;
+}
+
 export async function goNewChat(page, base) {
   const newUrl = new URL('/c/new', base).toString();
   await gotoRetry(page, newUrl);
