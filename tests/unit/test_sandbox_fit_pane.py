@@ -212,6 +212,50 @@ async def test_screencast_discards_stale_bitmap_with_new_viewport_metadata(
         await stop()
 
 
+@pytest.mark.asyncio
+async def test_resize_snapshot_replaces_bitmap_queued_during_redraw(
+    live_runtime,  # noqa: F811
+    tmp_path, monkeypatch,
+) -> None:
+    from sandbox_worker.browser import PlaywrightPage, ScreencastFrame
+
+    runtime, _pages = live_runtime
+    meta = await runtime.open_session(
+        school_id="school-a", membership_id="member-a", run_id=None, url="https://example.com/"
+    )
+    sess = runtime.get(meta["session_id"])
+    cdp = MagicMock(send=AsyncMock(), detach=AsyncMock())
+    page = MagicMock()
+    context = MagicMock(
+        pages=[page], new_cdp_session=AsyncMock(return_value=cdp),
+        storage_state=AsyncMock(return_value={}), close=AsyncMock(),
+    )
+    surface = PlaywrightPage(context, page, tmp_path / "profile")
+    sess.focused().surface = surface
+    monkeypatch.setattr(surface, "_apply_metrics", AsyncMock(return_value=time.time()))
+    monkeypatch.setattr(runtime_mod, "STREAM_PING_S", 0)
+
+    async def cast(push):
+        push(ScreencastFrame("initial", VIEWPORT_WIDTH, VIEWPORT_HEIGHT))
+
+        async def redraw(method, _params):
+            assert method == "Page.captureScreenshot"
+            push(ScreencastFrame("old-layout", 900, 700, page_token=surface.page_token))
+            return {"data": "redrawn-layout"}
+
+        cdp.send.side_effect = redraw
+        return AsyncMock()
+
+    monkeypatch.setattr(surface, "screencast", cast)
+    async with aclosing(runtime.stream(sess, ack=True)) as stream:
+        assert (await anext(stream))["jpeg"] == "initial"
+        await surface.set_viewport(900, 700, 1.5)
+        redrawn = await anext(stream)
+        assert (redrawn["jpeg"], redrawn["width"], redrawn["height"]) == ("redrawn-layout", 900, 700)
+        assert await anext(stream) == {"ping": True}
+        cdp.detach.assert_awaited_once()
+
+
 class FitSurface(CastSurface):
     def __init__(self, url: str, login_state: Any = None) -> None:
         super().__init__(url, login_state)
@@ -298,39 +342,49 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
         )
         runtime._sessions[sess.session_id] = sess
         async with aclosing(runtime.stream(sess, ack=True)) as stream:
-            async def next_frame() -> dict[str, Any]:
-                event = await anext(stream)
-                # A ping marks a full idle interval without the expected repaint.
+            async def next_frame(started_at: float) -> dict[str, Any]:
+                while (event := await anext(stream)).get("ping"):
+                    # The first ping can be due to silence before this operation.
+                    assert time.monotonic() - started_at < runtime_mod.STREAM_PING_S, (
+                        "Expected a matching frame within a full idle interval after the operation"
+                    )
                 assert "jpeg" in event, f"Expected a live frame, got {event}"
                 await runtime.apply_input(sess, frame_ack=event["frame_id"])
                 return event
 
-            await next_frame()
-            async with asyncio.TaskGroup() as viewer:
-                frame = viewer.create_task(next_frame())
-                await runtime.apply_input(
-                    sess, viewport_width=480, viewport_height=620, device_pixel_ratio=1.5,
-                )
+            async def first_resized_pixel(
+                size: tuple[int, int], native_size: tuple[int, int], point: tuple[int, int],
+            ) -> tuple[int, int, int]:
+                started_at = time.monotonic()
+                async with asyncio.TaskGroup() as viewer:
+                    frame = viewer.create_task(next_frame(started_at))
+                    await runtime.apply_input(
+                        sess, viewport_width=size[0], viewport_height=size[1],
+                        device_pixel_ratio=1.5,
+                    )
+                resized = frame.result()
+                while True:
+                    with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
+                        if jpeg.size == native_size:
+                            assert (resized["width"], resized["height"]) == size
+                            return jpeg.getpixel(point)
+                    resized = await next_frame(started_at)
+
+            await next_frame(time.monotonic())
+            pixel = await first_resized_pixel((480, 620), (720, 930), (700, 40))
+            red, green, blue = pixel
+            assert green > 240 and red < 15 and blue < 15, pixel
             assert await page.evaluate("[innerWidth, innerHeight]") == [480, 620]
             assert await page.evaluate("devicePixelRatio") == 1.5
             assert await page.is_visible("#w")  # the site's own narrow layout
-            resized = frame.result()
-            while True:
-                if resized["width"] == 480:
-                    assert resized["height"] == 620
-                    with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
-                        if jpeg.size == (720, 930):
-                            red, green, blue = jpeg.getpixel((700, 40))
-                            if green > 240 and red < 15 and blue < 15:
-                                break
-                resized = await next_frame()
             assert Image.open(io.BytesIO(await surface.screenshot_png())).size == (480, 620)
             assert await page.evaluate("devicePixelRatio") == 1.5
 
+            started_at = time.monotonic()
             await runtime.apply_input(sess, scroll_dy=500)
             await page.wait_for_function("scrollY === 500")
             while True:
-                scrolled = await next_frame()
+                scrolled = await next_frame(started_at)
                 with Image.open(io.BytesIO(base64.b64decode(scrolled["jpeg"]))) as jpeg:
                     red, green, blue = jpeg.getpixel((jpeg.width // 8, jpeg.height * 60 // 620))
                     if red > 235 and green < 20 and blue < 20:
@@ -341,30 +395,19 @@ async def test_real_chromium_page_reflows_new_tabs_follow_frames_match(
             )
             await runtime.apply_input(sess, click_x=60, click_y=60)
             assert await page.get_attribute("button", "data-hit") == "1"
+            started_at = time.monotonic()
             await page.evaluate("scrollTo(0, 0)")
             # Let Chromium display the scroll reset before changing the viewport again.
             while True:
-                returned = await next_frame()
+                returned = await next_frame(started_at)
                 with Image.open(io.BytesIO(base64.b64decode(returned["jpeg"]))) as jpeg:
                     red, green, blue = jpeg.getpixel((jpeg.width - 20, 40))
                     if green > 240 and red < 15 and blue < 15:
                         break
 
-            async with asyncio.TaskGroup() as viewer:
-                frame = viewer.create_task(next_frame())
-                await runtime.apply_input(
-                    sess, viewport_width=900, viewport_height=700, device_pixel_ratio=1.5,
-                )
-            resized = frame.result()
-            while True:
-                if resized["width"] == 900:
-                    assert resized["height"] == 700
-                    with Image.open(io.BytesIO(base64.b64decode(resized["jpeg"]))) as jpeg:
-                        if jpeg.size == (1350, 1050):
-                            red, green, blue = jpeg.getpixel((1300, 40))
-                            if blue > 100 and green < 20 and red < 20:
-                                break
-                resized = await next_frame()
+            pixel = await first_resized_pixel((900, 700), (1350, 1050), (1300, 40))
+            red, green, blue = pixel
+            assert 100 < blue < 150 and green < 20 and red < 20, pixel
 
         assert await surface.set_viewport(10, 99_999) == (VIEWPORT_MIN[0], VIEWPORT_MAX[1])
         await surface.set_viewport(900, 700, 1.5)

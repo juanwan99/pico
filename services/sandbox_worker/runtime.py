@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from anyio import CancelScope
 from pico_orchestrator.gateway import ToolError
 from pico_orchestrator.sandbox_persist import (
     PERSIST_COPY,
@@ -38,8 +39,10 @@ from pico_orchestrator.web_guard import parse_public_http_url
 from sandbox_worker.browser import (
     ENGINE_NAME,
     PNG_MAGIC,
+    SCREENCAST_QUALITY,
     BrowserHands,
     BrowserPage,
+    PlaywrightPage,
     RefBook,
     ScreencastFrame,
     open_chromium,
@@ -1017,7 +1020,23 @@ class SandboxRuntime:
                         scroll_quiet_at = win.last_scroll_at + STREAM_REFINE_S
                         clear_at = max(refine_at, scroll_quiet_at)
                         if len(waiting) < STREAM_MAX_IN_FLIGHT:
-                            if not frames.empty():
+                            if (
+                                first_frame and page_token != token
+                                and isinstance(win.surface, PlaywrightPage)
+                            ):
+                                # A resized screencast bitmap can still show the old layout.
+                                # Ask Chromium for a redraw before sending the new coordinates.
+                                frame = await _capture_resized_viewport(win.surface, page_token)
+                                if (
+                                    frame is None or self._alive_focus(sess) != window_id
+                                    or win.surface.page_token != page_token
+                                ):
+                                    continue
+                                # A bitmap queued during the redraw can predate this snapshot.
+                                if not frames.empty():
+                                    frames.get_nowait()
+                                first_frame = False
+                            elif not frames.empty():
                                 frame = frames.get_nowait()
                                 refine = None
                                 if frame.received_at is not None and frame.page_token != page_token:
@@ -1092,6 +1111,24 @@ class SandboxRuntime:
 
 def _mime_of(name: str) -> str:
     return mimetypes.guess_type(name)[0] or "application/octet-stream"
+
+
+async def _capture_resized_viewport(surface: PlaywrightPage, token: int) -> ScreencastFrame | None:
+    async with surface._viewport_lock:
+        if surface.page_token != token:
+            return None
+        width, height = surface._viewport
+        # As for PNG capture, use a session without a clip or emulation override.
+        cdp = await surface._context.new_cdp_session(surface._page)
+        try:
+            shot = await cdp.send(
+                "Page.captureScreenshot",
+                {"fromSurface": True, "format": "jpeg", "quality": SCREENCAST_QUALITY},
+            )
+        finally:
+            with CancelScope(shield=True):
+                await cdp.detach()
+    return ScreencastFrame(shot["data"], width, height, page_token=token)
 
 
 def _keep_latest(
