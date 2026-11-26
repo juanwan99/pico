@@ -128,6 +128,8 @@ def _map_error(raw: str | None, *, code: str | None = None) -> str:
     low = text.lower()
     c = (code or "").lower()
 
+    if c == "sandbox.fetch_failed" and re.search(r"（ERR_[A-Z0-9_]+，", text):
+        return f"未能完成：{text[:160]}"
     if c == "true_pi.no_progress":
         return "Pico 卡在同一步、反复得到同样的结果，已停下。"
     if "输入过长" in text or "too long" in low or "max_prompt" in low or c == "prompt_too_long":

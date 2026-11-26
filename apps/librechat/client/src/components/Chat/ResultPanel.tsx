@@ -11,6 +11,7 @@ import {
   getPicoArtifactContent,
   picoAuthedGet,
   openPicoSandboxBrowser,
+  PicoHttpError,
   openPicoSandboxDocument,
   type PicoArtifact,
   type PicoRun,
@@ -538,7 +539,7 @@ export default function ResultPanel({
       if (openedWebsiteRef.current === url) {
         openedWebsiteRef.current = null;
       }
-      const message = err instanceof Error ? err.message : String(err);
+      const message = err instanceof PicoHttpError ? err.message : null;
       // picoFetch may already have replaced an unsafe server message.
       setWebsiteError(teacherSafe(message === GENERIC_RETRY ? null : message, WEBSITE_OPEN_FAILED));
     }

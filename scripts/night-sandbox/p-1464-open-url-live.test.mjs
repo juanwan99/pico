@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isSandboxOpen4xx, roundAssertions } from './p-1464-open-url-live.mjs';
+import { isSandboxOpen4xx, loginFailureDetails, roundAssertions } from './p-1464-open-url-live.mjs';
 
 const sessions = 'https://pico.test/api/pico/v1/sandbox/sessions';
 
@@ -23,12 +23,18 @@ test('template round passes with a pane, a completed reply, and no browser error
     paneSeen: true,
     chromeErrorSeen: false,
     open4xx: 0,
+    openRequestsSettled: true,
+    targetHost: 'example.com',
+    finalPane: { url: 'https://example.com/login', has_password_input: true },
+    viewportVisible: true,
     reply: '平台异常：登录页正常打开。请在沙箱里输入账号密码。',
   }), {
     finished: 'PASS',
+    sandbox_open_requests_settled: 'PASS',
     sandbox_open_4xx_at_most_one: 'PASS',
     sandbox_web_pane_shown: 'PASS',
     no_chrome_error: 'PASS',
+    pane_stops_at_target_login: 'PASS',
     reply_stops_at_login: 'PASS',
   });
 });
@@ -39,12 +45,15 @@ test('template round reports each observed failure and never passes an absent re
     paneSeen: false,
     chromeErrorSeen: true,
     open4xx: 2,
+    openRequestsSettled: false,
     reply: '平台异常，请稍后重试',
   }), {
     finished: 'FAIL',
+    sandbox_open_requests_settled: 'FAIL',
     sandbox_open_4xx_at_most_one: 'FAIL',
     sandbox_web_pane_shown: 'FAIL',
     no_chrome_error: 'FAIL',
+    pane_stops_at_target_login: 'FAIL',
     reply_stops_at_login: 'FAIL',
   });
   assert.equal(roundAssertions('template').reply_stops_at_login, 'FAIL');
@@ -52,9 +61,44 @@ test('template round reports each observed failure and never passes an absent re
 });
 
 test('template round rejects replies that say the login page failed', () => {
-  for (const reply of ['登录页打不开', '无法访问登录页', '登录时到了异常页']) {
+  for (const reply of [
+    '登录页打不开', '无法访问登录页', '登录时到了异常页', '未能打开登录页', '无法打开登录页',
+  ]) {
     assert.equal(roundAssertions('template', { reply }).reply_stops_at_login, 'FAIL');
   }
+});
+
+test('template round requires the final pane to show a password field on the target host', () => {
+  for (const finalPane of [
+    undefined,
+    { url: 'https://other.example.com/login', has_password_input: true },
+    { url: 'https://example.com/home', has_password_input: false },
+  ]) {
+    const assertions = roundAssertions('template', {
+      targetHost: 'example.com', finalPane, viewportVisible: true,
+    });
+    assert.equal(assertions.pane_stops_at_target_login, 'FAIL');
+  }
+  assert.equal(roundAssertions('template', {
+    targetHost: 'example.com',
+    finalPane: { url: 'https://example.com/login', has_password_input: true },
+    viewportVisible: false,
+  }).pane_stops_at_target_login, 'FAIL');
+});
+
+test('reports missing drill credentials or login HTTP status without raw errors', () => {
+  assert.deepEqual(loginFailureDetails(new Error(
+    'Set ACCEPT_PASSWORD_DRILL_T701, EDU_ACCEPT_PASSWORD or EDU_SMOKE_PASSWORD.',
+  )), { reason: 'missing_password' });
+  for (const service of ['edu login', 'edu web-ticket', 'Pico edu session refresh']) {
+    assert.deepEqual(loginFailureDetails(new Error(`${service} HTTP 401`)), {
+      reason: 'http_error', http_status: 401,
+    });
+  }
+  assert.deepEqual(loginFailureDetails(new Error('Pico edu SSO did not reach /c/new.'), 503), {
+    reason: 'http_error', http_status: 503,
+  });
+  assert.deepEqual(loginFailureDetails(new Error('private login context')), {});
 });
 
 test('bad address round accepts the DNS reason from either the assistant or the pane', () => {

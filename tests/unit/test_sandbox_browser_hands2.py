@@ -206,7 +206,7 @@ def test_loading_navigation_leaves_room_under_sidecar_timeout() -> None:
 @pytest.mark.parametrize(
     ("error_text", "reason"),
     [
-        ("net::ERR_CONNECTION_REFUSED", "连接被拒绝"),
+        ("net::ERR_CONNECTION_REFUSED", "拒绝连接"),
         ("net::ERR_NAME_NOT_RESOLVED", "DNS 失败"),
         ("net::ERR_NAME_RESOLUTION_FAILED", "DNS 失败"),
         ("net::ERR_BLOCKED_BY_CLIENT", "访问被拦截"),
@@ -230,6 +230,15 @@ async def test_open_reports_failure_before_commit(
     assert error_text in caplog.text
     page.wait_for_load_state.assert_not_awaited()
     context.close.assert_awaited_once()
+
+
+def test_navigation_error_puts_reason_before_a_long_address() -> None:
+    url = f"{SITE}/{'a' * 300}"
+    error = browser_mod._navigation_error(f"{url}?token=secret", "ERR_NAME_NOT_RESOLVED")
+    reason = "页面打开失败（ERR_NAME_NOT_RESOLVED，无法解析该公开页的域名（DNS 失败））"
+    assert error.message == f"{reason}：地址 {url}"
+    for limit in (160, 180, 200):
+        assert error.message[:limit].startswith(reason)
 
 
 async def test_back_reports_http_error_before_waiting_for_dom(navigation_page) -> None:
@@ -336,7 +345,8 @@ def _assert_dns_snapshot(response, bad_url) -> None:
     assert result["url"] == browser_mod.CHROMIUM_ERROR_PAGE
     assert result["snapshot_mode"] == "full"
     assert result["snapshot"].startswith(
-        f"页面打开失败：地址 {bad_url}（ERR_NAME_NOT_RESOLVED，无法解析该公开页的域名"
+        "页面打开失败（ERR_NAME_NOT_RESOLVED，无法解析该公开页的域名（DNS 失败））"
+        f"：地址 {bad_url}"
     )
 
 

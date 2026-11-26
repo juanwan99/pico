@@ -2,33 +2,57 @@
 /**
  * Set ACCEPT_PASSWORD_DRILL_T701 (or EDU_ACCEPT_PASSWORD / EDU_SMOKE_PASSWORD).
  * Put the original template with the drill account line in a file outside the repo.
- * node scripts/night-sandbox/p-1464-open-url-live.mjs --template ~/.secrets/pico-1464.txt
+ * Node 22: node scripts/night-sandbox/p-1464-open-url-live.mjs --template ~/.secrets/pico-1464.txt
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { detectOpenWebsiteIntent } from '../../apps/librechat/client/src/utils/picoOpenInPane.ts';
 import { ROOT, goNewChat, loadPlaywright, loginWithEdu, sendPrompt, shot, writeJson } from './lib.mjs';
 
 const STOP = '[data-testid="stop-generation-button"], [data-testid="task-stop-button"]';
 const ROUND_TIMEOUT = 6 * 60 * 1000;
 
+function isSandboxOpen(method, url) {
+  return method === 'POST' && new URL(url).pathname.endsWith('/sandbox/sessions');
+}
+
 export function isSandboxOpen4xx(method, url, status) {
-  return method === 'POST' && status >= 400 && status < 500 &&
-    new URL(url).pathname.endsWith('/sandbox/sessions');
+  return status >= 400 && status < 500 && isSandboxOpen(method, url);
+}
+
+function isPaneMetadata(request) {
+  return request.method() === 'GET' &&
+    /\/sandbox\/sessions\/sbox_[^/]+$/.test(new URL(request.url()).pathname);
+}
+
+export function loginFailureDetails(error, ssoStatus) {
+  if (/^Set ACCEPT_PASSWORD_[A-Z0-9_]+, EDU_ACCEPT_PASSWORD or EDU_SMOKE_PASSWORD\.$/.test(error.message)) {
+    return { reason: 'missing_password' };
+  }
+  const http = /^(?:edu login|edu web-ticket|Pico edu session refresh) HTTP (\d{3})$/.exec(error.message);
+  const status = http ? Number(http[1]) : ssoStatus;
+  return status ? { reason: 'http_error', http_status: status } : {};
 }
 
 export function roundAssertions(round, {
-  finished, paneSeen, chromeErrorSeen, open4xx, reply = '', paneError = '', runCard = '',
+  finished, paneSeen, chromeErrorSeen, open4xx, openRequestsSettled,
+  targetHost, finalPane, viewportVisible, reply = '', paneError = '', runCard = '',
 } = {}) {
   const assertions = {
     finished,
+    sandbox_open_requests_settled: openRequestsSettled,
     sandbox_open_4xx_at_most_one: Number.isInteger(open4xx) && open4xx <= 1,
   };
   if (round === 'template') {
     assertions.sandbox_web_pane_shown = paneSeen;
     assertions.no_chrome_error = chromeErrorSeen === false;
-    assertions.reply_stops_at_login = reply.includes('登录') && !/打不开|无法访问|异常页/.test(reply);
+    const url = URL.parse(finalPane?.url ?? '');
+    assertions.pane_stops_at_target_login = viewportVisible && Boolean(targetHost) &&
+      url?.hostname === targetHost && finalPane?.has_password_input === true;
+    assertions.reply_stops_at_login = reply.includes('登录') &&
+      !/未能打开|无法打开|打不开|无法访问|异常页/.test(reply);
   } else {
     const dns = /解析|ERR_NAME_NOT_RESOLVED/i;
     const showsDnsReason = (text) => text.includes('解析') && !/请稍后重试|不是你的问题写错/.test(text);
@@ -55,45 +79,85 @@ function watchRound(stopSelector) {
   sample();
 }
 
-async function runRound(page, base, out, round, prompt, result) {
+async function runRound(page, base, out, round, prompt, result, targetHost) {
   await goNewChat(page, base);
   await page.evaluate(watchRound, STOP);
   let open4xx = 0;
-  const paneMetadata = [];
+  let onOpensDrained;
+  const pendingOpens = new Set();
+  const metadataRequests = [];
+  const onRequest = (request) => {
+    if (isSandboxOpen(request.method(), request.url())) pendingOpens.add(request);
+  };
   const onResponse = (response) => {
     if (isSandboxOpen4xx(response.request().method(), response.url(), response.status())) {
       open4xx++;
     }
-    // The remote browser is rendered as an image. Its URL comes from session metadata.
-    if (round === 'template' && response.ok() &&
-      /\/sandbox\/sessions(?:\/sbox_[^/]+)?$/.test(new URL(response.url()).pathname)) {
-      paneMetadata.push(response);
-    }
   };
+  const onRequestDone = (request) => {
+    if (pendingOpens.delete(request) && !pendingOpens.size) onOpensDrained?.();
+  };
+  const onRequestFinished = (request) => {
+    if (round === 'template' && (isPaneMetadata(request) || pendingOpens.has(request))) {
+      metadataRequests.push(request);
+    }
+    onRequestDone(request);
+  };
+  page.on('request', onRequest);
   page.on('response', onResponse);
+  page.on('requestfinished', onRequestFinished);
+  page.on('requestfailed', onRequestDone);
 
-  let finished = true;
+  let finished = false;
+  let finalPane;
+  let openRequestsSettled = true;
   let observed;
+  const deadline = performance.now() + ROUND_TIMEOUT;
+  const remaining = () => Math.max(1, deadline - performance.now());
   try {
     await sendPrompt(page, prompt);
     try {
       await page.waitForFunction(
         (stop) => window.picoOpenUrlWatch.watch.stopSeen && !document.querySelector(stop),
         STOP,
-        { timeout: ROUND_TIMEOUT },
+        { timeout: remaining() },
       );
+      finished = true;
+
+      const pane = page.getByTestId('sandbox-web-pane');
+      if (round === 'template') {
+        await pane.getByTestId('sandbox-web-viewport').waitFor({ timeout: remaining() });
+        // Take a fresh metadata sample from the visible pane after the turn.
+        const samplingStarted = Date.now();
+        const request = await page.waitForEvent('requestfinished', {
+          predicate: (request) => !pendingOpens.size && isPaneMetadata(request) &&
+            request.timing().startTime >= samplingStarted,
+          timeout: remaining(),
+        });
+        const response = await request.response();
+        if (response.ok()) finalPane = await response.json();
+      } else {
+        const assistant = page.locator('.agent-turn').last();
+        await assistant.locator('button[data-testid="pico-thinking-chain"][aria-expanded="false"]')
+          .click({ timeout: remaining() });
+        await page.getByTestId('artifact-action-error').waitFor({ timeout: remaining() });
+        await assistant.getByTestId('pico-thinking-chain-body')
+          .filter({ hasText: /解析|ERR_|页面打开失败|未能完成|工具没完成|请稍后重试|不是你的问题写错/ })
+          .waitFor({ timeout: remaining() });
+      }
     } catch (error) {
       if (error.name !== 'TimeoutError') throw error;
-      finished = false;
+      result.error = error.name;
     }
 
-    if (round === 'bad_address') {
-      const collapsedRunCard = page.locator('.agent-turn').last().locator(
-        'button[data-testid="pico-thinking-chain"][aria-expanded="false"]',
-      );
-      if (await collapsedRunCard.isVisible()) {
-        await collapsedRunCard.click();
-      }
+    if (pendingOpens.size) {
+      openRequestsSettled = await new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve(false), remaining());
+        onOpensDrained = () => {
+          clearTimeout(timeout);
+          resolve(true);
+        };
+      });
     }
     observed = await page.evaluate(() => {
       const { watch, sample, observer } = window.picoOpenUrlWatch;
@@ -106,15 +170,38 @@ async function runRound(page, base, out, round, prompt, result) {
       ).join('\n');
       const paneError = document.querySelector('[data-testid="artifact-action-error"]')?.innerText;
       const runCard = assistant?.querySelector('[data-testid="pico-thinking-chain-body"]')?.innerText;
-      return { paneSeen: watch.paneSeen, chromeErrorSeen: watch.chromeErrorSeen, reply, paneError, runCard };
+      const viewport = document.querySelector(
+        '[data-testid="sandbox-web-pane"] [data-testid="sandbox-web-viewport"]',
+      );
+      return {
+        paneSeen: watch.paneSeen,
+        chromeErrorSeen: watch.chromeErrorSeen,
+        viewportVisible: Boolean(viewport?.checkVisibility({ visibilityProperty: true })),
+        reply,
+        paneError,
+        runCard,
+      };
     });
   } finally {
+    page.off('request', onRequest);
     page.off('response', onResponse);
+    page.off('requestfinished', onRequestFinished);
+    page.off('requestfailed', onRequestDone);
   }
-  const metadata = await Promise.all(paneMetadata.map((response) => response.json()));
-  observed.chromeErrorSeen ||= metadata.some(({ url }) => /^chrome-error:/i.test(url ?? ''));
+  const metadata = await Promise.all(metadataRequests.map(async (request) => {
+    const response = await request.response();
+    return response.ok() ? response.json() : null;
+  }));
+  observed.chromeErrorSeen ||= metadata.some((meta) => /^chrome-error:/i.test(meta?.url ?? ''));
   result.sandbox_open_4xx = open4xx;
-  result.assertions = roundAssertions(round, { ...observed, finished, open4xx });
+  result.assertions = roundAssertions(round, {
+    ...observed,
+    finished,
+    open4xx,
+    openRequestsSettled: openRequestsSettled && pendingOpens.size === 0,
+    targetHost,
+    finalPane,
+  });
 
   // Capture the right rail alone so the user's template stays out of the first image.
   const file = path.join(out, `${round}.png`);
@@ -139,9 +226,13 @@ async function main() {
     report.rounds[round] = { assertions: roundAssertions(round), sandbox_open_4xx: null, screenshot: null };
   }
   let stage = 'read_template';
+  let ssoStatus;
   try {
     if (!args.template) throw new Error('--template is required');
     const template = await readFile(args.template, 'utf8');
+    const targetUrl = detectOpenWebsiteIntent(template);
+    if (!targetUrl) throw new Error('Template has no target website');
+    const targetHost = new URL(targetUrl).hostname;
     stage = 'launch_browser';
     const { chromium } = loadPlaywright();
     const browser = await chromium.launch({
@@ -153,11 +244,22 @@ async function main() {
       stage = 'login';
       const base = new URL(args.base).origin;
       report.base = base;
-      await loginWithEdu(page, base, {
-        eduBase: 'https://edu.weiyuji.cn',
-        school: 'dd792255-de1c-4c6e-a750-5b15c7a213c1',
-        loginName: 'drill.t701',
-      });
+      const onLoginResponse = (response) => {
+        const url = new URL(response.url());
+        if (url.origin === base && url.pathname === '/api/auth/edu-sso' && response.status() >= 400) {
+          ssoStatus = response.status();
+        }
+      };
+      page.on('response', onLoginResponse);
+      try {
+        await loginWithEdu(page, base, {
+          eduBase: 'https://edu.weiyuji.cn',
+          school: 'dd792255-de1c-4c6e-a750-5b15c7a213c1',
+          loginName: 'drill.t701',
+        });
+      } finally {
+        page.off('response', onLoginResponse);
+      }
 
       for (const [round, prompt] of [
         ['template', template],
@@ -165,7 +267,7 @@ async function main() {
       ]) {
         const result = report.rounds[round];
         try {
-          await runRound(page, base, out, round, prompt, result);
+          await runRound(page, base, out, round, prompt, result, targetHost);
         } catch (error) {
           // Playwright errors can include the prompt passed to fill().
           result.error = error.name;
@@ -180,7 +282,11 @@ async function main() {
     );
     if (allPassed) report.verdict = 'PASS';
   } catch (error) {
-    report.error = { stage, type: error.code || error.name };
+    report.error = {
+      stage,
+      type: error.code || error.name,
+      ...(stage === 'login' ? loginFailureDetails(error, ssoStatus) : {}),
+    };
   } finally {
     writeJson(path.join(out, 'REPORT.json'), report);
   }

@@ -7,6 +7,7 @@ import {
   getPicoSandboxScreenshot,
   getPicoSandboxSession,
   openPicoSandboxBrowser,
+  PicoHttpError,
   openPicoSandboxDocument,
   postPicoSandboxInput,
   type PicoArtifact,
@@ -17,6 +18,7 @@ import { GENERIC_RETRY } from '~/utils/picoTeacherText';
 import ResultPanel, { formatRunTokenUsage } from '../ResultPanel';
 
 jest.mock('~/data-provider/pico/api', () => ({
+  PicoHttpError: jest.requireActual('~/data-provider/pico/api').PicoHttpError,
   getPicoArtifactContent: jest.fn(),
   picoAuthedGet: jest.fn(),
   getPicoSandboxScreenshot: jest.fn(),
@@ -618,7 +620,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
 
   it('shows the sandbox quota message returned by the API', async () => {
     const message = '沙箱已满（最多 10 路），请关掉一路再开。';
-    mockOpenBrowser.mockRejectedValueOnce(new Error(message));
+    mockOpenBrowser.mockRejectedValueOnce(new PicoHttpError(message));
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
@@ -640,8 +642,8 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
   });
 
   it('keeps a failed website open to one attempt per user message across streaming and remounts', async () => {
-    const dnsError = '页面打开失败：地址 https://example.invalid/（ERR_NAME_NOT_RESOLVED，无法解析域名）';
-    mockOpenBrowser.mockRejectedValue(new Error(dnsError));
+    const dnsError = '页面打开失败（ERR_NAME_NOT_RESOLVED，无法解析域名）：地址 https://example.invalid/';
+    mockOpenBrowser.mockRejectedValue(new PicoHttpError(dnsError));
     const panel = (messageId: string, assistantText: string, clientTimestamp?: string) => (
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
@@ -684,12 +686,60 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     reopened.rerender(panel(messageId, '网页查看中'));
     expect(mockOpenBrowser).toHaveBeenCalledTimes(1);
 
-    mockOpenBrowser.mockRejectedValueOnce(new Error(GENERIC_RETRY));
+    mockOpenBrowser.mockRejectedValueOnce(new PicoHttpError(GENERIC_RETRY));
     reopened.rerender(panel('website-open-failure-next-turn', ''));
     expect(mockOpenBrowser).toHaveBeenCalledTimes(2);
     expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(
       '打开网页失败，请稍后重试',
     );
+  });
+
+  it.each([
+    ['server DNS error', '无法解析该公开页的域名', '请稍后重试'],
+    ['browser fetch rejection', '打开网页失败，请稍后重试', 'Failed to fetch'],
+  ])('shows the expected website error for a %s', async (failure, expected, hidden) => {
+    const api = jest.requireActual<typeof import('~/data-provider/pico/api')>(
+      '~/data-provider/pico/api',
+    );
+    mockOpenBrowser.mockImplementationOnce(api.openPicoSandboxBrowser);
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    if (failure === 'server DNS error') {
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        text: async () => JSON.stringify({
+          detail: {
+            code: 'sandbox.fetch_failed',
+            message: '页面打开失败（ERR_NAME_NOT_RESOLVED，无法解析该公开页的域名）',
+          },
+        }),
+      });
+    } else {
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    }
+    try {
+      render(
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <ResultPanel
+            messages={[
+              {
+                messageId: `website-open-${failure}`,
+                conversationId: 'c1',
+                parentMessageId: null,
+                text: '打开 https://example.invalid',
+                isCreatedByUser: true,
+              },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      const error = await screen.findByTestId('artifact-action-error');
+      expect(error).toHaveTextContent(expected);
+      expect(error).not.toHaveTextContent(hidden);
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   it('S1b: 打开浏览器 resolves a default page and opens Chromium', async () => {
