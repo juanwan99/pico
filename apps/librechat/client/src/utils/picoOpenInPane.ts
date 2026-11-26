@@ -3,6 +3,9 @@
  * iframe「浏览器」is not the open-website entry.
  */
 
+// @ts-expect-error TS5097: the Node probes load this source directly and require .ts.
+import { stripPicoControlMarkers } from './picoControlMarkers.ts';
+
 /** Public chrome is sandbox-only. overview/files stay as internal preview states. */
 export const RESULT_PANE_VIEWS = ['web'] as const;
 export type ResultPaneView = 'overview' | 'files' | 'web';
@@ -266,7 +269,7 @@ export function latestUserOpenOfficeIntent(
     if (!message?.isCreatedByUser) {
       continue;
     }
-    return detectOpenOfficeIntent(String(message.text || ''));
+    return detectOpenOfficeIntent(stripPicoControlMarkers(String(message.text || '')));
   }
   return null;
 }
@@ -285,7 +288,7 @@ export function latestUserOpenWebsiteIntent(
     if (!message?.isCreatedByUser) {
       continue;
     }
-    return detectOpenWebsiteIntent(String(message.text || ''));
+    return detectOpenWebsiteIntent(stripPicoControlMarkers(String(message.text || '')));
   }
   return null;
 }
