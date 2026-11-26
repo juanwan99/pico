@@ -55,6 +55,10 @@ function watchPane({ image, fullscreen }) {
       if (!body.frame_ack) requests.push({ at: now(), ...body });
     }
     const res = await fetchPage(url, opts);
+    if (url === '/api/pico/v1/sandbox/sessions' && opts?.method === 'POST' && res.status === 400) {
+      const { detail } = await res.clone().json();
+      if (detail?.code === 'sandbox.fetch_failed') window.sandboxLatency.fixtureFetchFailed = true;
+    }
     if (
       typeof url !== 'string' ||
       !url.includes('/stream?') ||
@@ -147,14 +151,20 @@ export async function measurePane(page, maximize, { out, getReference, run }) {
   const img = page.locator(IMAGE);
   const wait = { polling: 25, timeout: 15000 };
   try {
-    await page.waitForFunction(
-      () =>
-        window.sandboxLatency.frames.some(
+    const outcome = await page.waitForFunction(
+      () => {
+        const { frames, fixtureFetchFailed } = window.sandboxLatency;
+        if (fixtureFetchFailed) return 'fetch_failed';
+        return frames.some(
           (f) => f.ready && f.width === 720 && f.height === 700 && f.natural[0] === 1080,
-        ),
+        );
+      },
       null,
       { ...wait, timeout: 60000 },
     );
+    if (await outcome.jsonValue() === 'fetch_failed') {
+      throw new FixtureUnavailable('sandbox open HTTP 400 (sandbox.fetch_failed)');
+    }
   } catch (error) {
     if (error.name !== 'TimeoutError') throw error;
     throw new FixtureUnavailable('Sandbox test page did not render within 60 s.', { cause: error });
@@ -346,8 +356,8 @@ async function withCleanup(run, cleanup) {
   }
 }
 
-async function hasOpenDesk(sessions, headers) {
-  const current = await fetch(`${sessions}/current`, { headers });
+async function hasOpenDesk(currentUrl, headers) {
+  const current = await fetch(currentUrl, { headers });
   if (current.ok) return true;
   if (current.status === 404 && (await current.json()).detail?.code === 'sandbox.session_not_found') {
     return false;
@@ -355,71 +365,34 @@ async function hasOpenDesk(sessions, headers) {
   throw new Error(`sandbox current HTTP ${current.status}`);
 }
 
-async function requireEmptyDesk(sessions, headers) {
-  if (await hasOpenDesk(sessions, headers)) {
+async function requireEmptyDesk(currentUrl, headers) {
+  if (await hasOpenDesk(currentUrl, headers)) {
     throw new Error('The test teacher already has an open sandbox desk.');
   }
 }
 
-async function closeDesks(sessions, headers, ids) {
-  for (const id of ids) {
-    const closed = await fetch(`${sessions}/${id}`, { method: 'DELETE', headers });
+async function closeDesks(page, currentUrl, headers) {
+  const stop = page.getByTestId('task-stop-button');
+  // The maximized pane can cover the task bar. Trigger the mounted stop control directly.
+  await stop.evaluateAll(([button]) => button?.click());
+  await stop.waitFor({ state: 'detached', timeout: 30000 });
+  for (let count = 0; await hasOpenDesk(currentUrl, headers); count++) {
+    if (count === 5) throw new Error('A sandbox desk remains open after 5 deletes.');
+    const closed = await fetch(currentUrl, { method: 'DELETE', headers });
     if (!closed.ok) throw new Error(`sandbox cleanup HTTP ${closed.status}`);
-  }
-  if (await hasOpenDesk(sessions, headers)) {
-    throw new Error('A sandbox desk remains open after round cleanup.');
-  }
-}
-
-export async function collectChatDesks(page, base, headers, ids) {
-  // The public `current` route returns the alias as its session_id. Use the
-  // same sandbox.session events that mount the pane to get the concrete IDs.
-  await page.getByTestId('task-stop-button').waitFor({ state: 'detached', timeout: 60000 });
-  const conversationId = new URL(page.url()).pathname.split('/').at(-1);
-  if (conversationId === 'new') return;
-  async function read(route) {
-    const response = await fetch(`${base}/api/pico/v1${route}`, { headers });
-    if (!response.ok) throw new Error(`sandbox ledger HTTP ${response.status} (${route})`);
-    return response.json();
-  }
-  const { tasks } = await read(`/tasks?conversation_id=${encodeURIComponent(conversationId)}`);
-  for (const task of tasks) {
-    const { runs } = await read(`/tasks/${task.id}/runs`);
-    for (const run of runs) {
-      const { events } = await read(`/runs/${run.id}/events`);
-      for (const { type, payload } of events) {
-        if (type === 'sandbox.session') ids.add(payload.session_id);
-      }
-    }
   }
 }
 
 export async function measureRound({
-  sessions, headers, fixtureUrl, prepare, measure, collectDesks, onRetry,
+  page, currentUrl, headers, prepare, measure, onRetry,
 }) {
   for (let attempt = 1; ; attempt++) {
-    await requireEmptyDesk(sessions, headers);
+    await requireEmptyDesk(currentUrl, headers);
     await prepare();
-    const ids = new Set();
     let cleaned = false;
     try {
-      return await withCleanup(async () => {
-        const response = await fetch(sessions, {
-          method: 'POST',
-          headers: { ...headers, 'content-type': 'application/json' },
-          body: JSON.stringify({ url: fixtureUrl }),
-        });
-        if (response.status === 400 && (await response.json()).detail?.code === 'sandbox.fetch_failed') {
-          throw new FixtureUnavailable('sandbox open HTTP 400 (sandbox.fetch_failed)');
-        }
-        if (!response.ok) throw new Error(`sandbox open HTTP ${response.status}`);
-        const { session_id: id } = await response.json();
-        ids.add(id);
-        return await measure();
-      }, async () => {
-        await withCleanup(async () => {
-          if (ids.size) await collectDesks(ids);
-        }, () => closeDesks(sessions, headers, ids));
+      return await withCleanup(measure, async () => {
+        await closeDesks(page, currentUrl, headers);
         cleaned = true;
       });
     } catch (error) {
@@ -506,8 +479,7 @@ async function main() {
         loginName: eduLogin,
       });
     const headers = { authorization: `Bearer ${token}` };
-    const sessions = `${base}/api/pico/v1/sandbox/sessions`;
-    await requireEmptyDesk(sessions, headers);
+    const currentUrl = `${base}/api/pico/v1/sandbox/sessions/current`;
 
     let reference;
     if (local) {
@@ -536,9 +508,9 @@ async function main() {
       for (let run = 1; run <= 3; run++) {
         report.retries.push(0);
         const result = await measureRound({
-          sessions,
+          page,
+          currentUrl,
           headers,
-          fixtureUrl,
           prepare: async () => {
             await goNewChat(page, base);
             await page.addStyleTag({
@@ -551,19 +523,13 @@ async function main() {
             });
           },
           measure: async () => {
-            // A snapshot publishes the existing desk to the pane. A chat URL
-            // would also trigger the frontend's own open request.
-            await sendPrompt(
-              page,
-              '请调用一次 sandbox_browser_snapshot，把我当前沙箱桌的网页显示在右侧供我操作。只读这张已有的桌，保持页面原样，然后结束任务。',
-            );
+            await sendPrompt(page, `打开 ${fixtureUrl}`);
             return await measurePane(
               page,
               () => page.locator(FULLSCREEN).click(),
               { out, getReference: local ? () => reference : undefined, run },
             );
           },
-          collectDesks: (ids) => collectChatDesks(page, base, headers, ids),
           onRetry: (retry, error) => {
             report.retries[run - 1] = retry;
             console.warn(`Round ${run}, retry ${retry}: ${error.message}`);
@@ -581,6 +547,11 @@ async function main() {
           }),
         );
       }
+      const currentStartedAt = performance.now();
+      if (await hasOpenDesk(currentUrl, headers)) {
+        throw new Error('A sandbox desk remains open after the final round.');
+      }
+      report.currentMs = performance.now() - currentStartedAt;
       report.medianFps = report.runs.map((r) => r.scroll.fps).sort((a, b) => a - b)[1];
       report.pass =
         report.medianFps >= 2 &&
