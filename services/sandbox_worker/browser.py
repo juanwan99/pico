@@ -290,8 +290,6 @@ class BrowserHands(Protocol):
 
     async def navigate(self, url: str) -> None: ...
 
-    async def open_url(self, url: str) -> None: ...
-
     async def click_ref(self, ref: str, *, double: bool = False) -> None: ...
 
     async def hover_ref(self, ref: str) -> None: ...
@@ -655,10 +653,14 @@ class _NavigationFailure:
         if frame is self.page.main_frame and frame.url != CHROMIUM_ERROR_PAGE:
             self.failed = None
 
-    def check_error_page(self) -> None:
+    def error_on_page(self) -> ToolError | None:
         if self.page.url == CHROMIUM_ERROR_PAGE and self.failed:
-            url, code = self.failed
-            raise _navigation_error(url, code)
+            return _navigation_error(*self.failed)
+        return None
+
+    def check_error_page(self) -> None:
+        if error := self.error_on_page():
+            raise error
 
 
 class PlaywrightPage:
@@ -690,12 +692,11 @@ class PlaywrightPage:
         # Values the AI typed into boxes; masked on box lines in snapshots (pico#1320).
         self._typed: list[str] = []
         self._pages: dict[Any, _NavigationFailure] = {}
-        self._opening_pages: list[Any] | None = None
         self._watch(page, initial_failure)
         for existing in context.pages:
             if existing is not page:
                 self._watch(existing)
-        context.on("page", self._on_context_page)
+        context.on("page", self._on_new_page)
 
     @property
     def url(self) -> str:
@@ -707,7 +708,6 @@ class PlaywrightPage:
         self._pages[page] = failure or _NavigationFailure(page)
         page.on("dialog", self._on_dialog)
         page.on("close", self._on_close)
-        page.on("popup", self._on_popup)
 
     def _open_pages(self) -> list[Any]:
         return [p for p in self._context.pages if p in self._pages and not p.is_closed()]
@@ -838,19 +838,6 @@ class PlaywrightPage:
                 for check_frame, event in commit.frames.items():
                     check_frame(event)
         return size
-
-    def _on_context_page(self, page: Any) -> None:
-        if self._opening_pages is None:
-            self._on_new_page(page)
-        else:
-            self._opening_pages.append(page)
-
-    def _on_popup(self, page: Any) -> None:
-        # Playwright emits context "page" before the opener's "popup".
-        # A popup from a visible tab still follows its opener during an open.
-        if self._opening_pages is not None:
-            self._opening_pages.remove(page)
-            self._on_new_page(page)
 
     def _on_new_page(self, page: Any) -> None:
         """A link with target=_blank / window.open: the new tab becomes current."""
@@ -1059,49 +1046,43 @@ class PlaywrightPage:
 
     async def snapshot(self) -> str:
         page = self._page
-        failure = self._pages[page]
-        failure.check_error_page()
         try:
             text = await page.aria_snapshot(mode="ai", timeout=10_000)
         except Exception as exc:
-            failure.check_error_page()
             raise ToolError("sandbox.raster_failed", "隔离 Chromium 未能生成页面快照") from exc
-        failure.check_error_page()
         text = mask_secret_values(str(text or ""), await self._password_values())
         text = mask_typed_box_values(text, self._typed)
         if len(text) > SNAPSHOT_MAX_CHARS:
             text = text[:SNAPSHOT_MAX_CHARS] + "\n- text: …（快照过长已截断，可滚动或翻页后再取）"
         return text
 
-    async def navigate(self, url: str) -> None:
-        parse_public_http_url(url)
-        self.loading_note = await _navigate_page(self._pages[self._page], url)
-        assert_http_public_or_internal(self.url)
+    def navigation_error(self) -> str | None:
+        error = self._pages[self._page].error_on_page()
+        return error.message if error else None
 
-    async def open_url(self, url: str) -> None:
-        """Replace the current tab only after Chromium opens the new address."""
-        previous = self._page
-        opening_pages: list[Any] = []
-        self._opening_pages = opening_pages
-        opened = False
+    async def navigate(self, url: str) -> None:
+        from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+        parse_public_http_url(url)
+        page = self._page
+        failure = self._pages[page]
+        before = page.url
         try:
-            page = await self._context.new_page()
-            failure = _NavigationFailure(page)
-            loading_note = await _navigate_page(failure, url)
-            parse_public_http_url(page.url)
-            opened = True
-        finally:
-            self._opening_pages = None
-            if not opened:
-                for pending in opening_pages:
-                    await pending.close()
-        self._watch(page, failure)
-        self._use(page)
-        self.loading_note = loading_note
-        await previous.close()
-        for popup in opening_pages:
-            if popup is not page and not popup.is_closed():
-                self._on_new_page(popup)
+            self.loading_note = await _navigate_page(failure, url)
+        except ToolError:
+            if before.startswith(("http://", "https://")):
+                if page.url == before and failure.failed:
+                    # goto can reject before Chromium commits the error document.
+                    try:
+                        await page.wait_for_url(
+                            CHROMIUM_ERROR_PAGE, wait_until="commit", timeout=1_000,
+                        )
+                    except PlaywrightTimeoutError:
+                        logger.debug("Chromium did not commit an error page", exc_info=True)
+                if page.url == CHROMIUM_ERROR_PAGE:
+                    self.loading_note = await _navigate_page(failure, None)
+            raise
+        assert_http_public_or_internal(self.url)
 
     async def _element_info(self, loc: Any) -> dict[str, Any]:
         try:
@@ -1650,8 +1631,9 @@ def _navigation_error(url: str, error_code: str, *, timed_out: bool = False) -> 
         parts = urlsplit(url)
         # Redirect targets can include login tokens.
         safe_url = urlunsplit((parts.scheme, parts.netloc.rsplit("@", 1)[-1], parts.path, "", ""))
-        message += f"。地址：{safe_url}"
-    if error_code:
+        reason = f"{error_code}，{message}" if error_code else message
+        message = f"页面打开失败：地址 {safe_url}（{reason}）"
+    elif error_code:
         message += f"（{error_code}）"
     return ToolError("sandbox.fetch_failed", message)
 
@@ -1692,6 +1674,8 @@ async def _navigate_page(failure: _NavigationFailure, url: str | None) -> str:
         match = CHROMIUM_NET_ERROR.search(str(exc).partition("\n")[0])
         error_code = match[1] if match else ""
         failed_url, error_code = failure.failed or (url or "", error_code)
+        if failed_url and error_code and error_code != "ERR_ABORTED":
+            failure.failed = (failed_url, error_code)
         raise _navigation_error(
             failed_url, error_code, timed_out=isinstance(exc, PlaywrightTimeoutError),
         ) from exc

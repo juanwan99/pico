@@ -100,6 +100,8 @@ describe('picoOpenInPane', () => {
   it.each([
     ['先登录。再打开 https://example.com中文说明', 'https://example.com/'],
     ['打开 example.com。看完告诉我', 'https://example.com/'],
+    ['打开 https://example.com/index.html。查看首页', 'https://example.com/index.html'],
+    ['打开 https://example.com/guide.pdf，查看手册', 'https://example.com/guide.pdf'],
     [
       '打开 https://example.com/search?q=a%20b&sort=1#top，看看结果',
       'https://example.com/search?q=a%20b&sort=1#top',
@@ -107,6 +109,10 @@ describe('picoOpenInPane', () => {
     ['https://example.com/path!）', 'https://example.com/path'],
   ])('takes only the URL in %s', (message, url) => {
     expect(detectOpenWebsiteIntent(message)).toBe(url);
+  });
+
+  it('still treats a filename without a URL scheme as a file', () => {
+    expect(detectOpenWebsiteIntent('打开 index.html。查看首页')).toBeNull();
   });
 
   it('R1a/R1d: default 480, drag floor 340, 390 viewport cannot overflow', () => {

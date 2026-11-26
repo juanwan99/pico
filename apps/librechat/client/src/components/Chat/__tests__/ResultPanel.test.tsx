@@ -558,19 +558,20 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
   });
 
   it('T5: saying 打开 https://example.com opens 网页 via sandbox_browser_open', async () => {
+    const originalId = 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa';
     mockOpenBrowser.mockResolvedValue({
-      session_id: 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa',
+      session_id: originalId,
       url: 'https://example.com/',
       title: 'Example Domain',
     });
-    render(
+    const panel = (
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
           run={run()}
           runStatusLabel="已完成"
           messages={[
             {
-              messageId: 'u1',
+              messageId: 'website-open-success',
               conversationId: 'c1',
               parentMessageId: null,
               text: '打开 https://example.com',
@@ -578,13 +579,40 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
             },
           ]}
         />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
+    const { unmount } = render(panel);
     expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
     await waitFor(() =>
       expect(mockOpenBrowser).toHaveBeenCalledWith('https://example.com/'),
     );
     expect(screen.queryByTitle('browser-preview')).not.toBeInTheDocument();
+
+    unmount();
+    const reopened = render(panel);
+    expect(await screen.findByTestId('sandbox-web-pane')).toBeInTheDocument();
+    expect(mockOpenBrowser).toHaveBeenCalledTimes(1);
+
+    reopened.unmount();
+    const replacementId = 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb';
+    const replacement = { session_id: replacementId, url: 'https://example.com/' };
+    const gone = new Error('pico 404: gone');
+    (getPicoSandboxSession as jest.Mock).mockImplementation((id) =>
+      id === originalId ? Promise.reject(gone) : Promise.resolve(replacement),
+    );
+    (getPicoSandboxScreenshot as jest.Mock).mockImplementation((id) =>
+      id === originalId ? Promise.reject(gone) : Promise.resolve(new Blob()),
+    );
+    mockOpenBrowser.mockResolvedValue(replacement);
+    const expired = render(panel);
+    await userEvent.click(await screen.findByTestId('sandbox-reopen'));
+    expect(await screen.findByTestId('sandbox-web-viewport')).toBeInTheDocument();
+    expect(mockOpenBrowser).toHaveBeenCalledTimes(2);
+
+    expired.unmount();
+    render(panel);
+    expect(await screen.findByTestId('sandbox-web-viewport')).toBeInTheDocument();
+    expect(mockOpenBrowser).toHaveBeenCalledTimes(2);
   });
 
   it('shows the sandbox quota message returned by the API', async () => {
@@ -597,7 +625,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
           runStatusLabel="已完成"
           messages={[
             {
-              messageId: 'u1',
+              messageId: 'website-open-quota',
               conversationId: 'c1',
               parentMessageId: null,
               text: '打开 https://example.com',
@@ -610,9 +638,9 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
     expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(message);
   });
 
-  it('keeps a failed website open to one attempt per user message during streaming', async () => {
+  it('keeps a failed website open to one attempt per user message across streaming and remounts', async () => {
     mockOpenBrowser.mockRejectedValue(new Error('DNS failure'));
-    const panel = (messageId: string, assistantText: string) => (
+    const panel = (messageId: string, assistantText: string, clientTimestamp?: string) => (
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
           messages={[
@@ -620,6 +648,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
               messageId,
               conversationId: 'c1',
               parentMessageId: null,
+              clientTimestamp,
               isCreatedByUser: true,
               text: '打开 https://example.com',
             },
@@ -634,17 +663,25 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
         />
       </MemoryRouter>
     );
-    const { rerender } = render(panel('u1', ''));
+    const messageId = 'website-open-failure';
+    const timestamp = '2026-11-25T16:56:00';
+    const { rerender, unmount } = render(panel('website-open-optimistic', '', timestamp));
     const error = await screen.findByTestId('artifact-action-error');
     expect(error).toHaveTextContent('打开网页失败，请稍后重试');
 
-    rerender(panel('u1', '正在'));
-    rerender(panel('u1', '正在查看'));
-    rerender(panel('u1', '正在查看网页'));
+    rerender(panel(messageId, '正在', timestamp));
+    rerender(panel(messageId, '正在查看', timestamp));
+    rerender(panel(messageId, '正在查看网页'));
     expect(mockOpenBrowser).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('artifact-action-error')).toBe(error);
 
-    rerender(panel('u2', ''));
+    unmount();
+    const reopened = render(panel(messageId, '正在查看网页'));
+    await screen.findByTestId('artifact-action-error');
+    reopened.rerender(panel(messageId, '网页查看中'));
+    expect(mockOpenBrowser).toHaveBeenCalledTimes(1);
+
+    reopened.rerender(panel('website-open-failure-next-turn', ''));
     expect(mockOpenBrowser).toHaveBeenCalledTimes(2);
     expect(await screen.findByTestId('artifact-action-error')).toHaveTextContent(
       '打开网页失败，请稍后重试',
@@ -704,7 +741,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
           ]}
           messages={[
             {
-              messageId: 'u1',
+              messageId: 'website-open-named-alias',
               conversationId: 'c1',
               parentMessageId: null,
               text: '打开腾讯官网',

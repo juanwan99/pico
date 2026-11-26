@@ -71,6 +71,8 @@ type ArtifactAction = {
 const UNNAMED_ARTIFACT = '未命名产物';
 const UNNAMED_ATTACHMENT = '未命名附件';
 const UNKNOWN_KIND = '类型未知';
+type WebsiteAttempt = { url: string; request: ReturnType<typeof openPicoSandboxBrowser> };
+const autoWebsiteAttempts = new Map<string, WebsiteAttempt>();
 
 /** 「在等你选」contains 等待 — do not treat parked HITL as still generating files. */
 function showFilesPreparingSpinner(
@@ -323,7 +325,7 @@ export default function ResultPanel({
   const [websiteError, setWebsiteError] = useState<string | null>(null);
   const [chromeOpen, setChromeOpen] = useState(false);
   const openedWebsiteRef = useRef<string | null>(null);
-  const autoWebsiteAttemptRef = useRef<{ messageId: string; url: string } | null>(null);
+  const autoWebsiteAttemptRef = useRef<WebsiteAttempt | null>(null);
   const [paneWidth, setPaneWidth] = useState(() =>
     readStoredResultPaneWidth(
       typeof window === 'undefined' ? null : window.localStorage,
@@ -475,10 +477,22 @@ export default function ResultPanel({
     setPreviewArtifactId(null);
   };
 
-  const openWebsiteInPane = async (rawUrl: string, messageId?: string) => {
+  const openWebsiteInPane = async (rawUrl: string, message?: TMessage) => {
     const url = rawUrl.trim();
-    const attempt = autoWebsiteAttemptRef.current;
-    if (attempt && attempt.messageId === messageId && attempt.url === url) {
+    const key = message ? JSON.stringify([message.messageId, url]) : null;
+    // The SSE created event replaces the optimistic ID and carries over clientTimestamp.
+    const pendingKey = message?.clientTimestamp
+      ? JSON.stringify([message.parentMessageId, message.clientTimestamp, url])
+      : null;
+    let attempt = key ? autoWebsiteAttempts.get(key) : undefined;
+    if (!attempt && key && pendingKey) {
+      attempt = autoWebsiteAttempts.get(pendingKey);
+      if (attempt) {
+        autoWebsiteAttempts.set(key, attempt);
+        autoWebsiteAttempts.delete(pendingKey);
+      }
+    }
+    if (attempt && autoWebsiteAttemptRef.current === attempt) {
       return;
     }
     if (!url || openedWebsiteRef.current === url) {
@@ -487,16 +501,26 @@ export default function ResultPanel({
       }
       return;
     }
-    const autoAttempt = messageId === undefined ? null : { messageId, url };
-    if (autoAttempt) {
-      autoWebsiteAttemptRef.current = autoAttempt;
-    }
     openedWebsiteRef.current = url;
     setWebsiteError(null);
     clearFilePreview();
     setView('web');
     try {
-      const meta = await openPicoSandboxBrowser(url);
+      const request = attempt?.request ?? openPicoSandboxBrowser(url);
+      if (key) {
+        if (!attempt) {
+          attempt = { url, request };
+          autoWebsiteAttempts.set(key, attempt);
+          if (pendingKey) {
+            autoWebsiteAttempts.set(pendingKey, attempt);
+          }
+        }
+        autoWebsiteAttemptRef.current = attempt;
+      } else if (autoWebsiteAttemptRef.current?.url === url) {
+        // An explicit reopen can replace the expired session for this turn.
+        autoWebsiteAttemptRef.current.request = request;
+      }
+      const meta = await request;
       const sessionId = String(meta.session_id || '').trim();
       if (!sessionId.startsWith('sbox_')) {
         throw new Error('sandbox session missing');
@@ -508,9 +532,6 @@ export default function ResultPanel({
         humanCopy: String(meta.human_copy || '这是你的隔离浏览器，可以直接在画面里操作'),
         kind: String(meta.kind || 'browser'),
       });
-      if (autoWebsiteAttemptRef.current === autoAttempt) {
-        autoWebsiteAttemptRef.current = null;
-      }
     } catch (err) {
       if (openedWebsiteRef.current === url) {
         openedWebsiteRef.current = null;
@@ -577,8 +598,8 @@ export default function ResultPanel({
       void openOfficeInPane(office);
       return;
     }
-    const messageId = site
-      ? messages?.slice().reverse().find((message) => message?.isCreatedByUser)?.messageId
+    const userMessage = site
+      ? messages?.slice().reverse().find((message) => message?.isCreatedByUser)
       : undefined;
     if (ledgerSandbox) {
       if (site) {
@@ -592,13 +613,13 @@ export default function ResultPanel({
         if (already) {
           return;
         }
-        void openWebsiteInPane(site, messageId);
+        void openWebsiteInPane(site, userMessage);
         return;
       }
       return;
     }
     if (site) {
-      void openWebsiteInPane(site, messageId);
+      void openWebsiteInPane(site, userMessage);
       return;
     }
     setWebsiteError((prev) =>

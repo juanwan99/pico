@@ -180,7 +180,10 @@ export function detectOpenWebsiteIntent(text: string): string | null {
     ?.replace(/[.,;:!?)]+$/, '');
   if (candidate) {
     // Do not treat "打开 课程总结.md" as a website.
-    if (/\.(docx?|pptx?|xlsx?|pdf|md|txt|html?|csv|json|png|jpe?g|gif|webp)$/i.test(candidate)) {
+    if (
+      !/^https?:\/\//i.test(candidate) &&
+      /\.(docx?|pptx?|xlsx?|pdf|md|txt|html?|csv|json|png|jpe?g|gif|webp)$/i.test(candidate)
+    ) {
       return null;
     }
     return canonicalizeHttpUrl(candidate);

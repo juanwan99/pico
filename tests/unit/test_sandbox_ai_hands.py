@@ -202,9 +202,6 @@ class FakeFormPage:
         )
         return mask_secret_values(raw, [self.fields["e2"]])
 
-    async def open_url(self, url: str) -> None:
-        await self.navigate(url)
-
     async def navigate(self, url: str) -> None:
         parse_public_http_url(url)
         self._url = url
