@@ -99,9 +99,10 @@ export function loginFailureDetails(error, ssoStatus) {
   return status ? { reason: 'http_error', http_status: status } : {};
 }
 
-function hasNewDeskStream(paneRequests, oldSessionId) {
-  return Boolean(oldSessionId) && paneRequests.some(({ session_id, kind, status }) =>
-    kind === 'stream' && session_id !== oldSessionId && status >= 200 && status < 300,
+function hasNewDeskStream(paneRequests, oldSessionId, viewportSessionId) {
+  return Boolean(oldSessionId && viewportSessionId && viewportSessionId !== oldSessionId) &&
+    paneRequests.some(({ session_id, kind, status }) =>
+      kind === 'stream' && session_id === viewportSessionId && status >= 200 && status < 300,
   );
 }
 
@@ -109,7 +110,7 @@ export function roundAssertions(round, {
   finished, paneSeen, chromeErrorSeen, open4xx, openRequestsSettled,
   browserOpens, aiBrowserOpens,
   targetHost, finalPane, viewportVisible, reply = '', paneError = '', runCard = '',
-  oldSessionId, paneRequests = [],
+  oldSessionId, viewportSessionId, paneRequests = [],
 } = {}) {
   const assertions = {
     finished,
@@ -122,7 +123,8 @@ export function roundAssertions(round, {
     assertions.sandbox_web_pane_shown = paneSeen;
     assertions.no_chrome_error = chromeErrorSeen === false;
     if (round === 'same_chat_close_reopen') {
-      assertions.new_stream_after_close = viewportVisible && hasNewDeskStream(paneRequests, oldSessionId);
+      assertions.new_stream_after_close = viewportVisible &&
+        hasNewDeskStream(paneRequests, oldSessionId, viewportSessionId);
     } else {
       const url = URL.parse(finalPane?.url ?? '');
       assertions.pane_stops_at_target_login = viewportVisible && Boolean(targetHost) &&
@@ -154,10 +156,13 @@ function watchRound(stopSelector) {
     watch.chromeErrorSeen ||= /chrome-error/i.test(document.body.innerText);
     const viewport = pane?.querySelector('[data-testid="sandbox-web-viewport"]');
     const bounds = viewport?.getBoundingClientRect();
-    const viewportVisible = Boolean(bounds?.width && bounds.height &&
-      viewport.checkVisibility({ visibilityProperty: true }));
-    if (viewportVisible) watch.firstFrameMs ??= Math.round(performance.now() - watch.firstFrameStartedAt);
-    return viewportVisible;
+    const sessionId = viewport?.getAttribute('data-session-id');
+    if (!bounds?.width || !bounds.height || !viewport.checkVisibility({ visibilityProperty: true }) ||
+        (watch.oldSessionId && (!sessionId || sessionId === watch.oldSessionId))) {
+      return null;
+    }
+    watch.firstFrameMs ??= Math.round(performance.now() - watch.firstFrameStartedAt);
+    return viewport;
   }
   const observer = new MutationObserver(sample);
   observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
@@ -305,12 +310,13 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
         }
         shortcutOpens = browserOpens;
         reopenRequestsStart = result.pane_requests.length;
-        await page.evaluate(() => {
+        await page.evaluate((closedSessionId) => {
           const { watch } = window.picoOpenUrlWatch;
           watch.stopSeen = false;
           watch.firstFrameMs = null;
           watch.firstFrameStartedAt = performance.now();
-        });
+          watch.oldSessionId = closedSessionId;
+        }, oldSessionId);
         shortcutStage = undefined;
       }
       await sendPrompt(page, prompt);
@@ -318,13 +324,18 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
       finished = true;
 
       if (isTemplate) {
-        await viewport.waitFor({ timeout: remaining() });
         if (isReopen) {
-          const sawNewStream = () => hasNewDeskStream(reopenRequests(), oldSessionId);
+          const visibleSession = await page.waitForFunction(
+            () => window.picoOpenUrlWatch.sample()?.getAttribute('data-session-id'),
+            undefined, { timeout: remaining() },
+          );
+          const viewportSessionId = await visibleSession.jsonValue();
+          const sawNewStream = () => hasNewDeskStream(reopenRequests(), oldSessionId, viewportSessionId);
           if (!sawNewStream()) {
             await page.waitForResponse(sawNewStream, { timeout: remaining() });
           }
         } else {
+          await viewport.waitFor({ timeout: remaining() });
           // Take a fresh metadata sample from the visible pane after the turn.
           const samplingStarted = Date.now();
           const request = await page.waitForEvent('requestfinished', {
@@ -374,7 +385,7 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
       page.off('requestfailed', onRequestFailed);
       observed = await page.evaluate(() => {
         const { watch, sample, observer } = window.picoOpenUrlWatch;
-        const viewportVisible = sample();
+        const viewport = sample();
         observer.disconnect();
         document.removeEventListener('load', sample, true);
         const assistant = Array.from(document.querySelectorAll('.agent-turn')).at(-1);
@@ -384,9 +395,12 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
         ).join('\n');
         const paneError = document.querySelector('[data-testid="artifact-action-error"]')?.innerText;
         const runCard = assistant?.querySelector('[data-testid="pico-thinking-chain-body"]')?.innerText;
-        return { ...watch, viewportVisible, reply, paneError, runCard };
+        return {
+          ...watch, viewportVisible: Boolean(viewport),
+          viewportSessionId: viewport?.getAttribute('data-session-id'), reply, paneError, runCard,
+        };
       });
-      result.first_frame_ms = observed.firstFrameMs;
+      result.first_frame_ms = !isReopen || observed.oldSessionId ? observed.firstFrameMs : null;
     }
   }
   const metadata = await Promise.all(metadataRequests.map(async (request) => {

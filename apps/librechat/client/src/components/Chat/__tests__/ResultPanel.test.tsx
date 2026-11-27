@@ -1224,10 +1224,14 @@ describe('ResultPanel sandbox web pane', () => {
     const ledger = (desk: typeof oldDesk): PicoRunEvent[] => [
       { id: desk.session_id, run_id: 'run-1', seq: 1, type: 'sandbox.session', payload: desk },
     ];
-    const panel = (messages: TMessage[], runEvents: PicoRunEvent[] = []) => (
+    const panel = (
+      messages: TMessage[],
+      runEvents: PicoRunEvent[] = [],
+      routeId = shortcut.conversationId,
+    ) => (
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ResultPanel
-          conversationId={shortcut.conversationId}
+          conversationId={routeId}
           messages={messages}
           runEvents={runEvents}
         />
@@ -1267,24 +1271,44 @@ describe('ResultPanel sandbox web pane', () => {
       },
     );
 
-    it('keeps the shortcut desk when the same AI ID returns after an empty run', async () => {
+    it.each(['saved chat', 'draft promoted to saved chat'])(
+      'keeps the shortcut desk when the same AI ID returns in a %s',
+      async (start) => {
+        const routeId = start === 'saved chat' ? shortcut.conversationId : 'new';
+        const { rerender } = render(panel([template], ledger(newDesk), routeId));
+        expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
+        rerender(panel([template], ledger(newDesk)));
+
+        const laterShortcut = { ...shortcut, messageId: 'session-switch-later-shortcut' };
+        const messages = [template, laterShortcut];
+        rerender(panel(messages, ledger(newDesk)));
+        await waitFor(() => expect(streamIds()).toEqual([newId, oldId]));
+        expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
+
+        rerender(panel(messages, ledger(newDesk)));
+        expect(streamIds()).toEqual([newId, oldId]);
+        expect(screen.getByTestId('sandbox-web-viewport')).toBeVisible();
+
+        rerender(panel(messages));
+        expect(streamIds()).toEqual([newId, oldId]);
+        rerender(panel(messages, ledger(newDesk)));
+        expect(streamIds()).toEqual([newId, oldId]);
+        const viewport = screen.getByTestId('sandbox-web-viewport');
+        expect(viewport).toBeVisible();
+        expect(viewport).toHaveAttribute('data-session-id', oldId);
+      },
+    );
+
+    it('clears both desks after navigating to a different conversation', async () => {
       const { rerender } = render(panel([template], ledger(newDesk)));
       expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
-      const laterShortcut = { ...shortcut, messageId: 'session-switch-later-shortcut' };
-      const messages = [template, laterShortcut];
-      rerender(panel(messages, ledger(newDesk)));
+      const laterShortcut = { ...shortcut, messageId: 'session-switch-before-nav' };
+      rerender(panel([template, laterShortcut], ledger(newDesk)));
       await waitFor(() => expect(streamIds()).toEqual([newId, oldId]));
-      expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
 
-      rerender(panel(messages, ledger(newDesk)));
+      rerender(panel([], [], 'another-conversation'));
+      expect(screen.getByTestId('sandbox-empty')).toBeVisible();
       expect(streamIds()).toEqual([newId, oldId]);
-      expect(screen.getByTestId('sandbox-web-viewport')).toBeVisible();
-
-      rerender(panel(messages));
-      expect(streamIds()).toEqual([newId, oldId]);
-      rerender(panel(messages, ledger(newDesk)));
-      expect(streamIds()).toEqual([newId, oldId]);
-      expect(screen.getByTestId('sandbox-web-viewport')).toBeVisible();
     });
   });
 

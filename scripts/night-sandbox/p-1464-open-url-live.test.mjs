@@ -241,6 +241,7 @@ test('same-chat reopen requires both a visible viewport and a successful stream 
   const observed = {
     finished: true, openRequestsSettled: true, open4xx: 0, browserOpens: 0, aiBrowserOpens: 1,
     paneSeen: true, chromeErrorSeen: false, oldSessionId, viewportVisible: true,
+    viewportSessionId: newStream.session_id,
     paneRequests: [newStream], targetHost: 'example.com',
     finalPane: { url: 'https://example.com/home', has_password_input: false },
     reply: '页面已经打开。',
@@ -251,6 +252,8 @@ test('same-chat reopen requires both a visible viewport and a successful stream 
   for (const override of [
     { oldSessionId: undefined },
     { viewportVisible: false },
+    { viewportSessionId: oldSessionId },
+    { viewportSessionId: 'sbox_other' },
     { paneRequests: [] },
     { paneRequests: [{ ...newStream, session_id: oldSessionId }] },
     { paneRequests: [{ ...newStream, status: 404 }] },
