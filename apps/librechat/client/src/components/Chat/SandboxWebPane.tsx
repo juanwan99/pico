@@ -860,6 +860,7 @@ export default function SandboxWebPane({
               }}
               className="mx-auto block h-auto max-w-none cursor-default bg-white"
               data-testid="sandbox-web-viewport"
+              data-session-id={sessionId}
             />
           ) : (
             <div

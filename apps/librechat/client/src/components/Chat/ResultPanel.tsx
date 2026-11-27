@@ -36,6 +36,7 @@ import {
   type ResultPaneView,
 } from '~/utils/picoOpenInPane';
 import { latestArtifactsByFilename } from '~/utils/picoLatestArtifacts';
+import { resolveLedgerConversationId } from '~/utils/picoLedgerConvo';
 import { GENERIC_RETRY, teacherSafe } from '~/utils/picoTeacherText';
 import {
   collectPicoOfficeContentBox,
@@ -347,19 +348,43 @@ export default function ResultPanel({
       setLastRunSandbox(runSandbox);
     }
   }, [runSandbox]);
+  const runSandboxId = runSandbox?.sessionId;
+  const lastRunSandboxIdRef = useRef<string>();
   const ledgerSandbox = runSandbox || lastRunSandbox;
   const officeBox = useMemo(() => collectPicoOfficeContentBox(runEvents), [runEvents]);
   const sandboxSession = localSandbox || ledgerSandbox;
   const openedOfficeRef = useRef<string | null>(null);
+  const ledgerConversationId = resolveLedgerConversationId(
+    conversationId,
+    messages?.[0]?.conversationId,
+  );
+  const previousConversation = useRef<{
+    routeId: typeof conversationId;
+    ledgerId: typeof ledgerConversationId;
+  }>();
 
   useEffect(() => {
+    const previous = previousConversation.current;
+    previousConversation.current = { routeId: conversationId, ledgerId: ledgerConversationId };
+    // The created event supplies the saved ID before /c/new navigates to it.
+    if (previous && (previous.routeId === conversationId || previous.ledgerId === ledgerConversationId)) {
+      return;
+    }
     setLocalSandbox(null);
     setLastRunSandbox(null);
+    lastRunSandboxIdRef.current = undefined;
     openedWebsiteRef.current = null;
     autoWebsiteAttemptRef.current = null;
     openedOfficeRef.current = null;
     setWebsiteError(null);
-  }, [conversationId]);
+  }, [conversationId, ledgerConversationId]);
+
+  useEffect(() => {
+    if (runSandboxId && runSandboxId !== lastRunSandboxIdRef.current) {
+      lastRunSandboxIdRef.current = runSandboxId;
+      setLocalSandbox(null);
+    }
+  }, [runSandboxId]);
   const previewActive = Boolean(
     previewHtml || previewImage || previewPdf || previewText || previewOffice,
   );
