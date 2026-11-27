@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { v5: uuidv5 } = require('uuid');
 const { Constants, EModelEndpoint } = require('librechat-data-provider');
 const { getOpenAIModels } = require('@librechat/api');
@@ -21,22 +22,33 @@ async function readPico(base, headers, path) {
   }
 }
 
-async function importConversation(read, user, task) {
-  const {
-    conversation_id: conversationId,
-    latest_run: { id: runId },
-  } = task;
+async function importConversation(read, user, task, key, preferredModel) {
+  const conversationId = task.conversation_id;
   const ctx = { userId: user.id };
+  const batches = mongoose.connection.collection('pico_task_conversation_imports');
+  const filter = { _id: key };
+  // A retry resumes the same run's message upserts even if Pico has run the task again.
+  const { runId, completed } = await batches.findOneAndUpdate(
+    filter,
+    { $setOnInsert: { runId: task.latest_run.id } },
+    { upsert: true, returnDocument: 'after' },
+  );
+  if (completed) {
+    return false;
+  }
+  const complete = () => batches.updateOne(filter, { $set: { completed: true } });
   if (await getConvo(ctx.userId, conversationId)) {
+    await complete();
     return false;
   }
 
-  const [{ run }, { events }, { tasks: conversationTasks }, [model]] = await Promise.all([
+  const [{ run }, { events }, { tasks: conversationTasks }, models] = await Promise.all([
     read(`/v1/runs/${runId}`),
     read(`/v1/runs/${runId}/events`),
     read(`/v1/tasks?conversation_id=${encodeURIComponent(conversationId)}`),
     getOpenAIModels({ user: user.id, userObject: user }),
   ]);
+  const model = models.includes(preferredModel) ? preferredModel : models[0];
   const finalText = events.findLast((event) => event.type === 'message.final')?.payload.text;
   if (typeof finalText !== 'string') {
     throw new PicoUpstreamError(`Pico run ${runId} is missing its final answer`);
@@ -74,18 +86,21 @@ async function importConversation(read, user, task) {
   if (saved?.conversationId !== conversationId) {
     throw new Error(`Could not save mobile task conversation ${conversationId}`);
   }
+  await complete();
   return true;
 }
 
-async function syncConversation(read, user, task) {
-  const key = `${user.id}:${task.conversation_id}`;
+async function syncConversation(read, req, res, task) {
+  const key = JSON.stringify([req.user.id, task.conversation_id]);
   const pending = importsInProgress.get(key);
   if (pending) {
-    await pending;
+    if (await pending) {
+      res.set('X-Pico-Refresh-Conversations', '1');
+    }
     return false;
   }
 
-  const importing = importConversation(read, user, task);
+  const importing = importConversation(read, req.user, task, key, req.body?.model);
   importsInProgress.set(key, importing);
   try {
     return await importing;
@@ -107,7 +122,7 @@ function syncTaskConversations(picoBase, picoHeaders) {
           task.source === 'mobile' &&
           task.conversation_id &&
           task.latest_run?.status === 'succeeded' &&
-          (await syncConversation(read, req.user, task))
+          (await syncConversation(read, req, res, task))
         ) {
           created++;
         }

@@ -2,7 +2,7 @@
  * Browser → LibreChat `/api/pico` → Pico ledger (Task/Run/Artifact/Workspace).
  * Must send LibreChat JWT (same as other API clients).
  */
-import { getTokenHeader } from 'librechat-data-provider';
+import { getTokenHeader, request } from 'librechat-data-provider';
 import { splitSseEvents } from '~/utils/picoSse';
 import { teacherSafe } from '~/utils/picoTeacherText';
 
@@ -189,6 +189,10 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers || {}),
     },
   });
+  return picoResponse<T>(res);
+}
+
+async function picoResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     try {
@@ -215,8 +219,15 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function syncPicoTaskConversations() {
-  return picoFetch<{ created: number }>('/task-conversations/sync', { method: 'POST' });
+export async function syncPicoTaskConversations(model: string) {
+  const res = await request.authenticatedFetch('/api/pico/task-conversations/sync', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  });
+  const result = await picoResponse<{ created: number }>(res);
+  return { ...result, refresh: res.headers.get('X-Pico-Refresh-Conversations') === '1' };
 }
 
 export async function getPicoArtifactContent(

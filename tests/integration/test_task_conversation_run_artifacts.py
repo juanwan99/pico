@@ -1708,15 +1708,17 @@ async def test_exam_grading_ticket_rides_its_own_lane_and_bill_line(tmp_path, mo
     assert "lane" not in rows["member-chat"]
 
 
-@pytest.mark.parametrize("with_photos", [True, False])
-def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, with_photos):
+@pytest.mark.parametrize("photo_case", ["normal", "empty", "same_name", "large"])
+def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, photo_case):
     from io import BytesIO
+    from random import Random
 
     from app import delivery_gate
     from app.run_service import _execute_run
     from pico_orchestrator.true_pi.runner import take_conversation_files
     from PIL import Image
 
+    with_photos = photo_case != "empty"
     headers = _headers(client, "member-mobile")
     monkeypatch.setenv("PICO_RUNNER_URL", "http://runner.test")
     monkeypatch.delenv("PICO_RUNNER_MEMBERSHIPS", raising=False)
@@ -1747,19 +1749,26 @@ def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, with_photos)
     images_to_upload = [
         ("a.png", "red"), ("b.png", "blue"), ("unbound.png", "white"), ("pending.png", "green")
     ]
-    for photo, color in images_to_upload:
+    if photo_case == "same_name":
+        images_to_upload[1] = ("a.png", "blue")
+    for index, (photo, color) in enumerate(images_to_upload):
         buf = BytesIO()
-        Image.new("RGB", (2, 2), color).save(buf, format="PNG")
+        if photo_case == "large" and index == 0:
+            size = (1800, 1800)
+            Image.frombytes("RGB", size, Random(42).randbytes(1800**2 * 3)).save(buf, format="PNG")
+            assert buf.tell() > 8 * 1024 * 1024
+        else:
+            Image.new("RGB", (2, 2), color).save(buf, format="PNG")
         raw = buf.getvalue()
         encoded = base64.b64encode(raw).decode()
         upload_headers = headers
         if photo == "pending.png":
             upload_headers = {**headers, "X-Conversation-Id": "pending_other_tab"}
         uploaded = client.post(
-            "/v1/files", headers=upload_headers, json={"filename": photo, "content_b64": encoded}
+            "/v1/files", headers=upload_headers, files={"file": (photo, raw, "image/png")}
         )
         assert uploaded.status_code == 200, uploaded.text
-        if with_photos and photo in {"a.png", "b.png"}:
+        if with_photos and index < 2:
             photos.append((uploaded.json()["id"], photo, raw, encoded))
 
     submitted = client.post(
@@ -1781,10 +1790,18 @@ def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, with_photos)
     assert len(calls) == 2
     for run_cid, images, files in calls:
         assert run_cid == cid
-        assert {(img["mimeType"], img["data"]) for img in images} == {
-            ("image/png", p[3]) for p in photos
-        }
-        assert dict(files) == {p[1]: p[2] for p in photos}
+        assert len(images) == len(photos)
+        actual_images = {img["data"] for img in images}
+        if photo_case == "large":
+            assert photos[1][3] in actual_images
+            [model_copy] = actual_images - {photos[1][3]}
+            model_bytes = base64.b64decode(model_copy)
+            assert len(model_bytes) <= 8 * 1024 * 1024
+            assert Image.open(BytesIO(model_bytes)).getpixel((0, 0))
+        else:
+            assert actual_images == {p[3] for p in photos}
+        assert len(dict(files)) == len(photos)
+        assert {raw for _, raw in files} == {p[2] for p in photos}
     artifacts = client.get("/v1/artifacts", headers=headers, params={"conversation_id": cid})
     assert {p[0] for p in photos} <= {item["id"] for item in artifacts.json()["artifacts"]}
     task_artifacts = client.get(f"/v1/tasks/{task['id']}", headers=headers).json()["artifacts"]
@@ -1821,5 +1838,9 @@ def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, with_photos)
         assert len(calls) == 3
         desktop_cid, desktop_images, desktop_files = calls[-1]
         assert desktop_cid == cid
-        assert {image["data"] for image in desktop_images} == {p[3] for p in photos}
-        assert dict(desktop_files) == {p[1]: p[2] for p in photos}
+        if photo_case == "large":
+            assert {image["data"] for image in desktop_images} == {photos[1][3]}
+        else:
+            assert {image["data"] for image in desktop_images} == {p[3] for p in photos}
+        assert len(dict(desktop_files)) == len(photos)
+        assert {raw for _, raw in desktop_files} == {p[2] for p in photos}

@@ -1745,7 +1745,6 @@ async def create_task(
     task, run = await task_create.create_task(
         session, principal, body.title, body.prompt.strip(), body.skill_id, body.source, body.upload_ids
     )
-    await run_service.start_run_background(run.id, principal)
     return {"task": _task_dict(task), "run": _run_dict(run)}
 
 

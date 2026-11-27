@@ -11,6 +11,7 @@ import { useChatHelpers, useLocalize } from '~/hooks';
 import { syncPicoTaskConversations } from '~/data-provider/pico/api';
 import Sidebar from './Sidebar';
 import { cn } from '~/utils';
+import { getPicoModelMode } from '~/utils/picoModelPref';
 import store from '~/store';
 
 const EMPTY_LINKS: NavLink[] = [];
@@ -62,8 +63,8 @@ function UnifiedSidebar() {
   useEffect(() => {
     const sync = async () => {
       try {
-        const { created } = await syncPicoTaskConversations();
-        if (created > 0) {
+        const { created, refresh } = await syncPicoTaskConversations(getPicoModelMode());
+        if (created > 0 || refresh) {
           await queryClient.cancelQueries([QueryKeys.allConversations]);
           await queryClient.invalidateQueries([QueryKeys.allConversations]);
         }

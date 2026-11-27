@@ -171,3 +171,38 @@ def test_read_only_principal_cannot_create_mobile_task(client):
     response = client.post("/v1/tasks", headers=headers, json={"prompt": "整理", "source": "mobile"})
     assert response.status_code == 403, response.text
     assert [task["id"] for task in _tasks(client, headers)] == ["old-task"]
+
+
+def test_repeated_mobile_submission_keeps_original_photo_binding(client, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    headers = _headers()
+    ids = [_upload(client, headers, name) for name in ("first.png", "second.png")]
+    started = []
+
+    async def record_start(run_id, _principal):
+        started.append(run_id)
+
+    monkeypatch.setattr(run_service, "start_run_background", record_start)
+    body = {"prompt": "整理", "source": "mobile", "upload_ids": ids}
+
+    def submit(payload):
+        return client.post("/v1/tasks", headers=headers, json=payload)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(submit, [body, {**body, "upload_ids": ids[::-1]}]))
+    assert [r.status_code for r in responses] == [200, 200]
+    first, duplicate = [r.json() for r in responses]
+    assert first["task"]["id"] == duplicate["task"]["id"]
+    assert first["run"]["id"] == duplicate["run"]["id"]
+    assert started == [first["run"]["id"]]
+
+    subset = submit({**body, "upload_ids": ids[:1]})
+    assert subset.status_code == 400
+    foreign = _upload(client, headers, "different.png")
+    invalid = submit({**body, "upload_ids": [ids[0], foreign], "prompt": "重新排版"})
+    assert invalid.status_code == 400
+    assert invalid.json()["detail"]["code"] == "upload.invalid"
+    cid = first["task"]["conversation_id"]
+    items = client.get("/v1/artifacts", headers=headers, params={"conversation_id": cid})
+    assert {item["id"] for item in items.json()["artifacts"]} == set(ids)

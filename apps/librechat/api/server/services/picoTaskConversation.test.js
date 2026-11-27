@@ -1,6 +1,7 @@
 const express = require('express');
 const request = require('supertest');
 const { EModelEndpoint, Constants } = require('librechat-data-provider');
+const mongoose = require('mongoose');
 const { version } = require('uuid');
 const { getConvo, saveConvo, saveMessage } = require('~/models');
 
@@ -21,6 +22,7 @@ const router = require('../routes/pico');
 
 const conversationId = '12345678-1234-4234-9234-123456789abc';
 const runId = '12345678-1234-4234-9234-123456789def';
+const retryId = '12345678-1234-4234-9234-123456789eee';
 const mobile = {
   id: 'task-1',
   source: 'mobile',
@@ -32,8 +34,9 @@ const model = 'workbench-default-model';
 
 describe('Pico mobile task conversations', () => {
   const app = express();
+  app.use(express.json());
   app.use('/api/pico', router);
-  const sync = () => request(app).post('/api/pico/task-conversations/sync');
+  const sync = (body = {}) => request(app).post('/api/pico/task-conversations/sync').send(body);
   let conversations;
   let messages;
   const oldFetch = global.fetch;
@@ -46,6 +49,10 @@ describe('Pico mobile task conversations', () => {
         '/v1/tasks': { tasks },
         [`/v1/tasks?conversation_id=${conversationId}`]: { tasks: [mobile, ...uploads] },
         [`/v1/runs/${runId}`]: { run: { id: runId, prompt: '整理备课记录' } },
+        [`/v1/runs/${retryId}`]: { run: { id: retryId, prompt: '整理备课记录' } },
+        [`/v1/runs/${retryId}/events`]: {
+          events: [{ type: 'message.final', payload: { text: '重跑结果' } }],
+        },
         [`/v1/runs/${runId}/events`]: {
           events: [
             { type: 'message.final', payload: { text: '旧稿' } },
@@ -65,6 +72,16 @@ describe('Pico mobile task conversations', () => {
     process.env.OPENAI_MODELS = `${model},other-model`;
     conversations = new Map();
     messages = new Map();
+    const batches = new Map();
+    jest.spyOn(mongoose.connection, 'collection').mockReturnValue({
+      findOneAndUpdate: async ({ _id }, { $setOnInsert }) => {
+        if (!batches.has(_id)) {
+          batches.set(_id, $setOnInsert);
+        }
+        return { ...batches.get(_id) };
+      },
+      updateOne: async ({ _id }, { $set }) => Object.assign(batches.get(_id), $set),
+    });
     getConvo.mockImplementation(async (user, id) => conversations.get(`${user}:${id}`));
     saveMessage.mockImplementation(async ({ userId }, message) => {
       messages.set(`${userId}:${message.messageId}`, message);
@@ -123,15 +140,52 @@ describe('Pico mobile task conversations', () => {
     expect(saveMessage).toHaveBeenCalledTimes(2);
 
     conversations.clear();
-    await sync().expect(200, { created: 1 });
-    expect(Array.from(messages.values())).toEqual([user, assistant]);
+    messages.clear();
+    await sync().expect(200, { created: 0 });
+    expect(messages.size).toBe(0);
   });
 
   it('creates only one copy across two simultaneous requests and keeps another user separate', async () => {
     conversations.set(`other-user:${conversationId}`, { title: '别人的对话' });
     core();
-    const responses = await Promise.all([sync().expect(200), sync().expect(200)]);
-    expect(responses.map((res) => res.body.created).sort()).toEqual([0, 1]);
+    let releaseSave;
+    let importStarted;
+    const started = new Promise((resolve) => {
+      importStarted = resolve;
+    });
+    const save = saveConvo.getMockImplementation();
+    saveConvo.mockImplementationOnce(async (...args) => {
+      importStarted();
+      await new Promise((resolve) => {
+        releaseSave = resolve;
+      });
+      return save(...args);
+    });
+    const first = sync()
+      .expect(200)
+      .then((res) => res);
+    await started;
+    const fetch = global.fetch.getMockImplementation();
+    let secondRead;
+    const reading = new Promise((resolve) => {
+      secondRead = resolve;
+    });
+    global.fetch.mockImplementationOnce(async (...args) => {
+      const response = await fetch(...args);
+      secondRead();
+      return response;
+    });
+    const second = sync()
+      .expect(200)
+      .then((res) => res);
+    await reading;
+    await new Promise(setImmediate);
+    releaseSave();
+
+    const [created, joined] = await Promise.all([first, second]);
+    expect(created.body).toEqual({ created: 1 });
+    expect(joined.body).toEqual({ created: 0 });
+    expect(joined.headers['x-pico-refresh-conversations']).toBe('1');
     expect(saveConvo).toHaveBeenCalledTimes(1);
     expect(saveMessage).toHaveBeenCalledTimes(2);
     expect(Array.from(messages.values())[0].text).toBe('整理备课记录');
@@ -169,12 +223,20 @@ describe('Pico mobile task conversations', () => {
     expect(saveConvo).not.toHaveBeenCalled();
   });
 
-  it('can retry when the conversation save fails', async () => {
+  it('resumes the original import when a newer run succeeds after a failed save', async () => {
     core();
     saveConvo.mockResolvedValueOnce({ message: 'Error saving conversation' });
     await sync().expect(500);
     expect(conversations.size).toBe(0);
+    core({ tasks: [{ ...mobile, latest_run: { id: retryId, status: 'succeeded' } }] });
     await sync().expect(200, { created: 1 });
     expect(messages.size).toBe(2);
+    expect(Array.from(messages.values()).at(-1).text).toBe('备课记录已整理。');
+  });
+
+  it('uses the configured model selected for new desktop conversations', async () => {
+    core();
+    await sync({ model: 'other-model' }).expect(200, { created: 1 });
+    expect(conversations.get(`teacher-mongo:${conversationId}`).model).toBe('other-model');
   });
 });
