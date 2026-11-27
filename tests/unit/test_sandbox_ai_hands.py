@@ -387,6 +387,45 @@ def test_public_tool_args_masks_url_query_and_fragment() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("sandbox_browser_open", {"url": "https://example.com/"}),
+        ("sandbox_browser_snapshot", {}),
+        ("sandbox_browser_click", {"ref": "e5"}),
+    ],
+)
+@pytest.mark.parametrize(
+    ("metadata", "expects_fact"),
+    [
+        pytest.param({"kind": "browser", "has_password_input": False}, True, id="no-password"),
+        pytest.param({"kind": "browser", "has_password_input": True}, False, id="has-password"),
+        pytest.param({"kind": "office", "has_password_input": False}, False, id="office"),
+        pytest.param({"has_password_input": False}, True, id="missing-kind"),
+        pytest.param({"kind": "browser"}, False, id="missing-password-flag"),
+    ],
+)
+async def test_browser_tool_result_password_fact(tool, args, metadata, expects_fact) -> None:
+    owner = P("school-a", "member-a", ["ai:run"])
+    sidecar_result = {
+        "ok": True,
+        "session_id": "sbox_test",
+        "url": "https://example.com/",
+        **metadata,
+    }
+    original_items = list(sidecar_result.items())
+    with (
+        patch("pico_orchestrator.tools_builtin.sidecar_json", return_value=sidecar_result),
+        patch("pico_orchestrator.tools_builtin.emit_sandbox_usage"),
+    ):
+        result = await _gw().invoke(owner, tool, args)
+
+    expected = [("page_fact", "这一页没检测到密码框")] if expects_fact else []
+    assert list(result.items()) == expected + original_items
+    assert list(sidecar_result.items()) == original_items
+
+
+@pytest.mark.asyncio
 async def test_snapshot_uses_current_desk_and_masks_password(hands_runtime) -> None:
     runtime, _pages = hands_runtime
     gw = _gw()

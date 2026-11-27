@@ -2064,6 +2064,15 @@ def _workspace_handlers(
                 ) from exc
             raise
 
+    def _password_fact(out: Any) -> Any:
+        if (
+            isinstance(out, dict)
+            and out.get("kind", "browser") == "browser"
+            and out.get("has_password_input") is False
+        ):
+            return {"page_fact": "这一页没检测到密码框", **out}
+        return out
+
     async def browser_open(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
         """B2: open a public page in the isolated sidecar. Human-in-the-loop login."""
         started = time.perf_counter()
@@ -2106,7 +2115,7 @@ def _workspace_handlers(
                 "session_id": out.get("session_id"),
             }
             await _emit(True, extra_ok)
-            return out
+            return _password_fact(out)
         except ToolError as exc:
             await _emit(False, {"error_code": exc.code, "workspace_id": ws})
             raise
@@ -2327,7 +2336,7 @@ def _workspace_handlers(
                 if not isinstance(out, dict):
                     raise ToolError("sandbox.unavailable", "隔离沙箱返回异常")
                 await _emit(True, {"workspace_id": out.get("workspace_id") or ws})
-                return out
+                return _password_fact(out)
             except ToolError as exc:
                 await _emit(False, {"error_code": exc.code})
                 if action == "file_upload" and exc.code == "sandbox.file_not_found":
