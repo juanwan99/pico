@@ -121,13 +121,14 @@ export function roundAssertions(round, {
     assertions.ai_opens_once = aiBrowserOpens === 1;
     assertions.sandbox_web_pane_shown = paneSeen;
     assertions.no_chrome_error = chromeErrorSeen === false;
-    const url = URL.parse(finalPane?.url ?? '');
-    assertions.pane_stops_at_target_login = viewportVisible && Boolean(targetHost) &&
-      url?.hostname === targetHost && finalPane?.has_password_input === true;
-    assertions.reply_stops_at_login = reply.includes('登录') &&
-      !/未能打开|无法打开|打不开|无法访问|异常页/.test(reply);
     if (round === 'same_chat_close_reopen') {
       assertions.new_stream_after_close = viewportVisible && hasNewDeskStream(paneRequests, oldSessionId);
+    } else {
+      const url = URL.parse(finalPane?.url ?? '');
+      assertions.pane_stops_at_target_login = viewportVisible && Boolean(targetHost) &&
+        url?.hostname === targetHost && finalPane?.has_password_input === true;
+      assertions.reply_stops_at_login = reply.includes('登录') &&
+        !/未能打开|无法打开|打不开|无法访问|异常页/.test(reply);
     }
   } else {
     const dns = /解析|ERR_NAME_NOT_RESOLVED/i;
@@ -142,8 +143,10 @@ export function roundAssertions(round, {
 }
 
 function watchRound(stopSelector) {
-  const started = performance.now();
-  const watch = { stopSeen: false, paneSeen: false, chromeErrorSeen: false, firstFrameMs: null };
+  const watch = {
+    stopSeen: false, paneSeen: false, chromeErrorSeen: false,
+    firstFrameStartedAt: performance.now(), firstFrameMs: null,
+  };
   function sample() {
     watch.stopSeen ||= Boolean(document.querySelector(stopSelector));
     const pane = document.querySelector('[data-testid="sandbox-web-pane"]');
@@ -153,7 +156,7 @@ function watchRound(stopSelector) {
     const bounds = viewport?.getBoundingClientRect();
     const viewportVisible = Boolean(bounds?.width && bounds.height &&
       viewport.checkVisibility({ visibilityProperty: true }));
-    if (viewportVisible) watch.firstFrameMs ??= Math.round(performance.now() - started);
+    if (viewportVisible) watch.firstFrameMs ??= Math.round(performance.now() - watch.firstFrameStartedAt);
     return viewportVisible;
   }
   const observer = new MutationObserver(sample);
@@ -165,6 +168,7 @@ function watchRound(stopSelector) {
 
 export async function runRound(page, base, out, round, prompt, result, targetHost, headers) {
   const isTemplate = round !== 'bad_address';
+  const isReopen = round === 'same_chat_close_reopen';
   result.assertions.sandbox_open_requests_settled = 'PASS';
   result.pane_requests = [];
   result.first_frame_ms = null;
@@ -178,6 +182,8 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
   let open4xx = 0;
   let browserOpens = 0;
   let chatRequest;
+  let shortcutCloseUrl;
+  let shortcutCloseRequest;
   let onRequestsDrained;
   const pendingRequests = new Set();
   const metadataRequests = [];
@@ -196,6 +202,9 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
       pendingRequests.add(request);
     } else if (method === 'POST' && /^\/api\/agents\/chat(?:\/|$)/.test(new URL(url).pathname)) {
       chatRequest = request;
+      pendingRequests.add(request);
+    } else if (method === 'DELETE' && url === shortcutCloseUrl) {
+      shortcutCloseRequest = request;
       pendingRequests.add(request);
     }
   };
@@ -250,6 +259,7 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
   let finalPane;
   let observed;
   let oldSessionId;
+  let shortcutStage;
   let shortcutOpens = 0;
   let reopenRequestsStart;
   const reopenRequests = () => reopenRequestsStart === undefined
@@ -268,22 +278,40 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
     try {
       const pane = page.getByTestId('sandbox-web-pane');
       const viewport = pane.getByTestId('sandbox-web-viewport');
-      if (round === 'same_chat_close_reopen') {
+      if (isReopen) {
+        shortcutStage = 'shortcut_open';
         const [shortcut] = await Promise.all([
           page.waitForResponse((response) =>
             isSandboxOpen(response.request().method(), response.url()), { timeout: remaining() }),
           sendPrompt(page, `打开 ${templateTargetUrl(prompt)}`),
         ]);
-        if (!shortcut.ok()) throw new Error(`Shortcut desk HTTP ${shortcut.status()}`);
+        if (!shortcut.ok()) {
+          result.http_status = shortcut.status();
+          throw new Error(`Shortcut desk HTTP ${result.http_status}`);
+        }
         ({ session_id: oldSessionId } = await shortcut.json());
         await viewport.waitFor({ timeout: remaining() });
         await waitForTurn();
+        shortcutStage = 'shortcut_close';
+        shortcutCloseUrl = `${base}/api/pico/v1/sandbox/sessions/${encodeURIComponent(oldSessionId)}`;
         await pane.getByTestId('sandbox-screen-menu').click({ timeout: remaining() });
         await pane.getByTestId('sandbox-close-keep-disk').click({ timeout: remaining() });
         await pane.getByTestId('sandbox-dead-copy').waitFor({ timeout: remaining() });
+        await waitForRequests(deadline);
+        const closed = await shortcutCloseRequest?.response();
+        if (!closed?.ok()) {
+          result.http_status = closed?.status() ?? null;
+          throw new Error('Shortcut desk close did not succeed');
+        }
         shortcutOpens = browserOpens;
         reopenRequestsStart = result.pane_requests.length;
-        await page.evaluate(() => { window.picoOpenUrlWatch.watch.stopSeen = false; });
+        await page.evaluate(() => {
+          const { watch } = window.picoOpenUrlWatch;
+          watch.stopSeen = false;
+          watch.firstFrameMs = null;
+          watch.firstFrameStartedAt = performance.now();
+        });
+        shortcutStage = undefined;
       }
       await sendPrompt(page, prompt);
       await waitForTurn();
@@ -291,20 +319,21 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
 
       if (isTemplate) {
         await viewport.waitFor({ timeout: remaining() });
-        // Take a fresh metadata sample from the visible pane after the turn.
-        const samplingStarted = Date.now();
-        const request = await page.waitForEvent('requestfinished', {
-          predicate: (request) => !pendingRequests.size && isPaneMetadata(request) &&
-            request.timing().startTime >= samplingStarted,
-          timeout: remaining(),
-        });
-        const response = await request.response();
-        if (response.ok()) finalPane = await response.json();
-        if (round === 'same_chat_close_reopen') {
+        if (isReopen) {
           const sawNewStream = () => hasNewDeskStream(reopenRequests(), oldSessionId);
           if (!sawNewStream()) {
             await page.waitForResponse(sawNewStream, { timeout: remaining() });
           }
+        } else {
+          // Take a fresh metadata sample from the visible pane after the turn.
+          const samplingStarted = Date.now();
+          const request = await page.waitForEvent('requestfinished', {
+            predicate: (request) => !pendingRequests.size && isPaneMetadata(request) &&
+              request.timing().startTime >= samplingStarted,
+            timeout: remaining(),
+          });
+          const response = await request.response();
+          if (response.ok()) finalPane = await response.json();
         }
       } else {
         const assistant = page.locator('.agent-turn').last();
@@ -316,6 +345,7 @@ export async function runRound(page, base, out, round, prompt, result, targetHos
           .waitFor({ timeout: remaining() });
       }
     } catch (error) {
+      if (shortcutStage) result.error_stage = shortcutStage;
       if (error.name !== 'TimeoutError') throw error;
       result.error = error.name;
     } finally {

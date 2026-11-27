@@ -1267,7 +1267,7 @@ describe('ResultPanel sandbox web pane', () => {
       },
     );
 
-    it('keeps a later shortcut desk when streaming refreshes the same AI desk ID', async () => {
+    it('keeps the shortcut desk when the same AI ID returns after an empty run', async () => {
       const { rerender } = render(panel([template], ledger(newDesk)));
       expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
       const laterShortcut = { ...shortcut, messageId: 'session-switch-later-shortcut' };
@@ -1276,6 +1276,12 @@ describe('ResultPanel sandbox web pane', () => {
       await waitFor(() => expect(streamIds()).toEqual([newId, oldId]));
       expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
 
+      rerender(panel(messages, ledger(newDesk)));
+      expect(streamIds()).toEqual([newId, oldId]);
+      expect(screen.getByTestId('sandbox-web-viewport')).toBeVisible();
+
+      rerender(panel(messages));
+      expect(streamIds()).toEqual([newId, oldId]);
       rerender(panel(messages, ledger(newDesk)));
       expect(streamIds()).toEqual([newId, oldId]);
       expect(screen.getByTestId('sandbox-web-viewport')).toBeVisible();

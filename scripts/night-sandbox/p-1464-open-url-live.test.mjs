@@ -238,8 +238,16 @@ test('same-chat reopen requires both a visible viewport and a successful stream 
   const round = 'same_chat_close_reopen';
   const oldSessionId = 'sbox_old';
   const newStream = { session_id: 'sbox_new', kind: 'stream', status: 200 };
-  const observed = { oldSessionId, viewportVisible: true, paneRequests: [newStream] };
-  assert.equal(roundAssertions(round, observed).new_stream_after_close, 'PASS');
+  const observed = {
+    finished: true, openRequestsSettled: true, open4xx: 0, browserOpens: 0, aiBrowserOpens: 1,
+    paneSeen: true, chromeErrorSeen: false, oldSessionId, viewportVisible: true,
+    paneRequests: [newStream], targetHost: 'example.com',
+    finalPane: { url: 'https://example.com/home', has_password_input: false },
+    reply: '页面已经打开。',
+  };
+  const assertions = roundAssertions(round, observed);
+  assert.equal(assertions.new_stream_after_close, 'PASS');
+  assert.ok(Object.values(assertions).every((status) => status === 'PASS'));
   for (const override of [
     { oldSessionId: undefined },
     { viewportVisible: false },

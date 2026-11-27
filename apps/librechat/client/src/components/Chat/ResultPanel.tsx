@@ -348,11 +348,7 @@ export default function ResultPanel({
     }
   }, [runSandbox]);
   const runSandboxId = runSandbox?.sessionId;
-  useEffect(() => {
-    if (runSandboxId) {
-      setLocalSandbox(null);
-    }
-  }, [runSandboxId]);
+  const lastRunSandboxIdRef = useRef<string>();
   const ledgerSandbox = runSandbox || lastRunSandbox;
   const officeBox = useMemo(() => collectPicoOfficeContentBox(runEvents), [runEvents]);
   const sandboxSession = localSandbox || ledgerSandbox;
@@ -361,11 +357,19 @@ export default function ResultPanel({
   useEffect(() => {
     setLocalSandbox(null);
     setLastRunSandbox(null);
+    lastRunSandboxIdRef.current = undefined;
     openedWebsiteRef.current = null;
     autoWebsiteAttemptRef.current = null;
     openedOfficeRef.current = null;
     setWebsiteError(null);
   }, [conversationId]);
+
+  useEffect(() => {
+    if (runSandboxId && runSandboxId !== lastRunSandboxIdRef.current) {
+      lastRunSandboxIdRef.current = runSandboxId;
+      setLocalSandbox(null);
+    }
+  }, [runSandboxId]);
   const previewActive = Boolean(
     previewHtml || previewImage || previewPdf || previewText || previewOffice,
   );
