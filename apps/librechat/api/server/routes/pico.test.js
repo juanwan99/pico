@@ -1,6 +1,13 @@
 const express = require('express');
 const request = require('supertest');
 
+jest.mock('@librechat/api', () => ({ getOpenAIModels: jest.fn() }), { virtual: true });
+jest.mock('~/models', () => ({
+  getConvo: jest.fn(),
+  saveConvo: jest.fn(),
+  saveMessage: jest.fn(),
+}));
+
 jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, _res, next) => {
     req.user = global.__PICO_USER || { id: 'member-123' };
@@ -42,6 +49,22 @@ describe('Pico proxy routes', () => {
         headers: expect.objectContaining({
           'X-Pico-Membership-Id':
             '627bcf3a-a9a8-4047-afcc-3d4878e2a7af:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        }),
+      }),
+    );
+  });
+
+  it('registers the sync POST behind the authenticated membership proxy', async () => {
+    global.__PICO_USER = { id: 'mongo-user', eduId: 'teacher-a', eduSchoolId: 'school-a' };
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ tasks: [] }) });
+
+    await request(app).post('/api/pico/task-conversations/sync').expect(200, { created: 0 });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/tasks',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: expect.stringMatching(/^Bearer /),
+          'X-Pico-Membership-Id': 'school-a:teacher-a',
         }),
       }),
     );

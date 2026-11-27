@@ -7,7 +7,9 @@ import base64
 import binascii
 import json
 import logging
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -18,7 +20,7 @@ from pico_orchestrator.meili_kb import (
     project_material_artifact,
 )
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import Principal, require_any_scope
@@ -396,40 +398,49 @@ async def uploads_for_conversation(
     if not cid or cid in RESERVED_CONVO:
         return []
     cutoff = datetime.now(UTC).replace(tzinfo=None) - _UNBOUND_UPLOAD_WINDOW
-    src_rows = (
-        await session.execute(
-            select(ArtifactRow)
-            .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
-            .where(
-                TaskRow.school_id == principal.school_id,
-                TaskRow.membership_id == principal.membership_id,
-                TaskRow.title.startswith(EDU_READ_PREFIX),
-                ArtifactRow.kind.notin_((KIND_EXCERPT, "kb_text")),
-                or_(
-                    TaskRow.conversation_id == cid,
-                    and_(
+    owned = (
+        TaskRow.school_id == principal.school_id,
+        TaskRow.membership_id == principal.membership_id,
+    )
+    mobile = (
+        select(TaskRow.id)
+        .where(*owned, TaskRow.conversation_id == cid, TaskRow.source == "mobile")
+        .correlate(None)
+        .exists()
+    )
+    uploads = (
+        select(ArtifactRow, TaskRow.conversation_id, mobile.label("is_mobile"))
+        .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+        .where(
+            *owned,
+            TaskRow.title.startswith(EDU_READ_PREFIX),
+            ArtifactRow.kind.notin_((KIND_EXCERPT, "kb_text")),
+            or_(
+                TaskRow.conversation_id == cid,
+                and_(
+                    ~mobile,
+                    ArtifactRow.created_at >= cutoff,
+                    or_(
                         TaskRow.conversation_id.startswith("pending_", autoescape=True),
-                        ArtifactRow.created_at >= cutoff,
-                    ),
-                    and_(
-                        or_(
-                            TaskRow.conversation_id.is_(None),
-                            TaskRow.conversation_id == "",
-                        ),
-                        ArtifactRow.created_at >= cutoff,
+                        TaskRow.conversation_id.is_(None),
+                        TaskRow.conversation_id == "",
                     ),
                 ),
-            )
-            .order_by(ArtifactRow.created_at.desc())
+            ),
+        )
+    )
+    src_rows = (
+        await session.execute(
+            uploads.order_by(ArtifactRow.created_at.desc(), ArtifactRow.id.desc())
             .limit(_MAX_UPLOAD_INJECT * 3)
         )
-    ).scalars().all()
+    ).all()
     bound: list[ArtifactRow] = []
     pending: list[tuple[str, ArtifactRow]] = []
     unbound: list[ArtifactRow] = []
-    for src in src_rows:
-        task = await session.get(TaskRow, src.task_id)
-        convo = str(task.conversation_id or "").strip() if task is not None else ""
+    bindings = {src.task_id: binding for src, binding, _ in src_rows}
+    for src, binding, _ in src_rows:
+        convo = str(binding or "").strip()
         if convo == cid:
             bound.append(src)
         elif convo.startswith("pending_"):
@@ -458,31 +469,40 @@ async def uploads_for_conversation(
             candidates = [row for key, row in pending if key == draft_key]
     else:
         candidates = _newest_cluster(unbound)
-    seen_titles: set[str] = set()
-    picked: list[ArtifactRow] = []
-    for src in candidates:
-        title = str(src.title or "").strip()
-        key = title.lower() or src.id
-        if key in seen_titles:
-            continue
-        seen_titles.add(key)
-        picked.append(src)
-        if len(picked) >= _MAX_UPLOAD_INJECT:
-            break
+    picked = candidates[:_MAX_UPLOAD_INJECT]
+    if picked and not bound:
+        matches = [
+            and_(
+                TaskRow.id == src.task_id,
+                or_(
+                    TaskRow.conversation_id.is_not_distinct_from(bindings[src.task_id]),
+                    TaskRow.conversation_id == cid,
+                ),
+            )
+            for src in picked
+        ]
+        claimed = await session.scalars(
+            update(TaskRow)
+            .where(or_(*matches))
+            .values(conversation_id=cid)
+            .returning(TaskRow.id)
+            .execution_options(synchronize_session=False)
+        )
+        claimed_ids = set(claimed)
+        await session.commit()
+        picked = [src for src in picked if src.task_id in claimed_ids]
     if not picked:
         return []
-    claimed = False
-    if not bound:
-        for src in picked:
-            task = await session.get(TaskRow, src.task_id)
-            if task is None:
-                continue
-            current = str(task.conversation_id or "").strip()
-            if not current or current.startswith("pending_"):
-                task.conversation_id = cid
-                claimed = True
-    if claimed:
-        await session.commit()
+    # Mobile keeps its original names as older photos leave the turn's window.
+    titles = [(src.id, src.title) for src in picked]
+    if src_rows[0].is_mobile:
+        titles = (
+            await session.execute(
+                uploads.with_only_columns(ArtifactRow.id, ArtifactRow.title)
+                .order_by(ArtifactRow.created_at, ArtifactRow.id)
+            )
+        ).all()
+    attachment_names = _workspace_names((aid, str(title or "文件")) for aid, title in titles)
     task_ids = [row.task_id for row in picked]
     excerpt_rows = (
         await session.execute(
@@ -503,6 +523,7 @@ async def uploads_for_conversation(
         row = {
             "id": src.id,
             "title": str(src.title or "文件"),
+            "attachment_name": attachment_names[src.id],
             "kind": src.kind,
             "excerpt": text[:_MAX_UPLOAD_EXCERPT],
             "error": error,
@@ -514,6 +535,21 @@ async def uploads_for_conversation(
             row["ocr_text"] = ocr[:_MAX_UPLOAD_EXCERPT]
         out.append(row)
     return out
+
+
+def _workspace_names(titles: Iterable[tuple[str, str]]) -> dict[str, str]:
+    names: dict[str, str] = {}
+    used: set[str] = set()
+    for aid, title in titles:
+        path = Path(title)
+        name = title
+        number = 1
+        while name.casefold() in used:
+            number += 1
+            name = f"{path.stem}-{number}{path.suffix}"
+        used.add(name.casefold())
+        names[aid] = name
+    return names
 
 
 async def native_files_from_rows(
@@ -552,7 +588,7 @@ async def native_files_from_rows(
         )
         from pico_orchestrator.office.legacy import convert_target_from_name, looks_ooxml
 
-        name = str(src.title or title)
+        name = str(row.get("attachment_name") or src.title or title)
         if convert_target_from_name(name) and not looks_ooxml(raw):
             try:
                 raw = await convert_legacy_office_bytes(name, raw)
@@ -574,18 +610,18 @@ async def workspace_files_from_rows(
     max_files: int = 50,
     max_total: int = 100 * 1024 * 1024,
 ) -> list[tuple[str, bytes]]:
-    """Every conversation upload as (title, original bytes) for the workspace box.
+    """Every conversation upload as (workspace filename, original bytes).
 
     Unlike ``native_files_from_rows`` this keeps any type (md / csv / images /
     legacy Office): the box reads files itself. Excerpts and KB text are not files.
     """
     from app.artifact_store import decode_artifact_payload
 
-    out: list[tuple[str, bytes]] = []
+    files: list[tuple[ArtifactRow, str, bytes]] = []
     seen: set[str] = set()
     total = 0
     for row in rows or []:
-        if not isinstance(row, dict) or len(out) >= max_files:
+        if not isinstance(row, dict) or len(files) >= max_files:
             continue
         art_id = str(row.get("id") or row.get("workspace_artifact_id") or "").strip()
         if not art_id or art_id in seen:
@@ -602,9 +638,13 @@ async def workspace_files_from_rows(
             continue
         seen.add(art_id)
         total += len(raw)
-        title = str(src.title or row.get("title") or row.get("filename") or "file")
-        out.append((title, bytes(raw)))
-    return out
+        title = str(
+            row.get("attachment_name") or src.title or row.get("title") or row.get("filename") or "file"
+        )
+        files.append((src, title, bytes(raw)))
+    files.sort(key=lambda item: (item[0].created_at, item[0].id))
+    names = _workspace_names((src.id, title) for src, title, _ in files)
+    return [(names[src.id], raw) for src, _, raw in files]
 
 
 def _row_is_pixel(title: str, kind: str) -> bool:

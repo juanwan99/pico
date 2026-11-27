@@ -35,7 +35,7 @@ try:
 except ImportError:
     pass
 
-from app import run_service
+from app import run_service, task_create
 from app.auth import (
     Principal,
     issue_test_token,
@@ -1678,6 +1678,8 @@ class CreateTaskRequest(BaseModel):
     title: str = ""
     prompt: str
     skill_id: str | None = None
+    source: task_create.TaskSource = None
+    upload_ids: list[str] = Field(default_factory=list)
 
 
 def _task_dict(t) -> dict:
@@ -1687,6 +1689,7 @@ def _task_dict(t) -> dict:
         "membership_id": t.membership_id,
         "title": t.title,
         "conversation_id": getattr(t, "conversation_id", None),
+        "source": t.source,
         "workspace_id": getattr(t, "workspace_id", None),
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
@@ -1739,10 +1742,9 @@ async def create_task(
     await enforce_allowance(
         session, principal, quote_milli=quote_millipoints_from_input_len(len(body.prompt))
     )
-    task, run = await run_service.create_task(
-        session, principal, body.title, body.prompt.strip(), body.skill_id
+    task, run = await task_create.create_task(
+        session, principal, body.title, body.prompt.strip(), body.skill_id, body.source, body.upload_ids
     )
-    await run_service.start_run_background(run.id, principal)
     return {"task": _task_dict(task), "run": _run_dict(run)}
 
 

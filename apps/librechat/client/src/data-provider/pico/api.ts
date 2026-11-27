@@ -2,7 +2,7 @@
  * Browser → LibreChat `/api/pico` → Pico ledger (Task/Run/Artifact/Workspace).
  * Must send LibreChat JWT (same as other API clients).
  */
-import { getTokenHeader } from 'librechat-data-provider';
+import { getTokenHeader, request } from 'librechat-data-provider';
 import { splitSseEvents } from '~/utils/picoSse';
 import { teacherSafe } from '~/utils/picoTeacherText';
 
@@ -177,7 +177,11 @@ export async function picoAuthedPost(url: string, body?: unknown): Promise<Respo
   });
 }
 
-export class PicoHttpError extends Error {}
+export class PicoHttpError extends Error {
+  constructor(message: string, readonly created = 0) {
+    super(message);
+  }
+}
 
 async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api/pico${path}`, {
@@ -189,6 +193,10 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers || {}),
     },
   });
+  return picoResponse<T>(res);
+}
+
+async function picoResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     try {
@@ -196,6 +204,7 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
         detail?: { message?: string } | string;
         message?: string;
         user_message?: string;
+        created?: number;
       };
       const detail =
         typeof parsed.detail === 'string'
@@ -204,7 +213,7 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
             ? parsed.detail.message
             : '';
       const msg = parsed.user_message || parsed.message || detail || text;
-      throw new PicoHttpError(teacherSafe(String(msg).slice(0, 200)));
+      throw new PicoHttpError(teacherSafe(String(msg).slice(0, 200)), parsed.created);
     } catch (err) {
       if (err instanceof SyntaxError) {
         throw new PicoHttpError(teacherSafe(text.slice(0, 200)));
@@ -213,6 +222,16 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   return res.json() as Promise<T>;
+}
+
+export async function syncPicoTaskConversations(model: string) {
+  const res = await request.authenticatedFetch('/api/pico/task-conversations/sync', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  });
+  return picoResponse<{ created: number }>(res);
 }
 
 export async function getPicoArtifactContent(
