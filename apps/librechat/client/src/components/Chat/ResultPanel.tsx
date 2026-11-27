@@ -347,6 +347,12 @@ export default function ResultPanel({
       setLastRunSandbox(runSandbox);
     }
   }, [runSandbox]);
+  const runSandboxId = runSandbox?.sessionId;
+  useEffect(() => {
+    if (runSandboxId) {
+      setLocalSandbox(null);
+    }
+  }, [runSandboxId]);
   const ledgerSandbox = runSandbox || lastRunSandbox;
   const officeBox = useMemo(() => collectPicoOfficeContentBox(runEvents), [runEvents]);
   const sandboxSession = localSandbox || ledgerSandbox;

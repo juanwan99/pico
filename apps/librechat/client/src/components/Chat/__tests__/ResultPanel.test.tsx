@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import type { TMessage } from 'librechat-data-provider';
 import {
+  destroyPicoSandboxSession,
   getPicoArtifactContent,
   picoAuthedGet,
   getPicoSandboxScreenshot,
@@ -10,6 +12,7 @@ import {
   PicoHttpError,
   openPicoSandboxDocument,
   postPicoSandboxInput,
+  streamPicoSandbox,
   type PicoArtifact,
   type PicoRun,
   type PicoRunEvent,
@@ -24,6 +27,7 @@ jest.mock('~/data-provider/pico/api', () => ({
   getPicoSandboxScreenshot: jest.fn(),
   getPicoSandboxSession: jest.fn(),
   postPicoSandboxInput: jest.fn(),
+  streamPicoSandbox: jest.fn(() => new Promise(() => {})),
   destroyPicoSandboxSession: jest.fn(),
   openPicoSandboxBrowser: jest.fn(),
   openPicoSandboxDocument: jest.fn(),
@@ -1168,6 +1172,7 @@ describe('ResultPanel T-RESULT-OPEN-IN-PANE', () => {
       </MemoryRouter>,
     );
     expect(screen.getByTestId('sandbox-empty')).toHaveTextContent('沙箱还没有打开窗口');
+    expect(streamPicoSandbox).not.toHaveBeenCalled();
     expect(screen.queryByText('还没有隔离网页')).not.toBeInTheDocument();
     expect(screen.queryByTestId('main-delivery-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('result-view-menu')).not.toBeInTheDocument();
@@ -1196,6 +1201,84 @@ describe('ResultPanel sandbox web pane', () => {
     Object.defineProperty(URL, 'revokeObjectURL', {
       configurable: true,
       value: jest.fn(),
+    });
+  });
+
+  describe('same-chat sandbox selection', () => {
+    const oldId = 'sbox_aaaaaaaaaaaaaaaaaaaaaaaa';
+    const newId = 'sbox_bbbbbbbbbbbbbbbbbbbbbbbb';
+    const oldDesk = { session_id: oldId, url: 'https://example.com/' };
+    const newDesk = { session_id: newId, url: 'https://example.org/' };
+    const shortcut: TMessage = {
+      messageId: 'session-switch-shortcut',
+      conversationId: 'session-switch-chat',
+      parentMessageId: null,
+      text: `打开 ${oldDesk.url}`,
+      isCreatedByUser: true,
+    };
+    const template: TMessage = {
+      ...shortcut,
+      messageId: 'session-switch-template',
+      text: `打开 ${newDesk.url}\n如果还没登录，就停在登录页。`,
+    };
+    const ledger = (desk: typeof oldDesk): PicoRunEvent[] => [
+      { id: desk.session_id, run_id: 'run-1', seq: 1, type: 'sandbox.session', payload: desk },
+    ];
+    const panel = (messages: TMessage[], runEvents: PicoRunEvent[] = []) => (
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ResultPanel
+          conversationId={shortcut.conversationId}
+          messages={messages}
+          runEvents={runEvents}
+        />
+      </MemoryRouter>
+    );
+    const streamIds = () => jest.mocked(streamPicoSandbox).mock.calls.map(([id]) => id);
+
+    beforeEach(() => {
+      jest.mocked(openPicoSandboxBrowser).mockReset().mockResolvedValue(oldDesk);
+      jest.mocked(destroyPicoSandboxSession).mockReset().mockResolvedValue({ destroyed: true });
+      jest
+        .mocked(getPicoSandboxSession)
+        .mockImplementation(async (id) => (id === oldId ? oldDesk : newDesk));
+      jest.mocked(getPicoSandboxScreenshot).mockResolvedValue(new Blob());
+    });
+
+    it.each(['shortcut', 'ledger'])(
+      'switches from a closed %s desk to a new ledger desk',
+      async (source) => {
+        const user = userEvent.setup();
+        const messages = source === 'shortcut' ? [shortcut] : [];
+        const { rerender } = render(panel(messages, source === 'ledger' ? ledger(oldDesk) : []));
+        expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
+        expect(streamIds()).toEqual([oldId]);
+
+        await user.click(screen.getByTestId('sandbox-screen-menu'));
+        await user.click(screen.getByRole('button', { name: '关闭窗口（文件保留）' }));
+        expect(await screen.findByText('沙箱已关闭')).toBeVisible();
+        expect(destroyPicoSandboxSession).toHaveBeenCalledWith(oldId);
+
+        const nextMessages = [...messages, template];
+        rerender(panel(nextMessages));
+        rerender(panel(nextMessages, ledger(newDesk)));
+        expect(streamIds()).toEqual([oldId, newId]);
+        expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
+        expect(screen.getByTestId('sandbox-web-pane')).not.toHaveAttribute('data-live', 'dead');
+      },
+    );
+
+    it('keeps a later shortcut desk when streaming refreshes the same AI desk ID', async () => {
+      const { rerender } = render(panel([template], ledger(newDesk)));
+      expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
+      const laterShortcut = { ...shortcut, messageId: 'session-switch-later-shortcut' };
+      const messages = [template, laterShortcut];
+      rerender(panel(messages, ledger(newDesk)));
+      await waitFor(() => expect(streamIds()).toEqual([newId, oldId]));
+      expect(await screen.findByTestId('sandbox-web-viewport')).toBeVisible();
+
+      rerender(panel(messages, ledger(newDesk)));
+      expect(streamIds()).toEqual([newId, oldId]);
+      expect(screen.getByTestId('sandbox-web-viewport')).toBeVisible();
     });
   });
 

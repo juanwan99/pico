@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
-import {
+import * as live from './p-1464-open-url-live.mjs';
+
+const {
+  classifyPaneRequest,
   closeDesks,
   isSandboxOpen4xx,
   loginFailureDetails,
@@ -9,7 +12,7 @@ import {
   runRound,
   templateTargetHost,
   waitForAiBrowserOpens,
-} from './p-1464-open-url-live.mjs';
+} = live;
 
 const sessions = 'https://pico.test/api/pico/v1/sandbox/sessions';
 const currentUrl = `${sessions}/current`;
@@ -18,6 +21,25 @@ const headers = { authorization: 'Bearer test-teacher' };
 test('reads the target host from the open instruction in a long template', () => {
   const template = '先参考 https://example.org。\n打开 https://example.com/home。未登录就停在登录页。';
   assert.equal(templateTargetHost(template), 'example.com');
+});
+
+test('classifies browser pane requests without keeping the URL or query', () => {
+  const sessionId = 'sbox_123';
+  const desk = `${sessions}/${sessionId}`;
+  assert.deepEqual(classifyPaneRequest(`${desk}/stream?ack=1`), {
+    session_id: sessionId, kind: 'stream',
+  });
+  for (const endpoint of ['png', 'screenshot']) {
+    assert.deepEqual(classifyPaneRequest(`${desk}/${endpoint}`), {
+      session_id: sessionId, kind: 'png',
+    });
+  }
+  assert.deepEqual(classifyPaneRequest(`${currentUrl}/png`), {
+    session_id: null, kind: 'current/png',
+  });
+  for (const url of [desk, `${desk}/input`, 'https://pico.test/api/files/report.png']) {
+    assert.equal(classifyPaneRequest(url), null);
+  }
 });
 
 test('counts AI opens from the conversation ledger without counting tool results', async (t) => {
@@ -49,6 +71,16 @@ test('a failed round drains the AI and browser opens before the desk is closed',
   const failure = new Error('Pane observation failed');
   const round = { assertions: roundAssertions('template') };
   const browserRequest = { method: () => 'POST', url: () => sessions };
+  const stream = {
+    method: () => 'GET',
+    url: () => `${sessions}/sbox_123/stream?ack=1`,
+    timing: () => ({ responseStart: 123.4 }),
+  };
+  const png = {
+    method: () => 'GET',
+    url: () => `${currentUrl}/png`,
+    failure: () => ({ errorText: 'net::ERR_FAILED' }),
+  };
   t.signal.addEventListener('abort', () => page.emit('requestfinished', browserRequest), { once: true });
   const chatRequest = {
     method: () => 'POST',
@@ -71,13 +103,18 @@ test('a failed round drains the AI and browser opens before the desk is closed',
     click: async () => {
       page.emit('request', chatRequest);
       page.emit('requestfinished', chatRequest);
+      page.emit('request', stream);
+      page.emit('response', { request: () => stream, url: stream.url, status: () => 200 });
+      page.emit('request', png);
+      page.emit('requestfailed', png);
     },
   };
   Object.assign(page, {
     goto: async () => {},
     waitForTimeout: async () => {},
-    evaluate: async () => {},
+    evaluate: async () => ({ firstFrameMs: null }),
     locator: () => input,
+    getByTestId: () => page,
     getByRole: (_role, { name }) => name.test('发送') ? send : { count: async () => 0 },
     waitForFunction: async () => { throw failure; },
   });
@@ -116,6 +153,15 @@ test('a failed round drains the AI and browser opens before the desk is closed',
   );
   assert.equal(round.ai_browser_opens, 1);
   assert.equal(round.assertions.sandbox_open_requests_settled, 'PASS');
+  assert.equal(round.first_frame_ms, null);
+  assert.equal(round.pane_requests.length, 2);
+  const [streamEvidence, pngEvidence] = round.pane_requests;
+  assert.deepEqual(streamEvidence, {
+    session_id: 'sbox_123', kind: 'stream', status: 200, failure: null, response_headers_ms: 123,
+  });
+  assert.deepEqual(pngEvidence, {
+    session_id: null, kind: 'current/png', status: null, failure: 'net::ERR_FAILED', response_headers_ms: null,
+  });
   assert.equal(await closeDesks(currentUrl, headers), 404);
   assert.deepEqual(methods, ['browser response', 'GET', 'DELETE', 'GET']);
 });
@@ -186,6 +232,25 @@ test('template round passes with a pane, a completed reply, and no browser error
     pane_stops_at_target_login: 'PASS',
     reply_stops_at_login: 'PASS',
   });
+});
+
+test('same-chat reopen requires both a visible viewport and a successful stream for a different desk', () => {
+  const round = 'same_chat_close_reopen';
+  const oldSessionId = 'sbox_old';
+  const newStream = { session_id: 'sbox_new', kind: 'stream', status: 200 };
+  const observed = { oldSessionId, viewportVisible: true, paneRequests: [newStream] };
+  assert.equal(roundAssertions(round, observed).new_stream_after_close, 'PASS');
+  for (const override of [
+    { oldSessionId: undefined },
+    { viewportVisible: false },
+    { paneRequests: [] },
+    { paneRequests: [{ ...newStream, session_id: oldSessionId }] },
+    { paneRequests: [{ ...newStream, status: 404 }] },
+    { paneRequests: [{ ...newStream, status: null }] },
+    { paneRequests: [{ ...newStream, kind: 'png' }] },
+  ]) {
+    assert.equal(roundAssertions(round, { ...observed, ...override }).new_stream_after_close, 'FAIL');
+  }
 });
 
 test('template round reports each observed failure and never passes an absent reply', () => {
