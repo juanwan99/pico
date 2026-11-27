@@ -2198,7 +2198,7 @@ def _workspace_handlers(
                     out.update(raster_meta_from_write(shot, byte_size=len(png)))
                     out["screenshot"]["title"] = shot["title"]
             await _emit(True, {"workspace_id": out.get("workspace_id") or ws})
-            return out
+            return _password_fact(out)
         except ToolError as exc:
             await _emit(False, {"error_code": exc.code})
             raise

@@ -393,6 +393,7 @@ def test_public_tool_args_masks_url_query_and_fragment() -> None:
         ("sandbox_browser_open", {"url": "https://example.com/"}),
         ("sandbox_browser_snapshot", {}),
         ("sandbox_browser_click", {"ref": "e5"}),
+        ("sandbox_browser_screenshot", {}),
     ],
 )
 @pytest.mark.parametrize(
@@ -415,7 +416,10 @@ async def test_browser_tool_result_password_fact(tool, args, metadata, expects_f
     }
     original_items = list(sidecar_result.items())
     with (
-        patch("pico_orchestrator.tools_builtin.sidecar_json", return_value=sidecar_result),
+        patch(
+            "pico_orchestrator.tools_builtin.sidecar_json",
+            side_effect=lambda _method, path, **_: b"" if path.endswith("/png") else sidecar_result,
+        ),
         patch("pico_orchestrator.tools_builtin.emit_sandbox_usage"),
     ):
         result = await _gw().invoke(owner, tool, args)
