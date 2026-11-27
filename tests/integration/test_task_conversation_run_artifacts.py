@@ -1706,3 +1706,120 @@ async def test_exam_grading_ticket_rides_its_own_lane_and_bill_line(tmp_path, mo
         }
     assert rows["member-grade"].get("lane") == "grading"
     assert "lane" not in rows["member-chat"]
+
+
+@pytest.mark.parametrize("with_photos", [True, False])
+def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, with_photos):
+    from io import BytesIO
+
+    from app import delivery_gate
+    from app.run_service import _execute_run
+    from pico_orchestrator.true_pi.runner import take_conversation_files
+    from PIL import Image
+
+    headers = _headers(client, "member-mobile")
+    monkeypatch.setenv("PICO_RUNNER_URL", "http://runner.test")
+    monkeypatch.delenv("PICO_RUNNER_MEMBERSHIPS", raising=False)
+    calls = []
+    rest_runs = set()
+    apply_gate = delivery_gate.apply_delivery_gate
+
+    async def fake_runtime(*, caps, conversation_id, principal, artifact_store, run_id, **kwargs):
+        files = take_conversation_files(principal.membership_id, conversation_id)
+        calls.append((conversation_id, caps.images or [], files))
+        assert kwargs["persist_pi_session"] is True
+        if "history" not in kwargs:
+            rest_runs.add(run_id)
+        await artifact_store.write(principal, kind="file", title="notes.txt", content="成品")
+        return RunResult(status="succeeded", final_text="会议纪要已整理。" if with_photos else "")
+
+    async def check_gate(session, run, **kwargs):
+        if run.id in rest_runs:
+            async with session_factory()() as reader:
+                assert (await reader.get(RunRow, run.id)).status == "running"
+        await apply_gate(session, run, **kwargs)
+
+    monkeypatch.setattr(delivery_gate, "apply_delivery_gate", check_gate)
+    monkeypatch.setattr("pico_orchestrator.runtime.run_agent_runtime", fake_runtime)
+    monkeypatch.setattr("app.run_service.start_run_background", _execute_run)
+
+    photos = []
+    images_to_upload = [
+        ("a.png", "red"), ("b.png", "blue"), ("unbound.png", "white"), ("pending.png", "green")
+    ]
+    for photo, color in images_to_upload:
+        buf = BytesIO()
+        Image.new("RGB", (2, 2), color).save(buf, format="PNG")
+        raw = buf.getvalue()
+        encoded = base64.b64encode(raw).decode()
+        upload_headers = headers
+        if photo == "pending.png":
+            upload_headers = {**headers, "X-Conversation-Id": "pending_other_tab"}
+        uploaded = client.post(
+            "/v1/files", headers=upload_headers, json={"filename": photo, "content_b64": encoded}
+        )
+        assert uploaded.status_code == 200, uploaded.text
+        if with_photos and photo in {"a.png", "b.png"}:
+            photos.append((uploaded.json()["id"], photo, raw, encoded))
+
+    submitted = client.post(
+        "/v1/tasks",
+        headers=headers,
+        json={"prompt": "整理会议纪要", "source": "mobile", "upload_ids": [p[0] for p in photos]},
+    )
+    assert submitted.status_code == 200, submitted.text
+    task, run = submitted.json()["task"], submitted.json()["run"]
+    cid = task["conversation_id"]
+    assert cid
+    assert client.get(f"/v1/runs/{run['id']}", headers=headers).json()["run"]["status"] == "succeeded"
+    retry = client.post(f"/v1/runs/{run['id']}/retry", headers=headers)
+    assert retry.status_code == 200, retry.text
+    retry_id = retry.json()["run"]["id"]
+    assert retry_id != run["id"]
+    assert retry.json()["run"]["task_id"] == task["id"]
+    assert client.get(f"/v1/runs/{retry_id}", headers=headers).json()["run"]["status"] == "succeeded"
+    assert len(calls) == 2
+    for run_cid, images, files in calls:
+        assert run_cid == cid
+        assert {(img["mimeType"], img["data"]) for img in images} == {
+            ("image/png", p[3]) for p in photos
+        }
+        assert dict(files) == {p[1]: p[2] for p in photos}
+    artifacts = client.get("/v1/artifacts", headers=headers, params={"conversation_id": cid})
+    assert {p[0] for p in photos} <= {item["id"] for item in artifacts.json()["artifacts"]}
+    task_artifacts = client.get(f"/v1/tasks/{task['id']}", headers=headers).json()["artifacts"]
+    assert {run["id"], retry_id} == {item["run_id"] for item in task_artifacts}
+    assert {item["id"] for item in task_artifacts} <= {
+        item["id"] for item in artifacts.json()["artifacts"]
+    }
+    for rid in (run["id"], retry_id):
+        events = client.get(f"/v1/runs/{rid}/events", headers=headers).json()["events"]
+        finals = [event["payload"]["text"] for event in events if event["type"] == "message.final"]
+        assert finals[-1:] == ["会议纪要已整理。" if with_photos else ""]
+
+    if with_photos:
+        followup = client.post(
+            "/v1/chat/completions",
+            headers={**headers, "X-Conversation-Id": cid},
+            json={
+                "model": "pico-agent",
+                "messages": [
+                    {"role": "user", "content": "整理会议纪要"},
+                    {"role": "assistant", "content": "会议纪要已整理。"},
+                    {"role": "user", "content": "把最后一段再缩短一些。"},
+                ],
+            },
+        )
+        assert followup.status_code == 200, followup.text
+        tasks = client.get("/v1/tasks", headers=headers, params={"conversation_id": cid})
+        succeeded = [
+            item for item in tasks.json()["tasks"]
+            if (item["latest_run"] or {}).get("status") == "succeeded"
+        ]
+        assert len(succeeded) == 2
+        assert {item["source"] for item in succeeded} == {"mobile", None}
+        assert len(calls) == 3
+        desktop_cid, desktop_images, desktop_files = calls[-1]
+        assert desktop_cid == cid
+        assert {image["data"] for image in desktop_images} == {p[3] for p in photos}
+        assert dict(desktop_files) == {p[1]: p[2] for p in photos}

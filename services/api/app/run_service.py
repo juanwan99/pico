@@ -23,6 +23,7 @@ from app.db import (
     RunRow,
     TaskRow,
     append_event,
+    lock_sqlite_writer,
     new_id,
     session_factory,
 )
@@ -206,6 +207,9 @@ async def create_task(
     title: str,
     prompt: str,
     skill_id: str | None = None,
+    *,
+    conversation_id: str | None = None,
+    source: str | None = None,
 ) -> tuple[TaskRow, RunRow]:
     from pico_orchestrator.skill_policy import snapshot_for_skill
 
@@ -215,6 +219,8 @@ async def create_task(
         school_id=principal.school_id,
         membership_id=principal.membership_id,
         title=title or (prompt[:80] if prompt else "untitled"),
+        conversation_id=conversation_id,
+        source=source,
     )
     session.add(task)
     await session.flush()
@@ -558,6 +564,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             skill_snapshot = _run_skill_snapshot(run)
             task = await session.get(TaskRow, run.task_id)
             conversation_id = getattr(task, "conversation_id", None) if task else None
+            is_mobile = task is not None and task.source == "mobile"
 
         allowed_tools = None
         skill_instruction = ""
@@ -573,6 +580,20 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
             allowed_tools=allowed_tools,
             skill_instruction=skill_instruction,
         )
+        if is_mobile and conversation_id:
+            from pico_orchestrator.true_pi.runner import remember_conversation_files, runner_enabled
+            from pico_orchestrator.vision import apply_images_to_caps
+
+            from app.edu_files import images_from_upload_rows, workspace_files_from_rows
+            from app.task_create import mobile_photo_rows
+
+            async with factory() as session:
+                photos = await mobile_photo_rows(session, principal, conversation_id)
+                caps = apply_images_to_caps(caps, await images_from_upload_rows(session, photos))
+                if runner_enabled(principal.membership_id):
+                    files = await workspace_files_from_rows(session, photos)
+                    remember_conversation_files(principal.membership_id, conversation_id, files)
+
         from pico_orchestrator.capability_loading import resolve_visible_tools
 
         from app.delivery_gate import mark_turn_writers, turn_writers
@@ -688,6 +709,9 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         return
 
     async with factory() as session:
+        # The desktop importer must see the final answer and delivery status together.
+        if is_mobile:
+            await lock_sqlite_writer(session)
         run = await session.get(RunRow, run_id)
         if run is None or run.status in ("succeeded", "failed", "cancelled"):
             return
@@ -722,8 +746,9 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                     "role": "assistant",
                     "kind": "error",
                 },
+                commit=not is_mobile,
             )
-        if result.final_text:
+        if result.final_text or (is_mobile and result.status == "succeeded"):
             # final assistant message event if not already — never leak tenant IDs.
             await append_event(
                 session,
@@ -736,6 +761,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                         membership_id=principal.membership_id,
                     )
                 },
+                commit=not is_mobile,
             )
         if result.artifact_markdown:
             art = ArtifactRow(
@@ -752,6 +778,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                 run_id,
                 "artifact.created",
                 {"title": art.title, "kind": art.kind, "artifact_id": art.id},
+                commit=not is_mobile,
             )
         change_proposal = result.change_proposal
         if not change_proposal and skill_snapshot and skill_snapshot.get("requires_s7"):
@@ -781,6 +808,7 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
                 run_id,
                 "change.proposed",
                 {"change_id": ch.id, "title": ch.title},
+                commit=not is_mobile,
             )
         # Fail-closed delivery gate — same gate as _finalize_run (interactive).
         # Retry / REST / automation runs must not bypass #375 fail-closed semantics.

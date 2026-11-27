@@ -215,6 +215,10 @@ async function picoFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function syncPicoTaskConversations() {
+  return picoFetch<{ created: number }>('/task-conversations/sync', { method: 'POST' });
+}
+
 export async function getPicoArtifactContent(
   id: string,
   download = false,

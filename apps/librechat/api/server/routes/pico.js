@@ -10,6 +10,7 @@ const { createGzip, constants: zlib } = require('node:zlib');
 const express = require('express');
 const { logger } = require('~/config');
 const { requireJwtAuth } = require('~/server/middleware');
+const syncTaskConversations = require('~/server/services/picoTaskConversation');
 
 const router = express.Router();
 
@@ -161,6 +162,14 @@ function membershipFromReq(req) {
   return id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 128) || 'anonymous';
 }
 
+function picoHeaders(req) {
+  return {
+    Authorization: `Bearer ${picoKey()}`,
+    Accept: 'application/json',
+    'X-Pico-Membership-Id': membershipFromReq(req),
+  };
+}
+
 function assertId(param, name) {
   if (!param || !ID_RE.test(param)) {
     const err = new Error(`invalid ${name}`);
@@ -230,11 +239,7 @@ async function proxy(req, res, path, options = {}) {
   }
   const target = `${picoBase()}${path}${safeQs}`;
   try {
-    const headers = {
-      Authorization: `Bearer ${picoKey()}`,
-      Accept: 'application/json',
-      'X-Pico-Membership-Id': membershipFromReq(req),
-    };
+    const headers = picoHeaders(req);
     if (req.headers['content-type']) {
       headers['Content-Type'] = req.headers['content-type'];
     }
@@ -321,6 +326,7 @@ router.post('/v1/admin/gateway/accounts/:id/:action', (req, res) => {
   return proxy(req, res, `/v1/admin/gateway/accounts/${id}/${action}`);
 });
 
+router.post('/task-conversations/sync', syncTaskConversations(picoBase, picoHeaders));
 router.get('/v1/tasks', (req, res) => proxy(req, res, '/v1/tasks'));
 router.get('/v1/tasks/:taskId', (req, res) => {
   try {

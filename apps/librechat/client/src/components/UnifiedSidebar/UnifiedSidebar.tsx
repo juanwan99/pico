@@ -3,9 +3,12 @@ import type { ReactNode } from 'react';
 import { useRecoilState } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { useMediaQuery } from '@librechat/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { QueryKeys } from 'librechat-data-provider';
 import type { ChatFormValues, NavLink } from '~/common';
 import { ChatContext, ChatFormProvider, ActivePanelProvider } from '~/Providers';
 import { useChatHelpers, useLocalize } from '~/hooks';
+import { syncPicoTaskConversations } from '~/data-provider/pico/api';
 import Sidebar from './Sidebar';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -54,6 +57,25 @@ function UnifiedSidebar() {
     move: (e: MouseEvent) => void;
     up: () => void;
   } | null>(null);
+
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const sync = async () => {
+      try {
+        const { created } = await syncPicoTaskConversations();
+        if (created > 0) {
+          await queryClient.cancelQueries([QueryKeys.allConversations]);
+          await queryClient.invalidateQueries([QueryKeys.allConversations]);
+        }
+      } catch (error) {
+        console.error('Pico task conversation sync failed', error);
+        window.__lcRumPush?.('pico-task-conversation-sync-error');
+      }
+    };
+    void sync();
+    window.addEventListener('focus', sync);
+    return () => window.removeEventListener('focus', sync);
+  }, [queryClient]);
 
   const links = EMPTY_LINKS;
 

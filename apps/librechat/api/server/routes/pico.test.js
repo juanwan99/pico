@@ -47,6 +47,22 @@ describe('Pico proxy routes', () => {
     );
   });
 
+  it('registers the sync POST behind the authenticated membership proxy', async () => {
+    global.__PICO_USER = { id: 'mongo-user', eduId: 'teacher-a', eduSchoolId: 'school-a' };
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ tasks: [] }) });
+
+    await request(app).post('/api/pico/task-conversations/sync').expect(200, { created: 0 });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:18765/v1/tasks',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: expect.stringMatching(/^Bearer /),
+          'X-Pico-Membership-Id': 'school-a:teacher-a',
+        }),
+      }),
+    );
+  });
+
   it('exposes public tip probe with minimal fields only', async () => {
     const sha = '5a900f69906630c8ad3843b371909eecc998ac4e';
     global.fetch = jest.fn().mockResolvedValue({

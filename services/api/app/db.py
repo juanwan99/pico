@@ -75,6 +75,7 @@ class TaskRow(Base):
     title: Mapped[str] = mapped_column(String(512), default="")
     conversation_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    source: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -400,6 +401,8 @@ def _migrate_sqlite_sync(conn) -> None:
         conn.execute(text("ALTER TABLE tasks ADD COLUMN conversation_id VARCHAR(128)"))
     if "workspace_id" not in tcols:
         conn.execute(text("ALTER TABLE tasks ADD COLUMN workspace_id VARCHAR(36)"))
+    if "source" not in tcols:
+        conn.execute(text("ALTER TABLE tasks ADD COLUMN source VARCHAR(16)"))
 
     try:
         art_rows = conn.execute(text("PRAGMA table_info(artifacts)")).fetchall()
