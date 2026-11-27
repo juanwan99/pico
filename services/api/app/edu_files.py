@@ -8,6 +8,7 @@ import binascii
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -420,7 +421,7 @@ async def uploads_for_conversation(
                     ),
                 ),
             )
-            .order_by(ArtifactRow.created_at.desc())
+            .order_by(ArtifactRow.created_at.desc(), ArtifactRow.id.desc())
             .limit(_MAX_UPLOAD_INJECT * 3)
         )
     ).scalars().all()
@@ -458,17 +459,8 @@ async def uploads_for_conversation(
             candidates = [row for key, row in pending if key == draft_key]
     else:
         candidates = _newest_cluster(unbound)
-    seen_titles: set[str] = set()
-    picked: list[ArtifactRow] = []
-    for src in candidates:
-        title = str(src.title or "").strip()
-        key = title.lower() or src.id
-        if key in seen_titles:
-            continue
-        seen_titles.add(key)
-        picked.append(src)
-        if len(picked) >= _MAX_UPLOAD_INJECT:
-            break
+    # Take the most recent uploads and return them in upload order, as mobile runs do.
+    picked = list(reversed(candidates[:_MAX_UPLOAD_INJECT]))
     if not picked:
         return []
     claimed = False
@@ -574,7 +566,7 @@ async def workspace_files_from_rows(
     max_files: int = 50,
     max_total: int = 100 * 1024 * 1024,
 ) -> list[tuple[str, bytes]]:
-    """Every conversation upload as (title, original bytes) for the workspace box.
+    """Every conversation upload as (workspace filename, original bytes).
 
     Unlike ``native_files_from_rows`` this keeps any type (md / csv / images /
     legacy Office): the box reads files itself. Excerpts and KB text are not files.
@@ -583,6 +575,7 @@ async def workspace_files_from_rows(
 
     out: list[tuple[str, bytes]] = []
     seen: set[str] = set()
+    used_names: set[str] = set()
     total = 0
     for row in rows or []:
         if not isinstance(row, dict) or len(out) >= max_files:
@@ -603,7 +596,14 @@ async def workspace_files_from_rows(
         seen.add(art_id)
         total += len(raw)
         title = str(src.title or row.get("title") or row.get("filename") or "file")
-        out.append((title, bytes(raw)))
+        path = Path(title)
+        name = title
+        number = 1
+        while name.casefold() in used_names:
+            number += 1
+            name = f"{path.stem}-{number}{path.suffix}"
+        used_names.add(name.casefold())
+        out.append((name, bytes(raw)))
     return out
 
 

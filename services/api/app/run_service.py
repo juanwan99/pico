@@ -527,24 +527,6 @@ async def start_run_background(run_id: str, principal: Principal) -> None:
     _track_inflight(task)
 
 
-def _model_copy_of_photo(raw: bytes) -> dict[str, Any]:
-    """Use Pillow for the model channel's size limit; the workspace keeps the original."""
-    from io import BytesIO
-
-    from pico_orchestrator.vision import image_bytes_to_chat
-    from PIL import Image, ImageOps
-
-    with Image.open(BytesIO(raw)) as source:
-        photo = ImageOps.exif_transpose(source)
-        photo.thumbnail((2048, 2048), Image.Resampling.LANCZOS)
-        buf = BytesIO()
-        photo.convert("RGB").save(buf, format="JPEG", quality=85)
-    image = image_bytes_to_chat(buf.getvalue())
-    if image is None:
-        raise ValueError("手机照片无法缩小到模型图像通道的大小上限")
-    return image
-
-
 async def _execute_run(run_id: str, principal: Principal) -> None:
     from pico_orchestrator.run_types import provider_label
     from pico_orchestrator.runtime import run_agent_runtime
@@ -601,25 +583,19 @@ async def _execute_run(run_id: str, principal: Principal) -> None:
         if is_mobile and conversation_id:
             from pico_orchestrator.llm_file_pass import MAX_BYTES
             from pico_orchestrator.true_pi.runner import remember_conversation_files, runner_enabled
-            from pico_orchestrator.vision import _MAX_IMAGE_BYTES, apply_images_to_caps
+            from pico_orchestrator.vision import apply_images_to_caps
 
             from app.edu_files import images_from_upload_rows, workspace_files_from_rows
             from app.task_create import mobile_photo_rows
 
             async with factory() as session:
                 photos = await mobile_photo_rows(session, principal, conversation_id)
-                small = [photo for photo in photos if photo["byte_size"] <= _MAX_IMAGE_BYTES]
-                large = [photo for photo in photos if photo["byte_size"] > _MAX_IMAGE_BYTES]
-                workspace = runner_enabled(principal.membership_id)
-                files = await workspace_files_from_rows(
-                    session, photos if workspace else large, max_total=len(photos) * MAX_BYTES
-                )
-                images = await images_from_upload_rows(session, small)
-                for _, raw in files:
-                    if len(raw) > _MAX_IMAGE_BYTES:
-                        images.append(await asyncio.to_thread(_model_copy_of_photo, raw))
+                images = await images_from_upload_rows(session, photos)
                 caps = apply_images_to_caps(caps, images)
-                if workspace:
+                if runner_enabled(principal.membership_id):
+                    files = await workspace_files_from_rows(
+                        session, photos, max_total=len(photos) * MAX_BYTES
+                    )
                     remember_conversation_files(principal.membership_id, conversation_id, files)
 
         from pico_orchestrator.capability_loading import resolve_visible_tools

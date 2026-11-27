@@ -226,8 +226,7 @@ export async function syncPicoTaskConversations(model: string) {
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ model }),
   });
-  const result = await picoResponse<{ created: number }>(res);
-  return { ...result, refresh: res.headers.get('X-Pico-Refresh-Conversations') === '1' };
+  return picoResponse<{ created: number }>(res);
 }
 
 export async function getPicoArtifactContent(

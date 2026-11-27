@@ -1,6 +1,13 @@
 const express = require('express');
 const request = require('supertest');
 
+jest.mock('@librechat/api', () => ({ getOpenAIModels: jest.fn() }), { virtual: true });
+jest.mock('~/models', () => ({
+  getConvo: jest.fn(),
+  saveConvo: jest.fn(),
+  saveMessage: jest.fn(),
+}));
+
 jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, _res, next) => {
     req.user = global.__PICO_USER || { id: 'member-123' };

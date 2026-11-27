@@ -1,9 +1,12 @@
 const express = require('express');
 const request = require('supertest');
 const { EModelEndpoint, Constants } = require('librechat-data-provider');
+const { getOpenAIModels } = require('@librechat/api');
 const mongoose = require('mongoose');
 const { version } = require('uuid');
 const { getConvo, saveConvo, saveMessage } = require('~/models');
+
+jest.mock('@librechat/api', () => ({ getOpenAIModels: jest.fn() }), { virtual: true });
 
 jest.mock('~/models', () => ({
   getConvo: jest.fn(),
@@ -40,7 +43,6 @@ describe('Pico mobile task conversations', () => {
   let conversations;
   let messages;
   const oldFetch = global.fetch;
-  const oldModels = process.env.OPENAI_MODELS;
 
   function core({ tasks = [mobile], uploads = [] } = {}) {
     global.fetch = jest.fn(async (url) => {
@@ -69,7 +71,7 @@ describe('Pico mobile task conversations', () => {
   }
 
   beforeEach(() => {
-    process.env.OPENAI_MODELS = `${model},other-model`;
+    getOpenAIModels.mockResolvedValue([model, 'other-model']);
     conversations = new Map();
     messages = new Map();
     const batches = new Map();
@@ -95,11 +97,6 @@ describe('Pico mobile task conversations', () => {
 
   afterEach(() => {
     global.fetch = oldFetch;
-    if (oldModels === undefined) {
-      delete process.env.OPENAI_MODELS;
-    } else {
-      process.env.OPENAI_MODELS = oldModels;
-    }
   });
 
   it('imports the final answer and original prompt with an attachment count, then skips repeats', async () => {
@@ -182,12 +179,10 @@ describe('Pico mobile task conversations', () => {
     await new Promise(setImmediate);
     releaseSave();
 
-    const [created, joined] = await Promise.all([first, second]);
-    expect(created.body).toEqual({ created: 1 });
-    expect(joined.body).toEqual({ created: 0 });
-    expect(joined.headers['x-pico-refresh-conversations']).toBe('1');
-    expect(saveConvo).toHaveBeenCalledTimes(1);
-    expect(saveMessage).toHaveBeenCalledTimes(2);
+    await Promise.all([first, second]);
+    expect(conversations.size).toBe(2);
+    expect(conversations.has(`teacher-mongo:${conversationId}`)).toBe(true);
+    expect(messages.size).toBe(2);
     expect(Array.from(messages.values())[0].text).toBe('整理备课记录');
     expect(conversations.get(`other-user:${conversationId}`).title).toBe('别人的对话');
   });

@@ -15,5 +15,5 @@ Forbidden: iframe, edu `/pico` subpage, parent-domain `.weiyuji.cn` cookies, fie
 
 Formal release: merge to `main`, then `PICO_DEPLOY_SHA=<main-sha> bash scripts/prod-update.sh`.
 
-手机任务可在 `POST /v1/tasks` 带 `source: "mobile"` 和可选的 `upload_ids`（最多 8 个本人经 `POST /v1/files` 上传的图片 ID）。返回的 `task.conversation_id` 用于电脑上续改。
+手机任务可在 `POST /v1/tasks` 带 `source: "mobile"` 和可选的 `upload_ids`（最多 8 个本人经 `POST /v1/files` 上传、尚未挂到正式对话的图片 ID）。返回的 `task.conversation_id` 用于电脑上续改。
 电脑左栏同步只看 `GET /v1/tasks` 最近 50 条任务，更早的手机任务不补。导入的用户消息显示照片张数，续改时 Pico 仍可读取原图。

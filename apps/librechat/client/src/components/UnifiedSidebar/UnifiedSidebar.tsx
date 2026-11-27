@@ -63,8 +63,8 @@ function UnifiedSidebar() {
   useEffect(() => {
     const sync = async () => {
       try {
-        const { created, refresh } = await syncPicoTaskConversations(getPicoModelMode());
-        if (created > 0 || refresh) {
+        const { created } = await syncPicoTaskConversations(getPicoModelMode());
+        if (created > 0) {
           await queryClient.cancelQueries([QueryKeys.allConversations]);
           await queryClient.invalidateQueries([QueryKeys.allConversations]);
         }

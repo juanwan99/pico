@@ -5,7 +5,6 @@ const { getOpenAIModels } = require('@librechat/api');
 const { logger } = require('~/config');
 const { getConvo, saveConvo, saveMessage } = require('~/models');
 
-const importsInProgress = new Map();
 const endpoint = EModelEndpoint.openAI;
 
 class PicoUpstreamError extends Error {}
@@ -22,11 +21,11 @@ async function readPico(base, headers, path) {
   }
 }
 
-async function importConversation(read, user, task, key, preferredModel) {
+async function importConversation(read, user, task, preferredModel) {
   const conversationId = task.conversation_id;
   const ctx = { userId: user.id };
   const batches = mongoose.connection.collection('pico_task_conversation_imports');
-  const filter = { _id: key };
+  const filter = { _id: JSON.stringify([user.id, conversationId]) };
   // A retry resumes the same run's message upserts even if Pico has run the task again.
   const { runId, completed } = await batches.findOneAndUpdate(
     filter,
@@ -90,25 +89,6 @@ async function importConversation(read, user, task, key, preferredModel) {
   return true;
 }
 
-async function syncConversation(read, req, res, task) {
-  const key = JSON.stringify([req.user.id, task.conversation_id]);
-  const pending = importsInProgress.get(key);
-  if (pending) {
-    if (await pending) {
-      res.set('X-Pico-Refresh-Conversations', '1');
-    }
-    return false;
-  }
-
-  const importing = importConversation(read, req.user, task, key, req.body?.model);
-  importsInProgress.set(key, importing);
-  try {
-    return await importing;
-  } finally {
-    importsInProgress.delete(key);
-  }
-}
-
 function syncTaskConversations(picoBase, picoHeaders) {
   return async (req, res) => {
     const base = picoBase();
@@ -122,7 +102,7 @@ function syncTaskConversations(picoBase, picoHeaders) {
           task.source === 'mobile' &&
           task.conversation_id &&
           task.latest_run?.status === 'succeeded' &&
-          (await syncConversation(read, req, res, task))
+          (await importConversation(read, req.user, task, req.body?.model))
         ) {
           created++;
         }
