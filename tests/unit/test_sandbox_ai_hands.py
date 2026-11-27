@@ -420,7 +420,7 @@ async def test_browser_tool_result_password_fact(tool, args, metadata, expects_f
     ):
         result = await _gw().invoke(owner, tool, args)
 
-    expected = [("page_fact", "这一页没有密码框（还不是登录框）")] if expects_fact else []
+    expected = [("page_fact", "这一页没检测到密码框")] if expects_fact else []
     assert list(result.items()) == expected + original_items
     assert list(sidecar_result.items()) == original_items
 

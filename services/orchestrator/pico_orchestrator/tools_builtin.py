@@ -2070,7 +2070,7 @@ def _workspace_handlers(
             and out.get("kind", "browser") == "browser"
             and out.get("has_password_input") is False
         ):
-            return {"page_fact": "这一页没有密码框（还不是登录框）", **out}
+            return {"page_fact": "这一页没检测到密码框", **out}
         return out
 
     async def browser_open(principal: Principal, args: dict[str, Any]) -> dict[str, Any]:
