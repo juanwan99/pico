@@ -1732,7 +1732,10 @@ def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, photo_case):
         if "history" not in kwargs:
             rest_runs.add(run_id)
         await artifact_store.write(principal, kind="file", title="notes.txt", content="成品")
-        return RunResult(status="succeeded", final_text="会议纪要已整理。" if with_photos else "")
+        return RunResult(
+            status="succeeded",
+            final_text="会议纪要已整理。" if with_photos or "history" in kwargs else "",
+        )
 
     async def check_gate(session, run, **kwargs):
         if run.id in rest_runs:
@@ -1807,29 +1810,135 @@ def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, photo_case):
         finals = [event["payload"]["text"] for event in events if event["type"] == "message.final"]
         assert finals[-1:] == ["会议纪要已整理。" if with_photos else ""]
 
-    if with_photos:
-        followup = client.post(
-            "/v1/chat/completions",
-            headers={**headers, "X-Conversation-Id": cid},
-            json={
-                "model": "pico-agent",
-                "messages": [
-                    {"role": "user", "content": "整理会议纪要"},
-                    {"role": "assistant", "content": "会议纪要已整理。"},
-                    {"role": "user", "content": "把最后一段再缩短一些。"},
-                ],
-            },
+    followup = client.post(
+        "/v1/chat/completions",
+        headers={**headers, "X-Conversation-Id": cid},
+        json={
+            "model": "pico-agent",
+            "messages": [
+                {"role": "user", "content": "整理会议纪要"},
+                {"role": "assistant", "content": "会议纪要已整理。"},
+                {"role": "user", "content": "把最后一段再缩短一些。"},
+            ],
+        },
+    )
+    assert followup.status_code == 200, followup.text
+    tasks = client.get("/v1/tasks", headers=headers, params={"conversation_id": cid})
+    succeeded = [
+        item for item in tasks.json()["tasks"]
+        if (item["latest_run"] or {}).get("status") == "succeeded"
+    ]
+    assert len(succeeded) == 2
+    assert {item["source"] for item in succeeded} == {"mobile", None}
+    assert len(calls) == 3
+    desktop_cid, desktop_images, desktop_files = calls[-1]
+    assert desktop_cid == cid
+    assert {image["data"] for image in desktop_images} == {p[3] for p in photos}
+    assert dict(desktop_files) == expected_files
+
+
+@pytest.mark.parametrize("draft", [None, "pending_desktop"])
+def test_desktop_claim_keeps_photo_bound_by_mobile_after_its_read(client, monkeypatch, draft):
+    from io import BytesIO
+
+    from app import task_create
+    from app.auth import Principal
+    from app.edu_files import uploads_for_conversation
+    from PIL import Image
+
+    principal = Principal("school-a", "member-mobile", ["ai:run", "ai:read"], "", "", 0, {})
+    headers = _headers(client, principal.membership_id)
+    if draft:
+        headers["X-Conversation-Id"] = draft
+    buf = BytesIO()
+    Image.new("RGB", (2, 2)).save(buf, format="PNG")
+    uploaded = client.post(
+        "/v1/files", headers=headers, files={"file": ("photo.png", buf.getvalue(), "image/png")}
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    file_id = uploaded.json()["id"]
+
+    async def no_background(*args):
+        return None
+
+    monkeypatch.setattr("app.run_service.start_run_background", no_background)
+
+    async def interleave():
+        factory = session_factory()
+        async with factory() as desktop:
+            file = await desktop.get(ArtifactRow, file_id)
+            snapshot = await desktop.get(TaskRow, file.task_id)
+            assert snapshot.conversation_id == draft
+            execute = desktop.execute
+            desktop_cid = new_id()
+            mobile_cid = None
+
+            async def claim_after_select(statement, *args, **kwargs):
+                nonlocal mobile_cid
+                result = await execute(statement, *args, **kwargs)
+                if mobile_cid is None:
+                    async with factory() as mobile:
+                        task, _ = await task_create.create_task(
+                            mobile, principal, "", "整理照片", None, "mobile", [file_id]
+                        )
+                        mobile_cid = task.conversation_id
+                return result
+
+            monkeypatch.setattr(desktop, "execute", claim_after_select)
+            desktop_files = await uploads_for_conversation(desktop, principal, desktop_cid)
+        async with factory() as session:
+            persisted = await session.get(TaskRow, file.task_id)
+            assert desktop_files == []
+            assert persisted.conversation_id == mobile_cid
+
+    asyncio.run(interleave())
+
+
+@pytest.mark.parametrize("same_name", [False, True])
+def test_desktop_native_files_keep_recency_and_workspace_bytes(client, same_name):
+    from io import BytesIO
+
+    from app.auth import Principal
+    from app.edu_files import (
+        native_files_from_rows,
+        uploads_for_conversation,
+        workspace_files_from_rows,
+    )
+    from openpyxl import Workbook
+    from pico_orchestrator.llm_file_pass import forget_turn_files, remember_turn_files, turn_files
+    from pico_orchestrator.true_pi.runtime import _box_attachments
+
+    principal = Principal("school-a", "member-desktop", ["ai:run", "ai:read"], "", "", 0, {})
+    cid = new_id()
+    headers = {**_headers(client, principal.membership_id), "X-Conversation-Id": cid}
+    inputs = []
+    for number in range(2 if same_name else 5):
+        name = "成绩.xlsx" if same_name else f"第{number + 1}份.xlsx"
+        book = Workbook()
+        book.active["A1"] = number
+        buf = BytesIO()
+        book.save(buf)
+        raw = buf.getvalue()
+        inputs.append((name, raw))
+        uploaded = client.post(
+            "/v1/files", headers=headers,
+            files={"file": (name, raw, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
         )
-        assert followup.status_code == 200, followup.text
-        tasks = client.get("/v1/tasks", headers=headers, params={"conversation_id": cid})
-        succeeded = [
-            item for item in tasks.json()["tasks"]
-            if (item["latest_run"] or {}).get("status") == "succeeded"
-        ]
-        assert len(succeeded) == 2
-        assert {item["source"] for item in succeeded} == {"mobile", None}
-        assert len(calls) == 3
-        desktop_cid, desktop_images, desktop_files = calls[-1]
-        assert desktop_cid == cid
-        assert {image["data"] for image in desktop_images} == {p[3] for p in photos}
-        assert dict(desktop_files) == expected_files
+        assert uploaded.status_code == 200, uploaded.text
+
+    async def check_files():
+        async with session_factory()() as session:
+            rows = await uploads_for_conversation(session, principal, cid)
+            native = await native_files_from_rows(session, rows)
+            workspace = await workspace_files_from_rows(session, rows)
+        remember_turn_files(cid, native)
+        staged_native = [(file.filename, file.data) for file in turn_files(cid)]
+        forget_turn_files(cid)
+        if same_name:
+            expected_workspace = {"成绩.xlsx": inputs[0][1], "成绩-2.xlsx": inputs[1][1]}
+            assert dict(_box_attachments(workspace, staged_native)) == expected_workspace
+        else:
+            assert staged_native == inputs[:0:-1]
+            assert workspace == inputs
+
+    asyncio.run(check_files())

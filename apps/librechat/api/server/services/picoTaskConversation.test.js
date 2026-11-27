@@ -4,13 +4,12 @@ const { EModelEndpoint, Constants } = require('librechat-data-provider');
 const { getOpenAIModels } = require('@librechat/api');
 const mongoose = require('mongoose');
 const { version } = require('uuid');
-const { getConvo, saveConvo, saveMessage } = require('~/models');
+const { getConvo, saveMessage } = require('~/models');
 
 jest.mock('@librechat/api', () => ({ getOpenAIModels: jest.fn() }), { virtual: true });
 
 jest.mock('~/models', () => ({
   getConvo: jest.fn(),
-  saveConvo: jest.fn(),
   saveMessage: jest.fn(),
 }));
 
@@ -41,6 +40,7 @@ describe('Pico mobile task conversations', () => {
   app.use('/api/pico', router);
   const sync = (body = {}) => request(app).post('/api/pico/task-conversations/sync').send(body);
   let conversations;
+  const updateConvo = jest.fn();
   let messages;
   const oldFetch = global.fetch;
 
@@ -73,6 +73,7 @@ describe('Pico mobile task conversations', () => {
   beforeEach(() => {
     getOpenAIModels.mockResolvedValue([model, 'other-model']);
     conversations = new Map();
+    mongoose.models.Conversation = { updateOne: updateConvo };
     messages = new Map();
     const batches = new Map();
     jest.spyOn(mongoose.connection, 'collection').mockReturnValue({
@@ -86,17 +87,24 @@ describe('Pico mobile task conversations', () => {
     });
     getConvo.mockImplementation(async (user, id) => conversations.get(`${user}:${id}`));
     saveMessage.mockImplementation(async ({ userId }, message) => {
-      messages.set(`${userId}:${message.messageId}`, message);
-      return message;
+      const saved = { ...message, _id: message.messageId };
+      messages.set(`${userId}:${message.messageId}`, saved);
+      return saved;
     });
-    saveConvo.mockImplementation(async ({ userId }, conversation) => {
-      conversations.set(`${userId}:${conversation.conversationId}`, conversation);
-      return conversation;
+    updateConvo.mockImplementation(async (key, { $setOnInsert }) => {
+      expect(key).toEqual({ conversationId, user: 'teacher-mongo', tenantId: null });
+      const id = `${key.user}:${key.conversationId}`;
+      if (conversations.has(id)) {
+        return { upsertedCount: 0 };
+      }
+      conversations.set(id, { ...key, ...$setOnInsert });
+      return { upsertedCount: 1 };
     });
   });
 
   afterEach(() => {
     global.fetch = oldFetch;
+    delete mongoose.models.Conversation;
   });
 
   it('imports the final answer and original prompt with an attachment count, then skips repeats', async () => {
@@ -132,8 +140,9 @@ describe('Pico mobile task conversations', () => {
     });
     expect(version(user.messageId)).toBe(5);
     expect(version(assistant.messageId)).toBe(5);
+    expect(convo.messages).toEqual([user._id, assistant._id]);
     await sync().expect(200, { created: 0 });
-    expect(saveConvo).toHaveBeenCalledTimes(1);
+    expect(updateConvo).toHaveBeenCalledTimes(1);
     expect(saveMessage).toHaveBeenCalledTimes(2);
 
     conversations.clear();
@@ -145,41 +154,26 @@ describe('Pico mobile task conversations', () => {
   it('creates only one copy across two simultaneous requests and keeps another user separate', async () => {
     conversations.set(`other-user:${conversationId}`, { title: '别人的对话' });
     core();
-    let releaseSave;
-    let importStarted;
-    const started = new Promise((resolve) => {
-      importStarted = resolve;
+    let bothWriting;
+    const barrier = new Promise((resolve) => {
+      bothWriting = resolve;
     });
-    const save = saveConvo.getMockImplementation();
-    saveConvo.mockImplementationOnce(async (...args) => {
-      importStarted();
-      await new Promise((resolve) => {
-        releaseSave = resolve;
-      });
-      return save(...args);
+    let writes = 0;
+    const arrive = async () => {
+      if (++writes === 2) {
+        bothWriting();
+      }
+      await barrier;
+    };
+    const upsert = updateConvo.getMockImplementation();
+    updateConvo.mockImplementation(async (...args) => {
+      await arrive();
+      return upsert(...args);
     });
-    const first = sync()
-      .expect(200)
-      .then((res) => res);
-    await started;
-    const fetch = global.fetch.getMockImplementation();
-    let secondRead;
-    const reading = new Promise((resolve) => {
-      secondRead = resolve;
-    });
-    global.fetch.mockImplementationOnce(async (...args) => {
-      const response = await fetch(...args);
-      secondRead();
-      return response;
-    });
-    const second = sync()
-      .expect(200)
-      .then((res) => res);
-    await reading;
-    await new Promise(setImmediate);
-    releaseSave();
 
-    await Promise.all([first, second]);
+    await Promise.all([sync().expect(200), sync().expect(200)]);
+    expect(updateConvo).toHaveBeenCalledTimes(2);
+    expect(updateConvo.mock.calls[0][2]).toEqual({ upsert: true, timestamps: false });
     expect(conversations.size).toBe(2);
     expect(conversations.has(`teacher-mongo:${conversationId}`)).toBe(true);
     expect(messages.size).toBe(2);
@@ -199,7 +193,7 @@ describe('Pico mobile task conversations', () => {
       ],
     });
     await sync().expect(200, { created: 0 });
-    expect(saveConvo).not.toHaveBeenCalled();
+    expect(updateConvo).not.toHaveBeenCalled();
     expect(saveMessage).not.toHaveBeenCalled();
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(conversations.get(`teacher-mongo:${conversationId}`).title).toBe('电脑改过的标题');
@@ -208,19 +202,19 @@ describe('Pico mobile task conversations', () => {
   it('creates nothing when the membership has no tasks', async () => {
     core({ tasks: [] });
     await sync().expect(200, { created: 0 });
-    expect(saveConvo).not.toHaveBeenCalled();
+    expect(updateConvo).not.toHaveBeenCalled();
     expect(saveMessage).not.toHaveBeenCalled();
   });
 
   it('surfaces an unreachable core as a proxy failure', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
     await sync().expect(502, { error: 'pico_upstream_unavailable' });
-    expect(saveConvo).not.toHaveBeenCalled();
+    expect(updateConvo).not.toHaveBeenCalled();
   });
 
   it('resumes the original import when a newer run succeeds after a failed save', async () => {
     core();
-    saveConvo.mockResolvedValueOnce({ message: 'Error saving conversation' });
+    updateConvo.mockRejectedValueOnce(new Error('Error saving conversation'));
     await sync().expect(500);
     expect(conversations.size).toBe(0);
     core({ tasks: [{ ...mobile, latest_run: { id: retryId, status: 'succeeded' } }] });

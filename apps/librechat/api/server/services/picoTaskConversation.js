@@ -3,7 +3,7 @@ const { v5: uuidv5 } = require('uuid');
 const { Constants, EModelEndpoint } = require('librechat-data-provider');
 const { getOpenAIModels } = require('@librechat/api');
 const { logger } = require('~/config');
-const { getConvo, saveConvo, saveMessage } = require('~/models');
+const { getConvo, saveMessage } = require('~/models');
 
 const endpoint = EModelEndpoint.openAI;
 
@@ -81,12 +81,24 @@ async function importConversation(read, user, task, preferredModel) {
   if (!userMessage || !assistantMessage) {
     throw new Error(`Could not save messages for mobile task conversation ${conversationId}`);
   }
-  const saved = await saveConvo(ctx, { conversationId, title: task.title, endpoint, model });
-  if (saved?.conversationId !== conversationId) {
-    throw new Error(`Could not save mobile task conversation ${conversationId}`);
-  }
+  // Match the entire unique index. saveConvo omits tenantId for accounts without a tenant.
+  const now = new Date();
+  const saved = await mongoose.models.Conversation.updateOne(
+    { conversationId, user: ctx.userId, tenantId: user.tenantId ?? null },
+    {
+      $setOnInsert: {
+        title: task.title,
+        endpoint,
+        model,
+        messages: [userMessage._id, assistantMessage._id],
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    { upsert: true, timestamps: false },
+  );
   await complete();
-  return true;
+  return saved.upsertedCount === 1;
 }
 
 function syncTaskConversations(picoBase, picoHeaders) {
