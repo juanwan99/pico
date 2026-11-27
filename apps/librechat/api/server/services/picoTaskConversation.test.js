@@ -25,12 +25,22 @@ const router = require('../routes/pico');
 const conversationId = '12345678-1234-4234-9234-123456789abc';
 const runId = '12345678-1234-4234-9234-123456789def';
 const retryId = '12345678-1234-4234-9234-123456789eee';
+const olderConversationId = '12345678-1234-4234-9234-123456789ccc';
+const olderRunId = '12345678-1234-4234-9234-123456789ddd';
 const mobile = {
   id: 'task-1',
   source: 'mobile',
   conversation_id: conversationId,
   title: '备课记录',
+  created_at: '2026-11-27T08:15:00',
   latest_run: { id: runId, status: 'succeeded' },
+};
+const olderMobile = {
+  ...mobile,
+  id: 'task-0',
+  conversation_id: olderConversationId,
+  created_at: '2026-11-26T08:15:00',
+  latest_run: { id: olderRunId, status: 'succeeded' },
 };
 const model = 'workbench-default-model';
 
@@ -44,14 +54,25 @@ describe('Pico mobile task conversations', () => {
   let messages;
   const oldFetch = global.fetch;
 
-  function core({ tasks = [mobile], uploads = [] } = {}) {
+  function core({ tasks = [mobile], uploads = [], olderEventsAvailable = true } = {}) {
     global.fetch = jest.fn(async (url) => {
       const { pathname, search } = new URL(url);
       const data = {
         '/v1/tasks': { tasks },
         [`/v1/tasks?conversation_id=${conversationId}`]: { tasks: [mobile, ...uploads] },
-        [`/v1/runs/${runId}`]: { run: { id: runId, prompt: '整理备课记录' } },
-        [`/v1/runs/${retryId}`]: { run: { id: retryId, prompt: '整理备课记录' } },
+        [`/v1/tasks?conversation_id=${olderConversationId}`]: { tasks: [olderMobile] },
+        [`/v1/runs/${runId}`]: {
+          run: { id: runId, prompt: '整理备课记录', ended_at: '2026-11-27T08:30:00' },
+        },
+        [`/v1/runs/${retryId}`]: {
+          run: { id: retryId, prompt: '整理备课记录', ended_at: '2026-11-27T08:45:00' },
+        },
+        [`/v1/runs/${olderRunId}`]: {
+          run: { id: olderRunId, prompt: '整理昨天的记录', ended_at: '2026-11-26T08:30:00' },
+        },
+        [`/v1/runs/${olderRunId}/events`]: olderEventsAvailable
+          ? { events: [{ type: 'message.final', payload: { text: '昨天的记录已整理。' } }] }
+          : undefined,
         [`/v1/runs/${retryId}/events`]: {
           events: [{ type: 'message.final', payload: { text: '重跑结果' } }],
         },
@@ -92,7 +113,11 @@ describe('Pico mobile task conversations', () => {
       return saved;
     });
     updateConvo.mockImplementation(async (key, { $setOnInsert }) => {
-      expect(key).toEqual({ conversationId, user: 'teacher-mongo', tenantId: null });
+      expect(key).toEqual({
+        conversationId: expect.any(String),
+        user: 'teacher-mongo',
+        tenantId: null,
+      });
       const id = `${key.user}:${key.conversationId}`;
       if (conversations.has(id)) {
         return { upsertedCount: 0 };
@@ -208,8 +233,32 @@ describe('Pico mobile task conversations', () => {
 
   it('surfaces an unreachable core as a proxy failure', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
-    await sync().expect(502, { error: 'pico_upstream_unavailable' });
+    await sync().expect(502, { error: 'pico_upstream_unavailable', created: 0 });
     expect(updateConvo).not.toHaveBeenCalled();
+  });
+
+  it('reports conversations already created when a later run cannot be read', async () => {
+    core({ tasks: [mobile, olderMobile], olderEventsAvailable: false });
+    await sync().expect(502, { error: 'pico_upstream_unavailable', created: 1 });
+    expect(conversations.has(`teacher-mongo:${conversationId}`)).toBe(true);
+    expect(conversations.size).toBe(1);
+    core({ tasks: [mobile, olderMobile] });
+    await sync().expect(200, { created: 1 });
+    expect(conversations.size).toBe(2);
+    expect(messages.size).toBe(4);
+  });
+
+  it('preserves the ledger UTC dates for conversations imported together', async () => {
+    core({ tasks: [mobile, olderMobile] });
+    await sync().expect(200, { created: 2 });
+    expect(conversations.get(`teacher-mongo:${conversationId}`)).toMatchObject({
+      createdAt: new Date('2026-11-27T08:15:00Z'),
+      updatedAt: new Date('2026-11-27T08:30:00Z'),
+    });
+    expect(conversations.get(`teacher-mongo:${olderConversationId}`)).toMatchObject({
+      createdAt: new Date('2026-11-26T08:15:00Z'),
+      updatedAt: new Date('2026-11-26T08:30:00Z'),
+    });
   });
 
   it('resumes the original import when a newer run succeeds after a failed save', async () => {

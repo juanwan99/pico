@@ -1708,7 +1708,7 @@ async def test_exam_grading_ticket_rides_its_own_lane_and_bill_line(tmp_path, mo
     assert "lane" not in rows["member-chat"]
 
 
-@pytest.mark.parametrize("photo_case", ["normal", "empty", "same_name"])
+@pytest.mark.parametrize("photo_case", ["normal", "empty", "same_name", "same_name_after_uploads"])
 def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, photo_case):
     from io import BytesIO
 
@@ -1751,7 +1751,7 @@ def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, photo_case):
     images_to_upload = [
         ("a.png", "red"), ("b.png", "blue"), ("unbound.png", "white"), ("pending.png", "green")
     ]
-    if photo_case == "same_name":
+    if photo_case.startswith("same_name"):
         images_to_upload[:2] = [("image.jpg", "red"), ("image.jpg", "blue")]
     for index, (photo, color) in enumerate(images_to_upload):
         buf = BytesIO()
@@ -1790,7 +1790,7 @@ def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, photo_case):
     assert client.get(f"/v1/runs/{retry_id}", headers=headers).json()["run"]["status"] == "succeeded"
     assert len(calls) == 2
     expected_files = {p[1]: p[2] for p in photos}
-    if photo_case == "same_name":
+    if photo_case.startswith("same_name"):
         expected_files = {"image.jpg": photos[0][2], "image-2.jpg": photos[1][2]}
     for run_cid, images, files in calls:
         assert run_cid == cid
@@ -1809,6 +1809,19 @@ def test_mobile_run_and_retry_use_exact_photos(client, monkeypatch, photo_case):
         events = client.get(f"/v1/runs/{rid}/events", headers=headers).json()["events"]
         finals = [event["payload"]["text"] for event in events if event["type"] == "message.final"]
         assert finals[-1:] == ["会议纪要已整理。" if with_photos else ""]
+
+    if photo_case == "same_name_after_uploads":
+        del expected_files["image.jpg"]
+        photos = photos[1:]
+        for index in range(7):
+            name, raw = f"补充-{index}.txt", b"more notes"
+            uploaded = client.post(
+                "/v1/files",
+                headers={**headers, "X-Conversation-Id": cid},
+                files={"file": (name, raw, "text/plain")},
+            )
+            assert uploaded.status_code == 200, uploaded.text
+            expected_files[name] = raw
 
     followup = client.post(
         "/v1/chat/completions",
@@ -1982,7 +1995,7 @@ def test_desktop_native_files_keep_recency_and_workspace_bytes(client, same_name
         staged_native = [(file.filename, file.data) for file in turn_files(cid)]
         forget_turn_files(cid)
         if same_name:
-            expected_workspace = {"成绩.xlsx": inputs[0][1], "成绩-2.xlsx": inputs[1][1]}
+            expected_workspace = {"成绩.xlsx": inputs[1][1], "成绩-2.xlsx": inputs[0][1]}
             assert dict(_box_attachments(workspace, staged_native)) == expected_workspace
         else:
             assert staged_native == inputs[:0:-1]

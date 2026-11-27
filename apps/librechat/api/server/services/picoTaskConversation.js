@@ -82,7 +82,6 @@ async function importConversation(read, user, task, preferredModel) {
     throw new Error(`Could not save messages for mobile task conversation ${conversationId}`);
   }
   // Match the entire unique index. saveConvo omits tenantId for accounts without a tenant.
-  const now = new Date();
   const saved = await mongoose.models.Conversation.updateOne(
     { conversationId, user: ctx.userId, tenantId: user.tenantId ?? null },
     {
@@ -91,8 +90,8 @@ async function importConversation(read, user, task, preferredModel) {
         endpoint,
         model,
         messages: [userMessage._id, assistantMessage._id],
-        createdAt: now,
-        updatedAt: now,
+        createdAt: new Date(`${task.created_at}Z`),
+        updatedAt: new Date(`${run.ended_at}Z`),
       },
     },
     { upsert: true, timestamps: false },
@@ -106,9 +105,9 @@ function syncTaskConversations(picoBase, picoHeaders) {
     const base = picoBase();
     const headers = picoHeaders(req);
     const read = (path) => readPico(base, headers, path);
+    let created = 0;
     try {
       const { tasks } = await read('/v1/tasks');
-      let created = 0;
       for (const task of tasks) {
         if (
           task.source === 'mobile' &&
@@ -122,10 +121,11 @@ function syncTaskConversations(picoBase, picoHeaders) {
       res.json({ created });
     } catch (error) {
       logger.error('[pico task conversations sync]', error);
-      if (error instanceof PicoUpstreamError) {
-        return res.status(502).json({ error: 'pico_upstream_unavailable' });
-      }
-      res.status(500).json({ error: 'pico_task_conversations_sync_failed' });
+      const upstream = error instanceof PicoUpstreamError;
+      res.status(upstream ? 502 : 500).json({
+        error: upstream ? 'pico_upstream_unavailable' : 'pico_task_conversations_sync_failed',
+        created,
+      });
     }
   };
 }

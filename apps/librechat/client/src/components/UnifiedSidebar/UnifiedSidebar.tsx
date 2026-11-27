@@ -8,7 +8,7 @@ import { QueryKeys } from 'librechat-data-provider';
 import type { ChatFormValues, NavLink } from '~/common';
 import { ChatContext, ChatFormProvider, ActivePanelProvider } from '~/Providers';
 import { useChatHelpers, useLocalize } from '~/hooks';
-import { syncPicoTaskConversations } from '~/data-provider/pico/api';
+import { PicoHttpError, syncPicoTaskConversations } from '~/data-provider/pico/api';
 import Sidebar from './Sidebar';
 import { cn } from '~/utils';
 import { getPicoModelMode } from '~/utils/picoModelPref';
@@ -62,15 +62,16 @@ function UnifiedSidebar() {
   const queryClient = useQueryClient();
   useEffect(() => {
     const sync = async () => {
-      try {
-        const { created } = await syncPicoTaskConversations(getPicoModelMode());
-        if (created > 0) {
-          await queryClient.cancelQueries([QueryKeys.allConversations]);
-          await queryClient.invalidateQueries([QueryKeys.allConversations]);
-        }
-      } catch (error) {
-        console.error('Pico task conversation sync failed', error);
-        window.__lcRumPush?.('pico-task-conversation-sync-error');
+      const { created } = await syncPicoTaskConversations(getPicoModelMode()).catch(
+        (error: unknown) => {
+          console.error('Pico task conversation sync failed', error);
+          window.__lcRumPush?.('pico-task-conversation-sync-error');
+          return { created: error instanceof PicoHttpError ? error.created : 0 };
+        },
+      );
+      if (created > 0) {
+        await queryClient.cancelQueries([QueryKeys.allConversations]);
+        await queryClient.invalidateQueries([QueryKeys.allConversations]);
       }
     };
     void sync();

@@ -408,36 +408,38 @@ async def uploads_for_conversation(
         .correlate(None)
         .exists()
     )
-    src_rows = (
-        await session.execute(
-            select(ArtifactRow, TaskRow.conversation_id)
-            .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
-            .where(
-                *owned,
-                TaskRow.title.startswith(EDU_READ_PREFIX),
-                ArtifactRow.kind.notin_((KIND_EXCERPT, "kb_text")),
-                or_(
-                    TaskRow.conversation_id == cid,
-                    and_(
-                        ~mobile,
-                        ArtifactRow.created_at >= cutoff,
-                        or_(
-                            TaskRow.conversation_id.startswith("pending_", autoescape=True),
-                            TaskRow.conversation_id.is_(None),
-                            TaskRow.conversation_id == "",
-                        ),
+    uploads = (
+        select(ArtifactRow, TaskRow.conversation_id, mobile.label("is_mobile"))
+        .join(TaskRow, ArtifactRow.task_id == TaskRow.id)
+        .where(
+            *owned,
+            TaskRow.title.startswith(EDU_READ_PREFIX),
+            ArtifactRow.kind.notin_((KIND_EXCERPT, "kb_text")),
+            or_(
+                TaskRow.conversation_id == cid,
+                and_(
+                    ~mobile,
+                    ArtifactRow.created_at >= cutoff,
+                    or_(
+                        TaskRow.conversation_id.startswith("pending_", autoescape=True),
+                        TaskRow.conversation_id.is_(None),
+                        TaskRow.conversation_id == "",
                     ),
                 ),
-            )
-            .order_by(ArtifactRow.created_at.desc(), ArtifactRow.id.desc())
+            ),
+        )
+    )
+    src_rows = (
+        await session.execute(
+            uploads.order_by(ArtifactRow.created_at.desc(), ArtifactRow.id.desc())
             .limit(_MAX_UPLOAD_INJECT * 3)
         )
     ).all()
     bound: list[ArtifactRow] = []
     pending: list[tuple[str, ArtifactRow]] = []
     unbound: list[ArtifactRow] = []
-    bindings = {src.task_id: binding for src, binding in src_rows}
-    for src, binding in src_rows:
+    bindings = {src.task_id: binding for src, binding, _ in src_rows}
+    for src, binding, _ in src_rows:
         convo = str(binding or "").strip()
         if convo == cid:
             bound.append(src)
@@ -491,8 +493,16 @@ async def uploads_for_conversation(
         picked = [src for src in picked if src.task_id in claimed_ids]
     if not picked:
         return []
-    # Both file channels use the same name for each upload when the workspace merges them.
-    attachment_names = _workspace_names((src.id, str(src.title or "文件")) for src in reversed(picked))
+    # Mobile keeps its original names as older photos leave the turn's window.
+    titles = [(src.id, src.title) for src in picked]
+    if src_rows[0].is_mobile:
+        titles = (
+            await session.execute(
+                uploads.with_only_columns(ArtifactRow.id, ArtifactRow.title)
+                .order_by(ArtifactRow.created_at, ArtifactRow.id)
+            )
+        ).all()
+    attachment_names = _workspace_names((aid, str(title or "文件")) for aid, title in titles)
     task_ids = [row.task_id for row in picked]
     excerpt_rows = (
         await session.execute(
