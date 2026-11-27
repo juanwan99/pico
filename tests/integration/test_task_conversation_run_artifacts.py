@@ -1894,6 +1894,53 @@ def test_desktop_claim_keeps_photo_bound_by_mobile_after_its_read(client, monkey
     asyncio.run(interleave())
 
 
+def test_desktop_claim_keeps_photo_rebound_to_same_conversation_after_read(client, monkeypatch):
+    from io import BytesIO
+
+    from app.auth import Principal
+    from app.edu_files import uploads_for_conversation
+    from PIL import Image
+
+    principal = Principal("school-a", "member-desktop", ["ai:run", "ai:read"], "", "", 0, {})
+    headers = _headers(client, principal.membership_id)
+    draft = "pending_desktop"
+    cid = new_id()
+    buf = BytesIO()
+    Image.new("RGB", (2, 2)).save(buf, format="PNG")
+    uploaded = client.post(
+        "/v1/files",
+        headers={**headers, "X-Conversation-Id": draft},
+        files={"file": ("photo.png", buf.getvalue(), "image/png")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    file_id = uploaded.json()["id"]
+
+    async def interleave():
+        async with session_factory()() as desktop:
+            execute = desktop.execute
+            rebound = False
+
+            async def rebind_after_select(statement, *args, **kwargs):
+                nonlocal rebound
+                result = await execute(statement, *args, **kwargs)
+                if not rebound:
+                    response = client.post(
+                        "/v1/tasks/rebind-conversation",
+                        headers=headers,
+                        json={"from_conversation_id": draft, "to_conversation_id": cid},
+                    )
+                    assert response.status_code == 200, response.text
+                    assert response.json()["updated"] == 1
+                    rebound = True
+                return result
+
+            monkeypatch.setattr(desktop, "execute", rebind_after_select)
+            desktop_files = await uploads_for_conversation(desktop, principal, cid)
+            assert [row["id"] for row in desktop_files] == [file_id]
+
+    asyncio.run(interleave())
+
+
 @pytest.mark.parametrize("same_name", [False, True])
 def test_desktop_native_files_keep_recency_and_workspace_bytes(client, same_name):
     from io import BytesIO

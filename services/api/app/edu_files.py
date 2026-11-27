@@ -472,7 +472,10 @@ async def uploads_for_conversation(
         matches = [
             and_(
                 TaskRow.id == src.task_id,
-                TaskRow.conversation_id.is_not_distinct_from(bindings[src.task_id]),
+                or_(
+                    TaskRow.conversation_id.is_not_distinct_from(bindings[src.task_id]),
+                    TaskRow.conversation_id == cid,
+                ),
             )
             for src in picked
         ]
