@@ -407,7 +407,7 @@ async def test_usage_page_filters_all_rows_before_stable_pagination(usage_db) ->
         iss="t", aud="pico-api", exp=0, raw={},
     )
     stamp = datetime(2026, 11, 27, 15, 30, tzinfo=UTC)
-    matching = [f"event-{index:03d}" for index in range(56)]
+    matching = [f"event-{index:03d}" for index in range(103)]
     async with session_factory()() as session:
         session.add_all([
             UsageEventRow(
@@ -448,9 +448,9 @@ async def test_usage_page_filters_all_rows_before_stable_pagination(usage_db) ->
                 session, principal, filters=filters, sort="created_at", direction=direction,
                 page=2,
             )
-            assert first.total == second.total == 56
+            assert first.total == second.total == len(matching)
             assert [row.id for row in first.rows] == ordered[:50]
-            assert [row.id for row in second.rows] == ordered[50:]
+            assert [row.id for row in second.rows] == ordered[50:100]
             assert first.options == second.options == options
 
         personal = await usage_ledger.list_usage_page(
@@ -461,6 +461,23 @@ async def test_usage_page_filters_all_rows_before_stable_pagination(usage_db) ->
             session, principal, filters={"model": [""]},
         )
         assert [row.id for row in missing_model.rows] == ["other-model"]
+
+        params = {"filters": filters, "sort": "created_at", "direction": "asc"}
+        first = await usage_ledger.list_usage_page(session, principal, **params)
+        third = await usage_ledger.list_usage_page(session, principal, page=3, **params)
+        for boundary_id in (first.next_id, third.previous_id):
+            boundary = await session.get(UsageEventRow, boundary_id)
+            boundary.model = "outside-filter"
+        await session.commit()
+
+        for cursor in ({"after_id": first.next_id}, {"before_id": third.previous_id}):
+            second = await usage_ledger.list_usage_page(
+                session, principal, page=2, **params, **cursor,
+            )
+            assert [row.id for row in second.rows] == matching[50:100]
+            assert second.total == 101
+            assert second.previous_id == matching[50]
+            assert second.next_id == matching[99]
 
 
 async def test_usage_page_reads_count_and_rows_from_one_snapshot(usage_db, monkeypatch) -> None:

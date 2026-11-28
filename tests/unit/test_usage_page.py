@@ -105,7 +105,7 @@ async def test_filtered_pages_keep_conditions_and_changes_return_to_first(seeded
     second = await _page(seeded, url=next_url)
     assert _runs(second) == [f"run-{index:02d}" for index in range(50, 56)]
     prev_url = _link(second, "上一页")
-    assert _query(prev_url) == {**first_query, "before_id": ["e50"]}
+    assert _query(prev_url) == first_query
     assert _runs(await _page(seeded, url=prev_url)) == _runs(first)
     assert "下一页" not in second
     assert _query(_link(second, "时间 ↑")) == {**first_query, "direction": ["desc"]}
@@ -186,6 +186,7 @@ async def test_empty_account_and_scope_isolation(seeded):
     for params in [
         {"after_id": "same-school-private", "page": 2},
         {"before_id": "other-school-private"},
+        {"after_id": "missing-event", "page": 2},
     ]:
         invalid = await seeded.get("/v1/usage", params=params, headers=_auth())
         assert invalid.status_code == 400
@@ -196,7 +197,10 @@ async def test_empty_account_and_scope_isolation(seeded):
     ({}, [58, 56, 59, 57, *range(55, -1, -1)]),
     ({"sort": "kind", "direction": "asc"}, [56, 58, *range(56), 57, 59]),
 ])
-async def test_pagination_stays_on_the_boundary_after_a_new_usage_event(seeded, params, ordered):
+@pytest.mark.parametrize("via_link", [True, False], ids=["previous-link", "old-url"])
+async def test_pagination_stays_on_the_boundary_after_a_new_usage_event(
+    seeded, params, ordered, via_link,
+):
     first = await _page(seeded, params=params)
     expected = [f"run-{index:02d}" for index in ordered]
     assert _runs(first) == expected[:50]
@@ -213,4 +217,48 @@ async def test_pagination_stays_on_the_boundary_after_a_new_usage_event(seeded, 
     second = await _page(seeded, url=next_url)
     assert _runs(second) == expected[50:]
     assert "下一页" not in second
-    assert _runs(await _page(seeded, url=_link(second, "上一页"))) == expected[:50]
+    refreshed = ["run-60", *expected[:49]]
+    if via_link:
+        previous_url = _link(second, "上一页")
+        assert _runs(await _page(seeded, url=previous_url)) == refreshed
+        assert _query(previous_url) == {key: [value] for key, value in params.items()}
+    else:
+        stale_params = {**params, "page": 1, "before_id": f"e{ordered[50]:02d}"}
+        assert _runs(await _page(seeded, params=stale_params)) == refreshed
+
+
+async def test_next_page_returns_last_matching_page_after_final_row_changes(seeded):
+    stamp = datetime(2026, 11, 27, 15, 30, tzinfo=UTC)
+    async with db.session_factory()() as writer:
+        writer.add_all([
+            db.UsageEventRow(
+                id=f"later-{index:03d}", idempotency_key=f"later-{index:03d}", run_id=f"run-{index}",
+                school_id="school-a", membership_id="m1", kind="llm", created_at=stamp,
+            )
+            for index in range(60, 155)
+        ])
+        await writer.commit()
+
+    conditions = {"kind": "llm", "sort": "created_at", "direction": "asc"}
+    first = await _page(seeded, params=conditions)
+    second = await _page(seeded, url=_link(first, "下一页"))
+    third = await _page(seeded, url=_link(second, "下一页"))
+    next_url = _link(third, "下一页")
+    assert _runs(await _page(seeded, url=next_url)) == ["run-154"]
+
+    async with db.session_factory()() as writer:
+        final_row = await writer.get(db.UsageEventRow, "later-154")
+        final_row.kind = "search"
+        await writer.commit()
+
+    last = await _page(seeded, url=next_url)
+    assert _runs(last) == _runs(third)
+    assert "第 3 页 · 共 150 条" in last
+    assert "暂无符合筛选的记录" not in last
+    assert "下一页" not in last
+    previous_url = _link(last, "上一页")
+    assert _query(previous_url) == {
+        **{key: [value] for key, value in conditions.items()},
+        "page": ["2"], "before_id": ["later-104"],
+    }
+    assert _runs(await _page(seeded, url=previous_url)) == _runs(second)

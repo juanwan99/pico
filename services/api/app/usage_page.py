@@ -41,8 +41,8 @@ def _usage_query(
         params.extend(zip(("sort", "direction"), order, strict=True))
     if page > 1:
         params.append(("page", str(page)))
-    if before_id:
-        params.append(("before_id", before_id))
+        if before_id:
+            params.append(("before_id", before_id))
     if after_id:
         params.append(("after_id", after_id))
     return "?" + escape(urlencode(params))

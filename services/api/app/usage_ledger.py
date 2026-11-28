@@ -987,10 +987,12 @@ async def list_usage_page(
     column = sort_columns[order[0]] if order else UsageEventRow.created_at
     ascending = order is not None and order[1] == "asc"
     tie = UsageEventRow.id
-    # Fetch backwards from the first row for 上一页, then restore display order.
-    fetching_ascending = ascending != bool(before_id)
+    # Page one starts at the top, including links that still carry a backwards cursor.
+    backwards = bool(before_id) and page > 1
+    forwards = bool(after_id) and not before_id
+    fetching_ascending = ascending != backwards
     ordering = (column.asc(), tie.asc()) if fetching_ascending else (column.desc(), tie.desc())
-    query = select(UsageEventRow).where(*tenant, *predicates).order_by(*ordering)
+    details = select(UsageEventRow).where(*tenant, *predicates).order_by(*ordering)
     # A savepoint starts a physical SQLite read transaction even in legacy driver mode.
     async with session.begin_nested():
         options = {
@@ -1002,9 +1004,10 @@ async def list_usage_page(
         total = (await session.execute(count)).scalar_one()
         last_page = max(1, (total + USAGE_PAGE_SIZE - 1) // USAGE_PAGE_SIZE)
         number = min(page, last_page)
+        query = details.offset((number - 1) * USAGE_PAGE_SIZE)
         if boundary_id := before_id or after_id:
             boundary = (await session.execute(
-                select(column, tie).where(*tenant, *predicates, tie == boundary_id)
+                select(column, tie).where(*tenant, tie == boundary_id)
             )).one_or_none()
             if boundary is None:
                 from fastapi import HTTPException
@@ -1013,18 +1016,22 @@ async def list_usage_page(
                     status_code=400,
                     detail={"code": "usage.bad_cursor", "message": "invalid usage page cursor"},
                 )
-            key = tuple_(column, tie)
-            cursor = tuple_(*boundary)
-            query = query.where(key > cursor if fetching_ascending else key < cursor)
-        else:
-            query = query.offset((number - 1) * USAGE_PAGE_SIZE)
+            if backwards or forwards:
+                key = tuple_(column, tie)
+                cursor = tuple_(*boundary)
+                query = details.where(key > cursor if fetching_ascending else key < cursor)
         window = list(await session.scalars(query.limit(USAGE_PAGE_SIZE + 1)))
+        if forwards and not window and total:
+            number = last_page
+            window = list(await session.scalars(
+                details.offset((number - 1) * USAGE_PAGE_SIZE).limit(USAGE_PAGE_SIZE)
+            ))
     more = len(window) > USAGE_PAGE_SIZE
     rows = window[:USAGE_PAGE_SIZE]
-    if before_id:
+    if backwards:
         rows.reverse()
-    previous_id = rows[0].id if rows and number > 1 and (not before_id or more) else None
-    next_id = rows[-1].id if rows and (before_id or more) else None
+    previous_id = rows[0].id if rows and number > 1 and (not backwards or more) else None
+    next_id = rows[-1].id if rows and (backwards or more) else None
     return UsagePage(rows, total, options, order, number, previous_id, next_id)
 
 
