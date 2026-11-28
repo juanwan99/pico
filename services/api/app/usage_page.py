@@ -29,13 +29,22 @@ def _filter_label(key: str, value: str) -> str:
 
 
 def _usage_query(
-    filters: dict[str, list[str]], order: tuple[str, str] | None, page: int = 1,
+    filters: dict[str, list[str]],
+    order: tuple[str, str] | None,
+    page: int = 1,
+    *,
+    before_id: str | None = None,
+    after_id: str | None = None,
 ) -> str:
     params = [(key, value) for key, values in filters.items() for value in values]
     if order:
         params.extend(zip(("sort", "direction"), order, strict=True))
     if page > 1:
         params.append(("page", str(page)))
+    if before_id:
+        params.append(("before_id", before_id))
+    if after_id:
+        params.append(("after_id", after_id))
     return "?" + escape(urlencode(params))
 
 
@@ -99,12 +108,12 @@ def _pagination(page: UsagePage, filters: dict[str, list[str]]) -> str:
     if not page.total:
         return ""
     links = []
-    if page.number > 1:
-        url = _usage_query(filters, page.order, page.number - 1)
+    if page.previous_id:
+        url = _usage_query(filters, page.order, page.number - 1, before_id=page.previous_id)
         links.append(f'<a href="{url}">上一页</a>')
-    links.append(f"<span>第 {page.number} / {page.last_page} 页 · 共 {page.total} 条</span>")
-    if page.number < page.last_page:
-        url = _usage_query(filters, page.order, page.number + 1)
+    links.append(f"<span>第 {page.number} 页 · 共 {page.total} 条</span>")
+    if page.next_id:
+        url = _usage_query(filters, page.order, page.number + 1, after_id=page.next_id)
         links.append(f'<a href="{url}">下一页</a>')
     return f'<nav aria-label="明细分页">{"".join(links)}</nav>'
 
@@ -204,10 +213,13 @@ async def my_usage_page(
     sort: str | None = None,
     direction: str | None = None,
     page: int = Query(default=1, ge=1),
+    before_id: str | None = None,
+    after_id: str | None = None,
 ) -> HTMLResponse:
     filters = {"kind": kind or [], "bill_to": bill_to or [], "model": model or []}
     details = await list_usage_page(
         session, principal, filters=filters, sort=sort, direction=direction, page=page,
+        before_id=before_id, after_id=after_id,
     )
     summary = await summarize_usage(session, principal)
     return HTMLResponse(_usage_html(principal, summary, details, filters))

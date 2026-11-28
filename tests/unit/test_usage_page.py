@@ -98,19 +98,20 @@ async def test_filtered_pages_keep_conditions_and_changes_return_to_first(seeded
     first = await _page(seeded, params=conditions)
     assert _runs(first) == [f"run-{index:02d}" for index in range(50)]
     next_url = _link(first, "下一页")
-    assert _query(next_url) == {
-        **{key: value if isinstance(value, list) else [value] for key, value in conditions.items()},
-        "page": ["2"],
+    first_query = {
+        key: value if isinstance(value, list) else [value] for key, value in conditions.items()
     }
+    assert _query(next_url) == {**first_query, "page": ["2"], "after_id": ["e49"]}
     second = await _page(seeded, url=next_url)
     assert _runs(second) == [f"run-{index:02d}" for index in range(50, 56)]
     prev_url = _link(second, "上一页")
+    assert _query(prev_url) == {**first_query, "before_id": ["e50"]}
     assert _runs(await _page(seeded, url=prev_url)) == _runs(first)
     assert "下一页" not in second
-    assert _query(_link(second, "时间 ↑")) == {**_query(prev_url), "direction": ["desc"]}
+    assert _query(_link(second, "时间 ↑")) == {**first_query, "direction": ["desc"]}
 
     removed = _link(second, "记账：本人 ×")
-    assert _query(removed) == {**_query(prev_url), "bill_to": ["school"]}
+    assert _query(removed) == {**first_query, "bill_to": ["school"]}
     assert _runs(await _page(seeded, url=removed)) == [
         f"run-{index:02d}" for index in range(1, 56, 2)
     ]
@@ -182,3 +183,34 @@ async def test_empty_account_and_scope_isolation(seeded):
     denied = await seeded.get("/v1/usage", headers=patrol)
     assert denied.status_code == 403
     assert denied.json()["detail"]["code"] == "auth.steward_public_denied"
+    for params in [
+        {"after_id": "same-school-private", "page": 2},
+        {"before_id": "other-school-private"},
+    ]:
+        invalid = await seeded.get("/v1/usage", params=params, headers=_auth())
+        assert invalid.status_code == 400
+        assert invalid.json()["detail"]["code"] == "usage.bad_cursor"
+
+
+@pytest.mark.parametrize(("params", "ordered"), [
+    ({}, [58, 56, 59, 57, *range(55, -1, -1)]),
+    ({"sort": "kind", "direction": "asc"}, [56, 58, *range(56), 57, 59]),
+])
+async def test_pagination_stays_on_the_boundary_after_a_new_usage_event(seeded, params, ordered):
+    first = await _page(seeded, params=params)
+    expected = [f"run-{index:02d}" for index in ordered]
+    assert _runs(first) == expected[:50]
+    next_url = _link(first, "下一页")
+
+    async with db.session_factory()() as writer:
+        writer.add(db.UsageEventRow(
+            id="e60", idempotency_key="e60", run_id="run-60",
+            school_id="school-a", membership_id="m1", kind="api",
+            created_at=datetime(2026, 11, 29, 15, 30, tzinfo=UTC),
+        ))
+        await writer.commit()
+
+    second = await _page(seeded, url=next_url)
+    assert _runs(second) == expected[50:]
+    assert "下一页" not in second
+    assert _runs(await _page(seeded, url=_link(second, "上一页"))) == expected[:50]

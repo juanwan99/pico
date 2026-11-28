@@ -20,7 +20,7 @@ from pico_orchestrator.usage_parse import (
     parse_usage_blob,
     usage_extra_bits,
 )
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, tuple_
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -950,7 +950,8 @@ class UsagePage:
     options: dict[str, list[str]]
     order: tuple[str, str] | None
     number: int
-    last_page: int
+    previous_id: str | None
+    next_id: str | None
 
 
 async def list_usage_page(
@@ -961,6 +962,8 @@ async def list_usage_page(
     sort: str | None = None,
     direction: str | None = None,
     page: int = 1,
+    before_id: str | None = None,
+    after_id: str | None = None,
 ) -> UsagePage:
     """Page the current account's details and query its unfiltered facet values."""
     school, member = _tenant_filter(principal, None)
@@ -972,15 +975,10 @@ async def list_usage_page(
         "bill_to": case((raw_payer.in_(("school", "personal")), raw_payer), else_="member"),
         "model": func.coalesce(UsageEventRow.model, ""),
     }
-    options = {
-        key: list(await session.scalars(select(column).where(*tenant).distinct().order_by(column)))
-        for key, column in columns.items()
-    }
     predicates = [
         column.in_(filters[key]) for key, column in columns.items() if filters.get(key)
     ]
     count = select(func.count()).select_from(UsageEventRow).where(*tenant, *predicates)
-    total = (await session.execute(count)).scalar_one()
     sort_columns = {"created_at": UsageEventRow.created_at, "kind": UsageEventRow.kind}
     if sort in sort_columns and direction in ("asc", "desc"):
         order = (sort, direction)
@@ -989,17 +987,45 @@ async def list_usage_page(
     column = sort_columns[order[0]] if order else UsageEventRow.created_at
     ascending = order is not None and order[1] == "asc"
     tie = UsageEventRow.id
-    ordering = (column.asc(), tie.asc()) if ascending else (column.desc(), tie.desc())
-    last_page = max(1, (total + USAGE_PAGE_SIZE - 1) // USAGE_PAGE_SIZE)
-    number = min(page, last_page)
-    query = (
-        select(UsageEventRow)
-        .where(*tenant, *predicates)
-        .order_by(*ordering)
-        .offset((number - 1) * USAGE_PAGE_SIZE)
-        .limit(USAGE_PAGE_SIZE)
-    )
-    return UsagePage(list(await session.scalars(query)), total, options, order, number, last_page)
+    # Fetch backwards from the first row for 上一页, then restore display order.
+    fetching_ascending = ascending != bool(before_id)
+    ordering = (column.asc(), tie.asc()) if fetching_ascending else (column.desc(), tie.desc())
+    query = select(UsageEventRow).where(*tenant, *predicates).order_by(*ordering)
+    # A savepoint starts a physical SQLite read transaction even in legacy driver mode.
+    async with session.begin_nested():
+        options = {
+            key: list(await session.scalars(
+                select(value).where(*tenant).distinct().order_by(value)
+            ))
+            for key, value in columns.items()
+        }
+        total = (await session.execute(count)).scalar_one()
+        last_page = max(1, (total + USAGE_PAGE_SIZE - 1) // USAGE_PAGE_SIZE)
+        number = min(page, last_page)
+        if boundary_id := before_id or after_id:
+            boundary = (await session.execute(
+                select(column, tie).where(*tenant, *predicates, tie == boundary_id)
+            )).one_or_none()
+            if boundary is None:
+                from fastapi import HTTPException
+
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "usage.bad_cursor", "message": "invalid usage page cursor"},
+                )
+            key = tuple_(column, tie)
+            cursor = tuple_(*boundary)
+            query = query.where(key > cursor if fetching_ascending else key < cursor)
+        else:
+            query = query.offset((number - 1) * USAGE_PAGE_SIZE)
+        window = list(await session.scalars(query.limit(USAGE_PAGE_SIZE + 1)))
+    more = len(window) > USAGE_PAGE_SIZE
+    rows = window[:USAGE_PAGE_SIZE]
+    if before_id:
+        rows.reverse()
+    previous_id = rows[0].id if rows and number > 1 and (not before_id or more) else None
+    next_id = rows[-1].id if rows and (before_id or more) else None
+    return UsagePage(rows, total, options, order, number, previous_id, next_id)
 
 
 async def list_usage_events_for_run(
