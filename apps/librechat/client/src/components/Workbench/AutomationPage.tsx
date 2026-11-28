@@ -2,11 +2,11 @@
  * Automation list + create form backed by Pico /v1/automations.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Dialog, DialogContent, DialogTitle, type TableColumn } from '@librechat/client';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
-  Bot,
   Check,
   Clock3,
   FolderKanban,
@@ -30,6 +30,7 @@ import {
   type PicoRun,
   type PicoRunEvent,
 } from '~/data-provider/pico/api';
+import PicoListTable from './PicoListTable';
 import RunTimeline from '../Chat/RunTimeline';
 import { PicoIcon } from '~/components/ui/pico-icons';
 
@@ -168,12 +169,15 @@ function promptWithoutModelPrefix(prompt: string): string {
   return prompt.replace(/^【模型偏好：[^】]+】\r?\n/, '');
 }
 
+function timestamp(value?: string | null): number | undefined {
+  const naiveUtc = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?$/;
+  const millis = value ? Date.parse(value.replace(naiveUtc, '$&Z')) : NaN;
+  return Number.isNaN(millis) ? undefined : millis;
+}
+
 function formatDate(value?: string | null): string {
-  if (!value) {
-    return '—';
-  }
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
+  const millis = timestamp(value);
+  return millis == null ? '—' : new Date(millis).toLocaleString();
 }
 
 function scheduleLabel(automation: PicoAutomation): string {
@@ -188,6 +192,12 @@ function scheduleLabel(automation: PicoAutomation): string {
   const at = asString(automation.schedule?.at);
   return at ? `单次 ${formatDate(at)}` : '单次执行';
 }
+
+const automationFilters = [
+  { label: '状态', value: (item: PicoAutomation) => item.enabled ? '已启用' : '已停用' },
+  { label: '执行频率', value: scheduleLabel },
+  { label: '模型', value: (item: PicoAutomation) => readUiMeta(item)?.model || asString(item.schedule?.model, 'Auto') },
+];
 
 function Toggle({
   checked,
@@ -215,7 +225,7 @@ function Toggle({
     >
       <span
         className={cn(
-          'absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform',
+          'absolute left-0 top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform',
           checked ? 'translate-x-[18px]' : 'translate-x-0.5',
         )}
       />
@@ -242,6 +252,7 @@ export default function AutomationPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ id: string | null }>({ id: null });
   const [deleteTarget, setDeleteTarget] = useState<PicoAutomation | null>(null);
   const [runResults, setRunResults] = useState<Record<string, PicoRun>>({});
   const [runEvents, setRunEvents] = useState<Record<string, PicoRunEvent[]>>({});
@@ -381,7 +392,7 @@ export default function AutomationPage() {
     }
   };
 
-  const onToggle = async (item: PicoAutomation) => {
+  const onToggle = useCallback(async (item: PicoAutomation) => {
     if (pendingId) {
       return;
     }
@@ -395,9 +406,9 @@ export default function AutomationPage() {
     } finally {
       setPendingId(null);
     }
-  };
+  }, [pendingId]);
 
-  const onRunOnce = async (item: PicoAutomation) => {
+  const onRunOnce = useCallback(async (item: PicoAutomation) => {
     if (pendingId) {
       return;
     }
@@ -409,12 +420,13 @@ export default function AutomationPage() {
         current.map((entry) => (entry.id === item.id ? result.automation : entry)),
       );
       setRunResults((current) => ({ ...current, [item.id]: result.run }));
+      setSelection((current) => current === selection ? { id: item.id } : current);
     } catch (e) {
       setActionError(friendlyError(e instanceof Error ? e.message : String(e)));
     } finally {
       setPendingId(null);
     }
-  };
+  }, [pendingId, selection]);
 
   const activeRuns = useMemo(() => Object.entries(runResults), [runResults]);
 
@@ -479,8 +491,7 @@ export default function AutomationPage() {
     }
   };
 
-  if (mode === 'create') {
-    return (
+  const createForm = mode === 'create' && (
       <div className="flex h-full min-h-0 flex-col bg-[#f5f5f5] text-[#1a1a1a] dark:bg-presentation dark:text-text-primary">
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/[0.06] bg-white px-4 dark:border-border-light dark:bg-surface-primary">
           <div className="flex min-w-0 items-center gap-2 text-[14px] font-medium">
@@ -780,13 +791,17 @@ export default function AutomationPage() {
           </div>
         </div>
       </div>
-    );
-  }
+  );
 
   const enabledCount = list.filter((item) => item.enabled).length;
+  const detail = list.find((item) => item.id === selection.id);
+  const detailRun = detail && runResults[detail.id];
 
   return (
-    <div className="pico-shell-bg flex h-full min-h-0 flex-col dark:bg-presentation">
+    <>
+    {createForm}
+    <div className="pico-shell-bg flex h-full min-h-0 flex-col dark:bg-presentation"
+      style={mode === 'create' ? { display: 'none' } : undefined}>
       <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-4 py-2 dark:border-border-light dark:bg-surface-primary sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
           {returnPath ? (
@@ -858,23 +873,16 @@ export default function AutomationPage() {
             </div>
           ) : null}
 
-          <div className="pico-card overflow-hidden dark:border-border-light dark:bg-surface-primary">
-            <div className="hidden grid-cols-[minmax(0,1fr)_150px_170px_150px] gap-3 border-b border-[color:var(--pico-line)] bg-[color:var(--pico-surface-2)] px-4 py-2 text-[11px] text-[color:var(--pico-ink-2)] md:grid">
-              <span>任务</span>
-              <span>执行频率</span>
-              <span>运行记录</span>
-              <span className="text-right">状态与操作</span>
-            </div>
-
-            {loading && list.length === 0 ? (
+          <PicoListTable
+            data={list}
+            filters={automationFilters}
+            emptyState={loading ? (
               <div className="flex items-center justify-center gap-2 py-20 text-[13px] text-[#8c8c8c]">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 加载中
               </div>
-            ) : null}
-
-            {!loading && list.length === 0 ? (
-              <div className="flex flex-col items-center px-4 py-16 text-center">
+            ) : (
+              <div className="flex flex-col items-center px-4 py-6 text-center">
                 <div className="pico-icon-medallion size-12">
                   <PicoIcon name="clock" size="lg" />
                 </div>
@@ -895,65 +903,32 @@ export default function AutomationPage() {
                   返回新建任务
                 </Link>
               </div>
-            ) : null}
-
-            {list.length > 0 ? (
-              <ul className="divide-y divide-black/[0.05]">
-                {list.map((item) => {
-                  const meta = readUiMeta(item);
-                  const itemModel = meta?.model || asString(item.schedule?.model, 'Auto');
-                  return (
-                    <li
-                      key={item.id}
-                      className="grid gap-3 px-4 py-3 hover:bg-[#fcfcfc] md:grid-cols-[minmax(0,1fr)_150px_170px_150px]"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              'size-2 shrink-0 rounded-full',
-                              item.enabled ? 'bg-emerald-500' : 'bg-[#c7c7c7]',
-                            )}
-                          />
-                          <p className="truncate text-[13.5px] font-medium text-[#1a1a1a] dark:text-text-primary">
-                            {item.name}
-                          </p>
-                        </div>
-                        <p className="mt-1 line-clamp-2 pl-4 text-[12px] leading-[18px] text-[#6b6b6b]">
-                          {promptWithoutModelPrefix(item.prompt)}
-                        </p>
-                        <div className="mt-1.5 flex flex-wrap gap-1.5 pl-4 text-[10.5px] text-[#6b6b6b]">
-                          <span className="inline-flex items-center gap-1 rounded bg-[#f2f2f2] px-1.5 py-0.5">
-                            <Bot className="h-3 w-3" />
-                            {itemModel}
-                          </span>
-                          <span className="rounded bg-[#f2f2f2] px-1.5 py-0.5">
-                            {meta?.workspace.label || '账号默认工作空间'}
-                          </span>
-                          {meta?.binding.kind && meta.binding.kind !== 'none' ? (
-                            <span className="rounded bg-[#f2f2f2] px-1.5 py-0.5">
-                              {meta.binding.label}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="text-[12px] md:pt-0.5">
-                        <span className="mr-2 text-[#8c8c8c] md:hidden">频率</span>
-                        <span className="text-[#3d3d3d]">{scheduleLabel(item)}</span>
-                      </div>
-
-                      <div className="space-y-1 text-[11px] text-[#8c8c8c] md:pt-0.5">
-                        <p>上次 {formatDate(item.last_run_at)}</p>
-                        <p>下次 {formatDate(item.next_run_at)}</p>
-                        {runResults[item.id] ? (
-                          <p className="text-emerald-700" role="status">
-                            已创建运行 · {runResults[item.id].status}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 md:justify-end">
+            )}
+            columns={useMemo<TableColumn<PicoAutomation, unknown>[]>(() => [
+              {
+                accessorKey: 'name', header: '任务', sortingFn: 'alphanumeric', meta: { isRowHeader: true, width: 22 },
+                cell: ({ row: { original: item } }) => (
+                  <>
+                    <button type="button" title={item.name} className="block max-w-full truncate font-semibold hover:underline"
+                      onClick={() => setSelection({ id: item.id })}>{item.name}</button>
+                    <p className="truncate text-xs text-text-secondary">{readUiMeta(item)?.workspace.label || '账号默认工作空间'}</p>
+                  </>
+                ),
+              },
+              { id: 'schedule', header: '执行频率', accessorFn: scheduleLabel, enableSorting: false, meta: { width: 13 } },
+              { id: 'model', header: '模型', accessorFn: automationFilters[2].value, enableSorting: false, meta: { width: 15 } },
+              {
+                id: 'lastRun', header: '上次运行', accessorFn: (item) => timestamp(item.last_run_at),
+                meta: { width: 13 }, cell: ({ row }) => formatDate(row.original.last_run_at),
+              },
+              {
+                id: 'nextRun', header: '下次运行', accessorFn: (item) => timestamp(item.next_run_at),
+                meta: { width: 13 }, cell: ({ row }) => formatDate(row.original.next_run_at),
+              },
+              {
+                id: 'actions', header: '状态与操作', meta: { width: 24 },
+                cell: ({ row: { original: item } }) => (
+                  <div className="flex flex-wrap items-center gap-1">
                         <div className="flex items-center gap-2">
                           {pendingId === item.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin text-[#8c8c8c]" />
@@ -993,20 +968,32 @@ export default function AutomationPage() {
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                      </div>
-                      {runResults[item.id] ? (
-                        <div className="md:col-span-4">
-                          <RunTimeline events={runEvents[item.id]} run={runResults[item.id]} />
-                        </div>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-          </div>
+                  </div>
+                ),
+              },
+            ], [onRunOnce, onToggle, pendingId])}
+          />
         </div>
       </div>
+
+      <Dialog open={mode === 'list' && detail != null} onOpenChange={(open) => { if (!open) setSelection({ id: null }); }}>
+        {detail && (
+          <DialogContent aria-describedby={undefined} className="max-h-[80vh] max-w-xl overflow-auto p-6">
+            <DialogTitle className="pr-8">{detail.name}</DialogTitle>
+            <p className="text-xs text-text-secondary">{readUiMeta(detail)?.binding.label}</p>
+            <div>
+              <h2 className="mb-1 text-sm font-medium">提示词</h2>
+              <p className="whitespace-pre-wrap break-words text-sm">{promptWithoutModelPrefix(detail.prompt)}</p>
+            </div>
+            {detailRun && (
+              <>
+                <p className="text-xs text-emerald-700" role="status">已创建运行 · {detailRun.status}</p>
+                <RunTimeline events={runEvents[detail.id]} run={detailRun} />
+              </>
+            )}
+          </DialogContent>
+        )}
+      </Dialog>
 
       {deleteTarget ? (
         <div
@@ -1065,5 +1052,6 @@ export default function AutomationPage() {
         </div>
       ) : null}
     </div>
+    </>
   );
 }

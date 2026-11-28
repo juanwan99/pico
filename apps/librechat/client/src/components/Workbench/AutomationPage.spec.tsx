@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
   createPicoAutomation,
@@ -93,8 +94,8 @@ describe('AutomationPage', () => {
     fireEvent.change(screen.getByLabelText('提示词'), {
       target: { value: '整理本周研究进展' },
     });
-    fireEvent.change(screen.getByLabelText('模型偏好'), {
-      target: { value: 'pico-agent' },
+    fireEvent.change(screen.getByLabelText('档位'), {
+      target: { value: 'pico-deep' },
     });
     fireEvent.click(screen.getByRole('button', { name: /个人工作空间/ }));
     fireEvent.click(screen.getByRole('button', { name: /只读审阅/ }));
@@ -107,14 +108,14 @@ describe('AutomationPage', () => {
     await waitFor(() => expect(createPicoAutomation).toHaveBeenCalledTimes(1));
     expect(createPicoAutomation).toHaveBeenCalledWith({
       name: '研究周报',
-      prompt: '【模型偏好：pico-agent】\n整理本周研究进展',
+      prompt: '【模型偏好：pico-deep】\n整理本周研究进展',
       schedule_kind: 'periodic',
       schedule: {
         time: '09:00',
-        model: 'pico-agent',
+        model: 'pico-deep',
         pico_ui: {
           schema: 'pico.automation-ui/v1',
-          model: 'pico-agent',
+          model: 'pico-deep',
           workspace: { id: 'personal', label: '个人工作空间' },
           permission: 'read-only',
           binding: {
@@ -199,6 +200,13 @@ describe('AutomationPage', () => {
     expect(await screen.findByText('正在调工具')).toBeInTheDocument();
   });
 
+  it('shows the full prompt when opening a task', async () => {
+    jest.mocked(listPicoAutomations).mockResolvedValue({ automations: [automation] });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '每日摘要' }));
+    expect(screen.getByRole('dialog', { name: '每日摘要' })).toHaveTextContent('汇总昨日动态');
+  });
+
   it('keeps run-once failures visible and recoverable', async () => {
     jest.mocked(listPicoAutomations).mockResolvedValue({ automations: [automation] });
     jest.mocked(runPicoAutomation).mockRejectedValue(new Error('502 unavailable'));
@@ -224,4 +232,34 @@ describe('AutomationPage', () => {
       await within(dialog).findByText('自动化服务暂时不可用，请稍后重试。'),
     ).toBeInTheDocument();
   });
+  it('sorts actual times with empty times last and keeps the filters and sort after toggling and refreshing', async () => {
+    const bravo = { ...automation, name: 'Bravo' };
+    const alpha = { ...automation, id: 'auto-2', name: 'Alpha', next_run_at: '2026-07-31T02:30:00+02:00' };
+    const missing = { ...automation, id: 'auto-3', name: 'Missing', next_run_at: null };
+    const other = { ...automation, id: 'auto-4', name: 'Other', enabled: false };
+    jest.mocked(listPicoAutomations)
+      .mockResolvedValueOnce({ automations: [bravo, missing, alpha, other] })
+      .mockResolvedValueOnce({ automations: [other, bravo, missing, { ...alpha, enabled: false }] });
+    jest.mocked(setPicoAutomationEnabled).mockResolvedValue({ automation: { ...alpha, enabled: false } });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('Bravo');
+    await user.click(screen.getByRole('button', { name: '筛选' }));
+    await user.click(screen.getByRole('checkbox', { name: '已启用' }));
+    await user.keyboard('{Escape}');
+    const taskOrder = () => screen.getAllByRole('rowheader').map((cell) => within(cell).getByRole('button').textContent);
+    const nextRun = screen.getByRole('button', { name: /^下次运行 column/ });
+    await user.click(nextRun);
+    expect(taskOrder()).toEqual(['Alpha', 'Bravo', 'Missing']);
+    await user.click(nextRun);
+    expect(taskOrder()).toEqual(['Bravo', 'Alpha', 'Missing']);
+    await user.click(screen.getByRole('switch', { name: '停用 Alpha' }));
+    await waitFor(() => expect(taskOrder()).toEqual(['Bravo', 'Missing']));
+    await user.click(screen.getByRole('button', { name: '刷新' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '刷新' })).toBeEnabled());
+    expect(nextRun).toHaveAttribute('aria-sort', 'descending');
+    expect(screen.getByRole('button', { name: '状态：已启用 ×' })).toBeInTheDocument();
+    expect(taskOrder()).toEqual(['Bravo', 'Missing']);
+  });
+
 });

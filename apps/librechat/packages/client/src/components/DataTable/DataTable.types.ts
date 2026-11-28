@@ -102,6 +102,8 @@ export interface DataTableProps<TData extends Record<string, unknown>, TValue> {
   filterValue?: string;
   onFilterChange?: (value: string) => void;
   defaultSort?: SortingState;
+  manualSorting?: boolean;
+  emptyState?: React.ReactNode;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
   fetchNextPage?: () => Promise<unknown>;

@@ -5,6 +5,7 @@ import { ArrowUp, ArrowDown, ArrowDownUp } from 'lucide-react';
 import {
   useReactTable,
   getCoreRowModel,
+  getSortedRowModel,
   flexRender,
   type SortingState,
   type VisibilityState,
@@ -13,7 +14,7 @@ import {
   type Table as TTable,
 } from '@tanstack/react-table';
 import type { DataTableProps, ProcessedDataRow } from './DataTable.types';
-import { SelectionCheckbox, MemoizedTableRow, SkeletonRows } from './DataTableComponents';
+import { SelectionCheckbox, MemoizedTableRow, TableDataRow, SkeletonRows } from './DataTableComponents';
 import { Table, TableBody, TableHead, TableHeader, TableCell, TableRow } from '../Table';
 import { useDebounced, useOptimizedRowSelection } from './DataTable.hooks';
 import { useMediaQuery, useLocalize } from '~/hooks';
@@ -32,6 +33,8 @@ function DataTable<TData extends Record<string, unknown>, TValue>({
   filterValue = '',
   onFilterChange,
   defaultSort = [],
+  manualSorting = true,
+  emptyState,
   isFetchingNextPage = false,
   hasNextPage = false,
   fetchNextPage,
@@ -250,7 +253,9 @@ function DataTable<TData extends Record<string, unknown>, TValue>({
     getCoreRowModel: getCoreRowModel(),
     enableRowSelection,
     enableMultiRowSelection: true,
-    manualSorting: true,
+    manualSorting,
+    enableMultiSort: manualSorting,
+    getSortedRowModel: manualSorting ? undefined : getSortedRowModel(),
     manualFiltering: true,
     state: {
       sorting: finalSorting,
@@ -262,11 +267,12 @@ function DataTable<TData extends Record<string, unknown>, TValue>({
     onRowSelectionChange: setOptimizedRowSelection,
   });
 
+  const { rows } = table.getRowModel();
   const rowVirtualizer = useVirtualizer({
     enabled: virtualizationActive,
-    count: data.length,
+    count: rows.length,
     getScrollElement: () => tableContainerRef.current,
-    getItemKey: (index) => getRowId(data[index] as TData, index),
+    getItemKey: useCallback((index: number) => rows[index].id, [rows]),
     estimateSize: useCallback(() => rowHeight, [rowHeight]),
     overscan: dynamicOverscan,
   });
@@ -279,11 +285,11 @@ function DataTable<TData extends Record<string, unknown>, TValue>({
   const paddingBottom =
     virtualRows.length > 0 ? totalSize - (virtualRows[virtualRows.length - 1]?.end ?? 0) : 0;
 
-  const { rows } = table.getRowModel();
   const headerGroups = table.getHeaderGroups();
 
   const showSkeletons = isLoading || (isFetching && !isFetchingNextPage);
   const shouldShowSearch = enableSearch && onFilterChange;
+  const DataRow = manualSorting ? MemoizedTableRow : TableDataRow;
 
   // Render table body based on loading state and virtualization
   let tableBodyContent: React.ReactNode;
@@ -310,7 +316,7 @@ function DataTable<TData extends Record<string, unknown>, TValue>({
           if (!row) return null;
 
           return (
-            <MemoizedTableRow
+            <DataRow
               key={virtualRow.key}
               row={row as unknown as Row<Record<string, unknown>>}
               virtualIndex={virtualRow.index}
@@ -331,7 +337,7 @@ function DataTable<TData extends Record<string, unknown>, TValue>({
     );
   } else {
     tableBodyContent = rows.map((row) => (
-      <MemoizedTableRow
+      <DataRow
         key={getRowId(row.original as TData, row.index)}
         row={row as unknown as Row<Record<string, unknown>>}
         virtualIndex={row.index}
@@ -600,7 +606,7 @@ function DataTable<TData extends Record<string, unknown>, TValue>({
           </TableBody>
         </Table>
 
-        {!isLoading && !showSkeletons && rows.length === 0 && (
+        {!isLoading && !showSkeletons && rows.length === 0 && (emptyState ?? (
           <div
             className="flex flex-col items-center justify-center py-12"
             role="status"
@@ -610,7 +616,7 @@ function DataTable<TData extends Record<string, unknown>, TValue>({
               {searchTerm ? localize('com_ui_no_search_results') : localize('com_ui_no_data')}
             </Label>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

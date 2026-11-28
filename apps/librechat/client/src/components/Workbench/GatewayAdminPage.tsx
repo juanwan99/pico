@@ -2,15 +2,14 @@
  * Owner-only panel: New API pipe + Sub2API login-state + Pico usage.
  * Thin-read monitors (7d / 168h). Soft restore only. Hard re-login on public Sub2API.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { TableColumn } from '@librechat/client';
 import { SystemRoles } from 'librechat-data-provider';
 import { PicoIcon } from '~/components/ui/pico-icons';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { picoAuthedGet, picoAuthedPost } from '~/data-provider/pico/api';
+import PicoListTable from './PicoListTable';
 import WorkbenchShell from './WorkbenchShell';
-
-const FILTERS = ['全部', '健康', '警告', '严重', '未知'] as const;
-type FilterBucket = (typeof FILTERS)[number];
 
 const SOFT_LABELS: Record<string, string> = {
   refresh: '刷新',
@@ -104,13 +103,21 @@ function bucketText(bucket?: string): string {
   return 'text-zinc-500';
 }
 
-function formatAvail(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) {
-    return '—';
-  }
-  const pct = value <= 1 ? value * 100 : value;
-  return `${pct.toFixed(1)}%`;
+function availability(row: MonitorCard): number | undefined {
+  const value = row.availability_7d;
+  return value == null || Number.isNaN(value) ? undefined : value <= 1 ? value * 100 : value;
 }
+
+const monitorFilters = [
+  { label: '健康档', value: (row: MonitorCard) => row.bucket || '未知' },
+  { label: '提供方', value: (row: MonitorCard) => row.provider || '—' },
+];
+const accountFilters = [
+  { label: '平台', value: (row: AccountRow) => row.platform || '—' },
+  { label: '登录态', value: (row: AccountRow) => row.status || '—' },
+  { label: '调度', value: (row: AccountRow) =>
+    row.schedulable == null ? '未知' : row.schedulable ? '可调度' : '未调度' },
+];
 
 function ProbeRow({ title, probe, extra }: { title: string; probe?: Probe; extra?: string }) {
   const ok = probe?.ok === true;
@@ -136,20 +143,27 @@ function ProbeRow({ title, probe, extra }: { title: string; probe?: Probe; extra
   );
 }
 
+function listEmpty(http: number | undefined, empty: string, compliance: string) {
+  if (http == null || http === 200) return empty;
+  if (http === 423) return <span role="alert">{compliance}</span>;
+  if (http === 401) return <span role="alert">账号台鉴权失败，请重新登录。</span>;
+  return <span role="alert">读取失败（{http || '上游未响应'}）。</span>;
+}
+
 function TimelineBars({ points }: { points: TimelinePoint[] }) {
   if (points.length === 0) {
-    return <p className="mt-2 text-[12px] text-[color:var(--pico-ink-3)]">还没有小时点。</p>;
+    return <p className="text-xs text-text-secondary">还没有小时点。</p>;
   }
   return (
     <div
-      className="mt-2 flex h-8 w-full items-stretch gap-px overflow-hidden rounded-sm"
+      className="flex h-4 w-full items-stretch gap-[0.35px] overflow-hidden rounded-sm"
       role="img"
       aria-label={`近 ${points.length} 小时`}
     >
       {points.map((point, index) => (
         <span
           key={`${point.checked_at ?? index}-${index}`}
-          className={`min-w-[1px] flex-1 ${barColor(point.bucket)}`}
+          className={`min-w-0 flex-1 ${barColor(point.bucket)}`}
           title={`${point.bucket || '未知'}${point.checked_at ? ` · ${point.checked_at}` : ''}`}
         />
       ))}
@@ -157,12 +171,41 @@ function TimelineBars({ points }: { points: TimelinePoint[] }) {
   );
 }
 
+const monitorColumns: TableColumn<MonitorCard, unknown>[] = [
+  {
+    id: 'name', header: '渠道', sortingFn: 'alphanumeric', accessorFn: (row) => row.name || '未命名',
+    meta: { isRowHeader: true, width: 26 },
+    cell: ({ row: { original: row }, getValue }) => (
+      <>
+        <span title={row.name}>{String(getValue())}</span>
+        <p className="truncate text-xs text-text-secondary" title={[row.primary_model, row.group_name].filter(Boolean).join(' · ')}>
+          {[row.primary_model, row.group_name].filter(Boolean).join(' · ')}
+        </p>
+      </>
+    ),
+  },
+  { id: 'provider', header: '提供方', sortingFn: 'alphanumeric', accessorFn: monitorFilters[1].value, meta: { width: 13 } },
+  { id: 'bucket', header: '健康档', accessorFn: monitorFilters[0].value, enableSorting: false,
+    meta: { width: 10 }, cell: ({ getValue }) => <span className={bucketText(String(getValue()))}>{String(getValue())}</span> },
+  {
+    id: 'availability', header: '7 日可用率', accessorFn: availability,
+    meta: { width: 14, className: 'whitespace-nowrap' },
+    cell: ({ getValue }) => {
+      const pct = getValue<number | undefined>();
+      return pct == null ? '—' : `${pct.toFixed(1)}%`;
+    },
+  },
+  { id: 'latency', header: '延迟', meta: { width: 9 },
+    cell: ({ row: { original: row } }) => row.primary_latency_ms == null ? '—' : `${row.primary_latency_ms} ms` },
+  { id: 'timeline', header: '近 7 天小时状态', meta: { width: 28 },
+    cell: ({ row: { original: row } }) => <TimelineBars points={row.timeline ?? []} /> },
+];
+
 export default function GatewayAdminPage() {
   const { user } = useAuthContext();
   const isAdmin = user?.role === SystemRoles.ADMIN;
   const [status, setStatus] = useState<GatewayStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FilterBucket>('全部');
   const [busy, setBusy] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
@@ -198,27 +241,6 @@ export default function GatewayAdminPage() {
 
   const monitors = status?.sub2api?.monitors ?? [];
   const accounts = status?.sub2api?.accounts ?? [];
-  const filtered = useMemo(
-    () => (filter === '全部' ? monitors : monitors.filter((row) => (row.bucket || '未知') === filter)),
-    [filter, monitors],
-  );
-  const counts = useMemo(() => {
-    const next: Record<FilterBucket, number> = {
-      全部: monitors.length,
-      健康: 0,
-      警告: 0,
-      严重: 0,
-      未知: 0,
-    };
-    for (const row of monitors) {
-      const bucket = (row.bucket || '未知') as FilterBucket;
-      if (bucket in next && bucket !== '全部') {
-        next[bucket] += 1;
-      }
-    }
-    return next;
-  }, [monitors]);
-
   async function runSoftAction(accountId: number, action: string) {
     setBusy(`${accountId}:${action}`);
     setActionMsg(null);
@@ -265,18 +287,47 @@ export default function GatewayAdminPage() {
     ? '管理 API 要先在账号台签合规承诺。Pico 不代签。'
     : needsAuth
       ? monitorCount == null
-        ? '监控卡还是空的。硬重登、签合规、导入订阅号都在账号台。'
+        ? '硬重登、签合规、导入订阅号都在账号台。'
         : `监控 ${monitorCount} 条。硬重登仍走账号台。`
       : '硬重登走账号台，不接管 pico.aivia.asia。';
   const kinds = status?.usage?.kinds ?? [];
-  const emptyMonitors = monitors.length === 0;
-  const emptyCopy = compliance
-    ? '账号监控要先在账号台签合规。Pico 不代签。'
-    : '还没有监控卡。硬重登、签合规、导入订阅号都在账号台。';
+  const accountColumns: TableColumn<AccountRow, unknown>[] = [
+    {
+      id: 'name', header: '订阅号', sortingFn: 'alphanumeric', accessorFn: (row) => row.name || '未命名',
+      meta: { isRowHeader: true, width: 28 },
+      cell: ({ row: { original: row }, getValue }) => (
+        <>
+          <span title={row.name}>{String(getValue())}</span>
+          {row.error && <p className="truncate text-xs text-amber-800" title={row.error}>{row.error}</p>}
+        </>
+      ),
+    },
+    { id: 'platform', header: '平台', sortingFn: 'alphanumeric', accessorFn: accountFilters[0].value, meta: { width: 13 } },
+    { id: 'status', header: '登录态', accessorFn: accountFilters[1].value, enableSorting: false, meta: { width: 13 } },
+    { id: 'schedule', header: '调度', accessorFn: accountFilters[2].value, enableSorting: false, meta: { width: 12 } },
+    {
+      id: 'actions', header: '操作', meta: { width: 34 },
+      cell: ({ row: { original: row } }) => {
+        const { id } = row;
+        const actions = (row.soft_actions ?? Object.keys(SOFT_LABELS)).filter((action) => action in SOFT_LABELS);
+        return id != null && (
+          <div className="flex flex-wrap gap-1">
+            {actions.map((action) => (
+              <button key={action} type="button" disabled={busy === `${id}:${action}`}
+                onClick={() => void runSoftAction(id, action)}
+                className="rounded border border-border-light px-2 py-1 text-xs hover:bg-surface-secondary disabled:opacity-50">
+                {SOFT_LABELS[action]}
+              </button>
+            ))}
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <WorkbenchShell title="网关管理" subtitle="所有者 · 三本账" backTo="/c/new">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-6">
         <div className="pico-card flex flex-col gap-2 p-5">
           <span className="flex size-10 items-center justify-center rounded-xl bg-[color:var(--pico-surface-2)]">
             <PicoIcon name="shield" />
@@ -314,124 +365,17 @@ export default function GatewayAdminPage() {
               </a>
             ) : null}
 
-            <section className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4">
-              <p className="text-[14px] font-medium">服务状态 · 近 7 天</p>
-              <p className="mt-1 text-[12.5px] leading-5 text-[color:var(--pico-ink-2)]">
-                数据来自 Sub2API 渠道监控。Pico 不自建时序库。
-              </p>
-              <div className="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="监控筛选">
-                {FILTERS.map((name) => {
-                  const active = filter === name;
-                  return (
-                    <button
-                      key={name}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      className={
-                        active
-                          ? 'rounded-full bg-[color:var(--pico-ink)] px-2.5 py-1 text-[11px] text-[color:var(--pico-surface)]'
-                          : 'rounded-full border border-[color:var(--pico-line)] px-2.5 py-1 text-[11px] text-[color:var(--pico-ink-2)]'
-                      }
-                      onClick={() => setFilter(name)}
-                    >
-                      {name} {counts[name]}
-                    </button>
-                  );
-                })}
-              </div>
-              {emptyMonitors ? (
-                <p className="mt-3 text-[12.5px] leading-5 text-[color:var(--pico-ink-2)]">{emptyCopy}</p>
-              ) : filtered.length === 0 ? (
-                <p className="mt-3 text-[12.5px] text-[color:var(--pico-ink-2)]">这一档没有卡。</p>
-              ) : (
-                <ul className="mt-3 flex flex-col gap-3">
-                  {filtered.map((row) => (
-                    <li
-                      key={row.id ?? row.name}
-                      className="rounded-lg border border-[color:var(--pico-line)] p-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-[13.5px] font-medium">{row.name || '未命名'}</p>
-                          <p className="mt-0.5 text-[12px] text-[color:var(--pico-ink-2)]">
-                            {[row.provider, row.primary_model, row.group_name].filter(Boolean).join(' · ')}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[13px] font-medium tabular-nums">{formatAvail(row.availability_7d)}</p>
-                          <p className={`text-[11px] ${bucketText(row.bucket)}`}>{row.bucket || '未知'}</p>
-                        </div>
-                      </div>
-                      <TimelineBars points={row.timeline ?? []} />
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <section aria-label="服务状态 · 近 7 天" className="pico-card space-y-2 p-4">
+              <h2 className="text-sm font-medium">服务状态 · 近 7 天</h2>
+              <PicoListTable data={monitors} columns={monitorColumns} filters={monitorFilters}
+                emptyState={listEmpty(status?.sub2api?.monitors_http, '还没有渠道监控记录。', '账号监控要先在账号台签合规。Pico 不代签。')} />
             </section>
 
-            <section className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4">
-              <p className="text-[14px] font-medium">订阅号登录态</p>
-              <p className="mt-1 text-[12.5px] leading-5 text-[color:var(--pico-ink-2)]">
-                软按钮只转发刷新 / 测活 / 清错 / 恢复。硬重登仍走账号台。
-              </p>
-              {actionMsg ? (
-                <p role="status" className="mt-2 text-[12.5px] text-[color:var(--pico-ink)]">
-                  {actionMsg}
-                </p>
-              ) : null}
-              {accounts.length === 0 ? (
-                <p className="mt-2 text-[12.5px] leading-5 text-[color:var(--pico-ink-2)]">
-                  {compliance
-                    ? '账号列表要先在账号台签合规。Pico 不代签。'
-                    : '还没有订阅号。导入走账号台。'}
-                </p>
-              ) : (
-                <ul className="mt-3 flex flex-col gap-2">
-                  {accounts.map((row) => {
-                    const actions = (row.soft_actions ?? Object.keys(SOFT_LABELS)).filter(
-                      (name) => name in SOFT_LABELS,
-                    );
-                    return (
-                      <li
-                        key={row.id ?? row.name}
-                        className="rounded-lg border border-[color:var(--pico-line)] p-3"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-[13.5px] font-medium">{row.name || '未命名'}</p>
-                            <p className="mt-0.5 text-[12px] text-[color:var(--pico-ink-2)]">
-                              {[row.platform, row.status].filter(Boolean).join(' · ')}
-                              {row.schedulable === false ? ' · 未调度' : ''}
-                            </p>
-                            {row.error ? (
-                              <p className="mt-1 text-[12px] text-amber-900">{row.error}</p>
-                            ) : null}
-                          </div>
-                        </div>
-                        {row.id != null ? (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {actions.map((action) => {
-                              const key = `${row.id}:${action}`;
-                              return (
-                                <button
-                                  key={action}
-                                  type="button"
-                                  className="rounded-md border border-[color:var(--pico-line)] px-2 py-1 text-[11.5px] disabled:opacity-50"
-                                  disabled={busy === key}
-                                  onClick={() => runSoftAction(row.id as number, action)}
-                                >
-                                  {SOFT_LABELS[action]}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+            <section aria-label="订阅号登录态" className="pico-card space-y-2 p-4">
+              <h2 className="text-sm font-medium">订阅号登录态</h2>
+              {actionMsg ? <p role="status" className="text-xs">{actionMsg}</p> : null}
+              <PicoListTable data={accounts} columns={accountColumns} filters={accountFilters}
+                emptyState={listEmpty(status?.sub2api?.accounts_http, '还没有订阅号。导入走账号台。', '账号列表要先在账号台签合规。Pico 不代签。')} />
             </section>
 
             <div className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4">

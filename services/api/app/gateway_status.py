@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
 
 NEW_API_STATUS = "http://127.0.0.1:3000/api/status"
 NEW_API_MODELS = "http://127.0.0.1:3000/v1/models"
@@ -235,12 +238,29 @@ def _items(body: dict | list | None) -> list[dict]:
     return [row for row in rows if isinstance(row, dict)]
 
 
+def _probe_paginated(
+    url: str, headers: dict[str, str] | None
+) -> tuple[int, dict | list | None, list[dict]]:
+    rows: list[dict] = []
+    for page in range(1, 21):
+        code, body = _probe_json(f"{url}?page={page}&page_size=100", headers=headers)
+        if code != 200:
+            return code, body, []
+        rows.extend(_items(body))
+        data = _unwrap(body)
+        pages = data.get("pages") if isinstance(data, dict) else None
+        if not isinstance(pages, int) or page >= pages:
+            return code, body, rows
+    logger.warning("Sub2API pagination exceeded 20 pages for %s", url)
+    return 502, None, []
+
+
 def _sub2api_login_state() -> dict:
     headers = _auth_headers()
-    monitors_http, monitors_body = _probe_json(SUB2API_MONITORS, headers=headers)
-    accounts_http, accounts_body = _probe_json(SUB2API_ADMIN_ACCOUNTS, headers=headers)
-    monitors = [_sanitize_monitor(row) for row in _items(monitors_body)] if monitors_http == 200 else []
-    accounts = [_sanitize_account(row) for row in _items(accounts_body)] if accounts_http == 200 else []
+    monitors_http, monitors_body, monitor_rows = _probe_paginated(SUB2API_MONITORS, headers)
+    accounts_http, accounts_body, account_rows = _probe_paginated(SUB2API_ADMIN_ACCOUNTS, headers)
+    monitors = [_sanitize_monitor(row) for row in monitor_rows]
+    accounts = [_sanitize_account(row) for row in account_rows]
     compliance_required = accounts_http == 423 or monitors_http == 423
     for blob in (monitors_body, accounts_body):
         if isinstance(blob, dict) and str(blob.get("code") or "") == "ADMIN_COMPLIANCE_ACK_REQUIRED":
