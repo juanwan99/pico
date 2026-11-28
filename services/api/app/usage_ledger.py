@@ -987,6 +987,7 @@ async def list_usage_page(
     column = sort_columns[order[0]] if order else UsageEventRow.created_at
     ascending = order is not None and order[1] == "asc"
     tie = UsageEventRow.id
+    key = tuple_(column, tie)
     # Page one starts at the top, including links that still carry a backwards cursor.
     backwards = bool(before_id) and page > 1
     forwards = bool(after_id) and not before_id
@@ -1017,7 +1018,6 @@ async def list_usage_page(
                     detail={"code": "usage.bad_cursor", "message": "invalid usage page cursor"},
                 )
             if backwards or forwards:
-                key = tuple_(column, tie)
                 cursor = tuple_(*boundary)
                 query = details.where(key > cursor if fetching_ascending else key < cursor)
         window = list(await session.scalars(query.limit(USAGE_PAGE_SIZE + 1)))
@@ -1026,12 +1026,18 @@ async def list_usage_page(
             window = list(await session.scalars(
                 details.offset((number - 1) * USAGE_PAGE_SIZE).limit(USAGE_PAGE_SIZE)
             ))
-    more = len(window) > USAGE_PAGE_SIZE
-    rows = window[:USAGE_PAGE_SIZE]
-    if backwards:
-        rows.reverse()
+        more = len(window) > USAGE_PAGE_SIZE
+        rows = window[:USAGE_PAGE_SIZE]
+        has_next = more
+        if backwards and rows:
+            rows.reverse()
+            last_key = tuple_(getattr(rows[-1], column.key), rows[-1].id)
+            after_last = key > last_key if ascending else key < last_key
+            has_next = await session.scalar(
+                details.with_only_columns(tie).where(after_last).limit(1)
+            ) is not None
     previous_id = rows[0].id if rows and number > 1 and (not backwards or more) else None
-    next_id = rows[-1].id if rows and (backwards or more) else None
+    next_id = rows[-1].id if rows and has_next else None
     return UsagePage(rows, total, options, order, number, previous_id, next_id)
 
 

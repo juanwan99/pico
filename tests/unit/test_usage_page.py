@@ -6,11 +6,12 @@ from html import unescape
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 import pytest
-from app import db
+from app import db, usage_page
 from app.auth import issue_test_token
 from app.main import app
 from app.settings import get_settings
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture()
@@ -158,6 +159,36 @@ async def test_filtered_empty_keeps_unfiltered_daily_summary(seeded):
     assert re.search(daily, filtered, re.DOTALL)[1] == re.search(daily, default, re.DOTALL)[1]
 
 
+@pytest.mark.parametrize("before_summary", [False, True], ids=["after-count", "before-summary"])
+async def test_usage_page_reads_one_snapshot(client, monkeypatch, before_summary):
+    target, method = (usage_page, "summarize_usage") if before_summary else (AsyncSession, "execute")
+    read = getattr(target, method)
+
+    async def read_with_first_write(*args, **kwargs):
+        if not before_summary and not str(args[1]).startswith("SELECT count(*)"):
+            return await read(*args, **kwargs)
+        monkeypatch.setattr(target, method, read)
+        if not before_summary:
+            result = await read(*args, **kwargs)
+        async with db.session_factory()() as writer:
+            writer.add(db.UsageEventRow(
+                id="first", idempotency_key="first", run_id="run-01", kind="llm", model="alpha",
+                school_id="school-a", membership_id="m1",
+            ))
+            await writer.commit()
+        if before_summary:
+            return await read(*args, **kwargs)
+        return result
+
+    monkeypatch.setattr(target, method, read_with_first_write)
+    first = await _page(client)
+    assert "暂无用量记录" in first and "暂无汇总" in first
+    assert 'aria-label="明细分页"' not in first and 'name="model"' not in first
+    refreshed = await _page(client)
+    assert _runs(refreshed) == ["run-01"] and "· 1 次 ·" in refreshed
+    assert "共 1 条" in refreshed and 'name="model" value="alpha"' in refreshed
+
+
 async def test_empty_account_and_scope_isolation(seeded):
     empty = await _page(seeded, headers=_auth(member="m3"), params={"kind": "llm"})
     assert "暂无用量记录" in empty and "暂无汇总" in empty
@@ -239,17 +270,25 @@ async def test_next_page_returns_last_matching_page_after_final_row_changes(seed
         ])
         await writer.commit()
 
-    conditions = {"kind": "llm", "sort": "created_at", "direction": "asc"}
+    conditions = {
+        "kind": ["llm"], "model": ["", "alpha", 'beta < " &'],
+        "sort": ["created_at"], "direction": ["asc"],
+    }
     first = await _page(seeded, params=conditions)
     second = await _page(seeded, url=_link(first, "下一页"))
     third = await _page(seeded, url=_link(second, "下一页"))
     next_url = _link(third, "下一页")
-    assert _runs(await _page(seeded, url=next_url)) == ["run-154"]
+    final = await _page(seeded, url=next_url)
+    assert _runs(final) == ["run-154"]
 
     async with db.session_factory()() as writer:
         final_row = await writer.get(db.UsageEventRow, "later-154")
-        final_row.kind = "search"
+        final_row.model = "corrected-model"
         await writer.commit()
+
+    previous = await _page(seeded, url=_link(final, "上一页"))
+    assert _runs(previous) == _runs(third)
+    assert "下一页" not in previous
 
     last = await _page(seeded, url=next_url)
     assert _runs(last) == _runs(third)
@@ -257,8 +296,5 @@ async def test_next_page_returns_last_matching_page_after_final_row_changes(seed
     assert "暂无符合筛选的记录" not in last
     assert "下一页" not in last
     previous_url = _link(last, "上一页")
-    assert _query(previous_url) == {
-        **{key: [value] for key, value in conditions.items()},
-        "page": ["2"], "before_id": ["later-104"],
-    }
+    assert _query(previous_url) == {**conditions, "page": ["2"], "before_id": ["later-104"]}
     assert _runs(await _page(seeded, url=previous_url)) == _runs(second)

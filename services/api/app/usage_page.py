@@ -217,9 +217,11 @@ async def my_usage_page(
     after_id: str | None = None,
 ) -> HTMLResponse:
     filters = {"kind": kind or [], "bill_to": bill_to or [], "model": model or []}
-    details = await list_usage_page(
-        session, principal, filters=filters, sort=sort, direction=direction, page=page,
-        before_id=before_id, after_id=after_id,
-    )
-    summary = await summarize_usage(session, principal)
+    # Keep both reads on the same SQLite snapshot, including for an empty account.
+    async with session.begin_nested():
+        details = await list_usage_page(
+            session, principal, filters=filters, sort=sort, direction=direction, page=page,
+            before_id=before_id, after_id=after_id,
+        )
+        summary = await summarize_usage(session, principal)
     return HTMLResponse(_usage_html(principal, summary, details, filters))
