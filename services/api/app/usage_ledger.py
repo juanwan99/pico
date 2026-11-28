@@ -20,7 +20,7 @@ from pico_orchestrator.usage_parse import (
     parse_usage_blob,
     usage_extra_bits,
 )
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, tuple_
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +33,7 @@ USAGE_KINDS = frozenset({"llm", "search", "sandbox", "image", "api", "other"})
 # extra.status on llm rows (edu-core#5295); a row without it succeeded.
 USAGE_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
 USAGE_EXPORT_SCHEMA = "pico.usage.v1"
+USAGE_PAGE_SIZE = 50
 BILLING_COLUMN_NAMES = frozenset(
     {
         "price",
@@ -940,6 +941,104 @@ async def list_usage_events(
     q = q.order_by(UsageEventRow.created_at.desc()).offset(off).limit(cap)
     result = await session.execute(q)
     return list(result.scalars().all())
+
+
+@dataclass(frozen=True)
+class UsagePage:
+    rows: list[UsageEventRow]
+    total: int
+    options: dict[str, list[str]]
+    order: tuple[str, str] | None
+    number: int
+    previous_id: str | None
+    next_id: str | None
+
+
+async def list_usage_page(
+    session: AsyncSession,
+    principal: Principal,
+    *,
+    filters: dict[str, list[str]],
+    sort: str | None = None,
+    direction: str | None = None,
+    page: int = 1,
+    before_id: str | None = None,
+    after_id: str | None = None,
+) -> UsagePage:
+    """Page the current account's details and query its unfiltered facet values."""
+    school, member = _tenant_filter(principal, None)
+    tenant = (UsageEventRow.school_id == school, UsageEventRow.membership_id == member)
+    raw_payer = func.json_extract(UsageEventRow.extra_json, "$.bill_to")
+    columns = {
+        "kind": UsageEventRow.kind,
+        # Match the teacher view: missing payer tags on old rows belong to the member.
+        "bill_to": case((raw_payer.in_(("school", "personal")), raw_payer), else_="member"),
+        "model": func.coalesce(UsageEventRow.model, ""),
+    }
+    predicates = [
+        column.in_(filters[key]) for key, column in columns.items() if filters.get(key)
+    ]
+    count = select(func.count()).select_from(UsageEventRow).where(*tenant, *predicates)
+    sort_columns = {"created_at": UsageEventRow.created_at, "kind": UsageEventRow.kind}
+    if sort in sort_columns and direction in ("asc", "desc"):
+        order = (sort, direction)
+    else:
+        order = None
+    column = sort_columns[order[0]] if order else UsageEventRow.created_at
+    ascending = order is not None and order[1] == "asc"
+    tie = UsageEventRow.id
+    key = tuple_(column, tie)
+    # Page one starts at the top, including links that still carry a backwards cursor.
+    backwards = bool(before_id) and page > 1
+    forwards = bool(after_id) and not before_id
+    fetching_ascending = ascending != backwards
+    ordering = (column.asc(), tie.asc()) if fetching_ascending else (column.desc(), tie.desc())
+    details = select(UsageEventRow).where(*tenant, *predicates).order_by(*ordering)
+    # A savepoint starts a physical SQLite read transaction even in legacy driver mode.
+    async with session.begin_nested():
+        options = {
+            key: list(await session.scalars(
+                select(value).where(*tenant).distinct().order_by(value)
+            ))
+            for key, value in columns.items()
+        }
+        total = (await session.execute(count)).scalar_one()
+        last_page = max(1, (total + USAGE_PAGE_SIZE - 1) // USAGE_PAGE_SIZE)
+        number = min(page, last_page)
+        query = details.offset((number - 1) * USAGE_PAGE_SIZE)
+        if boundary_id := before_id or after_id:
+            boundary = (await session.execute(
+                select(column, tie).where(*tenant, tie == boundary_id)
+            )).one_or_none()
+            if boundary is None:
+                from fastapi import HTTPException
+
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "usage.bad_cursor", "message": "invalid usage page cursor"},
+                )
+            if backwards or forwards:
+                cursor = tuple_(*boundary)
+                query = details.where(key > cursor if fetching_ascending else key < cursor)
+        window = list(await session.scalars(query.limit(USAGE_PAGE_SIZE + 1)))
+        if forwards and not window and total:
+            number = last_page
+            window = list(await session.scalars(
+                details.offset((number - 1) * USAGE_PAGE_SIZE).limit(USAGE_PAGE_SIZE)
+            ))
+        more = len(window) > USAGE_PAGE_SIZE
+        rows = window[:USAGE_PAGE_SIZE]
+        has_next = more
+        if backwards and rows:
+            rows.reverse()
+            last_key = tuple_(getattr(rows[-1], column.key), rows[-1].id)
+            after_last = key > last_key if ascending else key < last_key
+            has_next = await session.scalar(
+                details.with_only_columns(tie).where(after_last).limit(1)
+            ) is not None
+    previous_id = rows[0].id if rows and number > 1 and (not backwards or more) else None
+    next_id = rows[-1].id if rows and has_next else None
+    return UsagePage(rows, total, options, order, number, previous_id, next_id)
 
 
 async def list_usage_events_for_run(

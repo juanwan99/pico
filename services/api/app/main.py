@@ -35,7 +35,7 @@ try:
 except ImportError:
     pass
 
-from app import run_service, task_create
+from app import run_service, task_create, usage_page
 from app.auth import (
     Principal,
     issue_test_token,
@@ -231,6 +231,7 @@ app.include_router(model_endpoint_router)
 app.include_router(html_pages_router)
 app.include_router(llm_pass_router)
 app.include_router(ws_proxy_router)
+app.include_router(usage_page.router)
 
 
 # ----- meta / auth -----
@@ -590,66 +591,6 @@ async def me(principal: Principal = Depends(require_scoped_principal)) -> dict:
 # ----- usage ledger (statistics only — no billing) -----
 
 
-def _usage_html(principal: Principal, summary: dict, events: list[dict]) -> str:
-    import html as html_lib
-
-    payer = {"school": "学校账", "personal": "我的接口", "member": "本人"}
-    rows = []
-    for ev in events:
-        pts = ev.get("points")
-        pts_label = str(pts) if isinstance(pts, str) and pts else "—"
-        bill = (ev.get("extra") or {}).get("bill_to") or "member"
-        rows.append(
-            "<tr>"
-            f"<td>{html_lib.escape(str(ev.get('created_at') or ''))}</td>"
-            f"<td>{html_lib.escape(str(ev.get('kind') or ''))}</td>"
-            f"<td>{html_lib.escape(str(ev.get('model') or '—'))}</td>"
-            f"<td>{html_lib.escape(payer.get(bill, bill))}</td>"
-            f"<td>{html_lib.escape(pts_label)}</td>"
-            f"<td>{html_lib.escape(str(ev.get('run_id') or '—'))}</td>"
-            "</tr>"
-        )
-    body_rows = "\n".join(rows) or (
-        "<tr><td colspan='6'>暂无用量记录（空态诚实）</td></tr>"
-    )
-    day_bits = []
-    for d in summary.get("days") or []:
-        pts = d.get("points")
-        pts_label = str(pts) if isinstance(pts, str) and pts else "—"
-        bill = str(d.get("bill_to") or "member")
-        day_bits.append(
-            f"<li>{html_lib.escape(str(d.get('day')))} · {html_lib.escape(str(d.get('kind')))} · "
-            f"{html_lib.escape(payer.get(bill, bill))} · "
-            f"{int(d.get('calls') or 0)} 次 · 积分 "
-            f"{html_lib.escape(pts_label)}"
-            f"</li>"
-        )
-    days_html = "\n".join(day_bits) or "<li>暂无汇总</li>"
-    school = html_lib.escape(principal.school_id)
-    member = html_lib.escape(principal.membership_id)
-    return f"""<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>我的用量</title>
-<style>
-body {{ font-family: sans-serif; margin: 1.5rem; color: #111; }}
-table {{ border-collapse: collapse; width: 100%; }}
-th, td {{ border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; }}
-.note {{ color: #555; }}
-</style></head><body>
-<h1>我的用量</h1>
-<p class="note">统计/管理 · <strong>不做钱</strong>（无价格、无扣款）。账号 {school} / {member}</p>
-<h2>按日汇总（北京时间）</h2>
-<ul>{days_html}</ul>
-<h2>明细</h2>
-<table>
-<thead><tr><th>时间</th><th>kind</th><th>模型</th><th>记账</th><th>积分</th><th>run</th></tr></thead>
-<tbody>
-{body_rows}
-</tbody>
-</table>
-</body></html>
-"""
-
-
 @app.get("/v1/usage/summary")
 async def usage_summary(
     kind: str | None = None,
@@ -766,19 +707,6 @@ async def usage_points_settle(
         turns = await settle_points_for_conversation(session, principal, cid)
         return {"turns": turns, "wallet": False}
     raise HTTPException(status_code=400, detail="run_id or conversation_id required")
-
-
-@app.get("/v1/usage")
-async def my_usage_page(
-    principal: Principal = Depends(require_scope("ai:read")),
-    session: AsyncSession = Depends(get_session),
-) -> HTMLResponse:
-    from app.usage_ledger import list_usage_events, summarize_usage, teacher_usage_event_dict
-
-    summary = await summarize_usage(session, principal)
-    rows = await list_usage_events(session, principal, limit=50, offset=0)
-    html = _usage_html(principal, summary, [teacher_usage_event_dict(r) for r in rows])
-    return HTMLResponse(html)
 
 
 @app.get("/v1/internal/usage/export")
