@@ -109,12 +109,13 @@ def test_login_reads_monitors_and_strips_secrets(monkeypatch) -> None:
     timeline = [{"status": "operational", "checked_at": "t", "secret": "leak", "latency_ms": 12}] * 200
 
     def fake_probe_json(url, timeout=2.0, headers=None, method="GET", payload=None):
+        url = url.partition("?")[0]
         if url.endswith("/auth/login"):
             assert method == "POST"
             assert payload == {"email": "owner@example.com", "password": "super-secret-password"}
             return 200, {"code": 0, "data": {"access_token": "tok_abc", "expires_in": 3600}}
         assert headers == {"Authorization": "Bearer tok_abc"}
-        if url.partition("?")[0].endswith("/channel-monitors"):
+        if url.endswith("/channel-monitors"):
             return 200, {
                 "code": 0,
                 "data": {
@@ -131,7 +132,7 @@ def test_login_reads_monitors_and_strips_secrets(monkeypatch) -> None:
                     ]
                 },
             }
-        if url.partition("?")[0].endswith("/admin/accounts"):
+        if url.endswith("/admin/accounts"):
             return 200, {
                 "code": 0,
                 "data": {
@@ -185,13 +186,14 @@ def test_admin_api_key_uses_x_api_key_not_password_login(monkeypatch) -> None:
     login_calls = {"n": 0}
 
     def fake_probe_json(url, timeout=2.0, headers=None, method="GET", payload=None):
+        url = url.partition("?")[0]
         if url.endswith("/auth/login"):
             login_calls["n"] += 1
             raise AssertionError("password login must not run when admin API key is set")
         assert headers == {"X-API-Key": "admin-deadbeef"}
-        if url.partition("?")[0].endswith("/channel-monitors"):
+        if url.endswith("/channel-monitors"):
             return 200, {"code": 0, "data": {"items": []}}
-        if url.partition("?")[0].endswith("/admin/accounts"):
+        if url.endswith("/admin/accounts"):
             return 200, {"code": 0, "data": {"items": []}}
         return 200, {}
 
@@ -238,11 +240,12 @@ def test_admin_accounts_423_is_compliance_not_fake_success(monkeypatch) -> None:
     monkeypatch.setattr("app.gateway_status._new_api_models", list)
 
     def fake_probe_json(url, timeout=2.0, headers=None, method="GET", payload=None):
+        url = url.partition("?")[0]
         if url.endswith("/auth/login"):
             return 200, {"code": 0, "data": {"access_token": "tok_abc", "expires_in": 3600}}
-        if url.partition("?")[0].endswith("/channel-monitors"):
+        if url.endswith("/channel-monitors"):
             return 200, {"code": 0, "data": {"items": []}}
-        if url.partition("?")[0].endswith("/admin/accounts"):
+        if url.endswith("/admin/accounts"):
             return 423, {"code": "ADMIN_COMPLIANCE_ACK_REQUIRED", "message": "ack"}
         if url.endswith("/admin/accounts/9/refresh"):
             return 423, {"code": "ADMIN_COMPLIANCE_ACK_REQUIRED"}

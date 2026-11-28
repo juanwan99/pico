@@ -143,6 +143,13 @@ function ProbeRow({ title, probe, extra }: { title: string; probe?: Probe; extra
   );
 }
 
+function listEmpty(http: number | undefined, empty: string, compliance: string) {
+  if (http == null || http === 200) return empty;
+  if (http === 423) return <span role="alert">{compliance}</span>;
+  if (http === 401) return <span role="alert">账号台鉴权失败，请重新登录。</span>;
+  return <span role="alert">读取失败（{http || '上游未响应'}）。</span>;
+}
+
 function TimelineBars({ points }: { points: TimelinePoint[] }) {
   if (points.length === 0) {
     return <p className="text-xs text-text-secondary">还没有小时点。</p>;
@@ -166,7 +173,7 @@ function TimelineBars({ points }: { points: TimelinePoint[] }) {
 
 const monitorColumns: TableColumn<MonitorCard, unknown>[] = [
   {
-    id: 'name', header: '渠道', accessorFn: (row) => row.name || '未命名',
+    id: 'name', header: '渠道', sortingFn: 'alphanumeric', accessorFn: (row) => row.name || '未命名',
     meta: { isRowHeader: true, width: 26 },
     cell: ({ row: { original: row }, getValue }) => (
       <>
@@ -177,7 +184,7 @@ const monitorColumns: TableColumn<MonitorCard, unknown>[] = [
       </>
     ),
   },
-  { id: 'provider', header: '提供方', accessorFn: monitorFilters[1].value, meta: { width: 13 } },
+  { id: 'provider', header: '提供方', sortingFn: 'alphanumeric', accessorFn: monitorFilters[1].value, meta: { width: 13 } },
   { id: 'bucket', header: '健康档', accessorFn: monitorFilters[0].value, enableSorting: false,
     meta: { width: 10 }, cell: ({ getValue }) => <span className={bucketText(String(getValue()))}>{String(getValue())}</span> },
   {
@@ -280,13 +287,13 @@ export default function GatewayAdminPage() {
     ? '管理 API 要先在账号台签合规承诺。Pico 不代签。'
     : needsAuth
       ? monitorCount == null
-        ? '还没有监控记录。硬重登、签合规、导入订阅号都在账号台。'
+        ? '硬重登、签合规、导入订阅号都在账号台。'
         : `监控 ${monitorCount} 条。硬重登仍走账号台。`
       : '硬重登走账号台，不接管 pico.aivia.asia。';
   const kinds = status?.usage?.kinds ?? [];
   const accountColumns: TableColumn<AccountRow, unknown>[] = [
     {
-      id: 'name', header: '订阅号', accessorFn: (row) => row.name || '未命名',
+      id: 'name', header: '订阅号', sortingFn: 'alphanumeric', accessorFn: (row) => row.name || '未命名',
       meta: { isRowHeader: true, width: 28 },
       cell: ({ row: { original: row }, getValue }) => (
         <>
@@ -295,7 +302,7 @@ export default function GatewayAdminPage() {
         </>
       ),
     },
-    { id: 'platform', header: '平台', accessorFn: accountFilters[0].value, meta: { width: 13 } },
+    { id: 'platform', header: '平台', sortingFn: 'alphanumeric', accessorFn: accountFilters[0].value, meta: { width: 13 } },
     { id: 'status', header: '登录态', accessorFn: accountFilters[1].value, enableSorting: false, meta: { width: 13 } },
     { id: 'schedule', header: '调度', accessorFn: accountFilters[2].value, enableSorting: false, meta: { width: 12 } },
     {
@@ -361,14 +368,14 @@ export default function GatewayAdminPage() {
             <section aria-label="服务状态 · 近 7 天" className="pico-card space-y-2 p-4">
               <h2 className="text-sm font-medium">服务状态 · 近 7 天</h2>
               <PicoListTable data={monitors} columns={monitorColumns} filters={monitorFilters}
-                emptyState={compliance ? '账号监控要先在账号台签合规。Pico 不代签。' : '还没有渠道监控记录。'} />
+                emptyState={listEmpty(status?.sub2api?.monitors_http, '还没有渠道监控记录。', '账号监控要先在账号台签合规。Pico 不代签。')} />
             </section>
 
             <section aria-label="订阅号登录态" className="pico-card space-y-2 p-4">
               <h2 className="text-sm font-medium">订阅号登录态</h2>
               {actionMsg ? <p role="status" className="text-xs">{actionMsg}</p> : null}
               <PicoListTable data={accounts} columns={accountColumns} filters={accountFilters}
-                emptyState={compliance ? '账号列表要先在账号台签合规。Pico 不代签。' : '还没有订阅号。导入走账号台。'} />
+                emptyState={listEmpty(status?.sub2api?.accounts_http, '还没有订阅号。导入走账号台。', '账号列表要先在账号台签合规。Pico 不代签。')} />
             </section>
 
             <div className="rounded-lg border border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] p-4">

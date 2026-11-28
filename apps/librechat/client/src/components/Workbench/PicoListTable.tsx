@@ -4,35 +4,29 @@ import { DataTableV2, type TableColumn } from '@librechat/client';
 import { ListFilter } from 'lucide-react';
 
 type Filter<Row> = { label: string; value: (row: Row) => string };
-
-export default function PicoListTable<Row extends Record<string, unknown>>({
-  data,
-  columns,
-  filters,
-  emptyState,
-}: {
+type Props<Row> = {
   data: Row[];
   columns: TableColumn<Row, unknown>[];
   filters: Filter<Row>[];
   emptyState: ReactNode;
-}) {
+};
+
+export default function PicoListTable<Row extends Record<string, unknown>>(
+  { data, columns, filters, emptyState }: Props<Row>,
+) {
   const [selected, setSelected] = useState<Record<string, string[]>>({});
-  const choices = useMemo(() => filters.map(({ label, value }) => ({
-    label,
-    values: [...new Set([...data.map(value), ...(selected[label] ?? [])])].sort((a, b) =>
-      a.localeCompare(b, 'zh-CN'),
-    ),
-  })), [data, filters, selected]);
+  const choices = useMemo(() => filters.map(({ label, value }) => {
+    const values = [...new Set(data.map(value).concat(selected[label] ?? []))];
+    return { label, values: values.sort((a, b) => a.localeCompare(b, 'zh-CN')) };
+  }), [data, filters, selected]);
   const visibleRows = useMemo(() => data.filter((row) => filters.every(({ label, value }) => {
     const values = selected[label];
     return !values?.length || values.includes(value(row));
   })), [data, filters, selected]);
   const tableColumns = useMemo(() => columns.map((column) => ({
-    sortDescFirst: false,
-    sortUndefined: 'last' as const,
+    sortDescFirst: false, sortUndefined: 'last' as const,
     ...column,
   })), [columns]);
-
   function toggle(label: string, value: string) {
     setSelected((current) => {
       const values = current[label] ?? [];
@@ -42,12 +36,9 @@ export default function PicoListTable<Row extends Record<string, unknown>>({
   }
 
   const active = Object.values(selected).some((values) => values.length > 0);
-  const clear = (
-    <button type="button" className="text-text-secondary underline" onClick={() => setSelected({})}>
-      清除筛选
-    </button>
-  );
-
+  const clear = <button type="button" className="text-text-secondary underline" onClick={() => setSelected({})}>
+    清除筛选
+  </button>;
   return (
     <DataTableV2
       columns={tableColumns}
@@ -57,7 +48,7 @@ export default function PicoListTable<Row extends Record<string, unknown>>({
       config={{ selection: { enableRowSelection: false }, search: { enableSearch: false } }}
       emptyState={(
         <div className="px-4 py-6 text-center text-[13px] text-text-secondary">
-          {active ? <><p role="status">暂无符合筛选的记录</p>{clear}</> : emptyState}
+          {data.length && active ? <><p role="status">暂无符合筛选的记录</p>{clear}</> : emptyState}
         </div>
       )}
       customActionsRenderer={() => (

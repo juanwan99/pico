@@ -2,7 +2,7 @@
  * Automation list + create form backed by Pico /v1/automations.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@librechat/client';
+import { Dialog, DialogContent, DialogTitle, type TableColumn } from '@librechat/client';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -170,7 +170,8 @@ function promptWithoutModelPrefix(prompt: string): string {
 }
 
 function timestamp(value?: string | null): number | undefined {
-  const millis = value ? Date.parse(value) : NaN;
+  const naiveUtc = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?$/;
+  const millis = value ? Date.parse(value.replace(naiveUtc, '$&Z')) : NaN;
   return Number.isNaN(millis) ? undefined : millis;
 }
 
@@ -251,7 +252,7 @@ export default function AutomationPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ id: string | null }>({ id: null });
   const [deleteTarget, setDeleteTarget] = useState<PicoAutomation | null>(null);
   const [runResults, setRunResults] = useState<Record<string, PicoRun>>({});
   const [runEvents, setRunEvents] = useState<Record<string, PicoRunEvent[]>>({});
@@ -391,7 +392,7 @@ export default function AutomationPage() {
     }
   };
 
-  const onToggle = async (item: PicoAutomation) => {
+  const onToggle = useCallback(async (item: PicoAutomation) => {
     if (pendingId) {
       return;
     }
@@ -405,9 +406,9 @@ export default function AutomationPage() {
     } finally {
       setPendingId(null);
     }
-  };
+  }, [pendingId]);
 
-  const onRunOnce = async (item: PicoAutomation) => {
+  const onRunOnce = useCallback(async (item: PicoAutomation) => {
     if (pendingId) {
       return;
     }
@@ -419,13 +420,13 @@ export default function AutomationPage() {
         current.map((entry) => (entry.id === item.id ? result.automation : entry)),
       );
       setRunResults((current) => ({ ...current, [item.id]: result.run }));
-      setDetailId(item.id);
+      setSelection((current) => current === selection ? { id: item.id } : current);
     } catch (e) {
       setActionError(friendlyError(e instanceof Error ? e.message : String(e)));
     } finally {
       setPendingId(null);
     }
-  };
+  }, [pendingId, selection]);
 
   const activeRuns = useMemo(() => Object.entries(runResults), [runResults]);
 
@@ -490,8 +491,7 @@ export default function AutomationPage() {
     }
   };
 
-  if (mode === 'create') {
-    return (
+  const createForm = mode === 'create' && (
       <div className="flex h-full min-h-0 flex-col bg-[#f5f5f5] text-[#1a1a1a] dark:bg-presentation dark:text-text-primary">
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/[0.06] bg-white px-4 dark:border-border-light dark:bg-surface-primary">
           <div className="flex min-w-0 items-center gap-2 text-[14px] font-medium">
@@ -791,15 +791,17 @@ export default function AutomationPage() {
           </div>
         </div>
       </div>
-    );
-  }
+  );
 
   const enabledCount = list.filter((item) => item.enabled).length;
-  const detail = list.find((item) => item.id === detailId);
+  const detail = list.find((item) => item.id === selection.id);
   const detailRun = detail && runResults[detail.id];
 
   return (
-    <div className="pico-shell-bg flex h-full min-h-0 flex-col dark:bg-presentation">
+    <>
+    {createForm}
+    <div className="pico-shell-bg flex h-full min-h-0 flex-col dark:bg-presentation"
+      style={mode === 'create' ? { display: 'none' } : undefined}>
       <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-[color:var(--pico-line)] bg-[color:var(--pico-surface)] px-4 py-2 dark:border-border-light dark:bg-surface-primary sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
           {returnPath ? (
@@ -902,13 +904,13 @@ export default function AutomationPage() {
                 </Link>
               </div>
             )}
-            columns={[
+            columns={useMemo<TableColumn<PicoAutomation, unknown>[]>(() => [
               {
-                accessorKey: 'name', header: '任务', meta: { isRowHeader: true, width: 22 },
+                accessorKey: 'name', header: '任务', sortingFn: 'alphanumeric', meta: { isRowHeader: true, width: 22 },
                 cell: ({ row: { original: item } }) => (
                   <>
                     <button type="button" title={item.name} className="block max-w-full truncate font-semibold hover:underline"
-                      onClick={() => setDetailId(item.id)}>{item.name}</button>
+                      onClick={() => setSelection({ id: item.id })}>{item.name}</button>
                     <p className="truncate text-xs text-text-secondary">{readUiMeta(item)?.workspace.label || '账号默认工作空间'}</p>
                   </>
                 ),
@@ -969,12 +971,12 @@ export default function AutomationPage() {
                   </div>
                 ),
               },
-            ]}
+            ], [onRunOnce, onToggle, pendingId])}
           />
         </div>
       </div>
 
-      <Dialog open={detail != null} onOpenChange={(open) => { if (!open) setDetailId(null); }}>
+      <Dialog open={mode === 'list' && detail != null} onOpenChange={(open) => { if (!open) setSelection({ id: null }); }}>
         {detail && (
           <DialogContent aria-describedby={undefined} className="max-h-[80vh] max-w-xl overflow-auto p-6">
             <DialogTitle className="pr-8">{detail.name}</DialogTitle>
@@ -1050,5 +1052,6 @@ export default function AutomationPage() {
         </div>
       ) : null}
     </div>
+    </>
   );
 }
