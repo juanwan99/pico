@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -396,3 +397,67 @@ async def test_owner_usage_today_has_no_membership_ids(usage_db) -> None:
     assert llm["total_tokens"] == 10
 
 
+async def test_usage_page_filters_all_rows_before_stable_pagination(usage_db) -> None:
+    from app import usage_ledger
+    from app.auth import Principal
+    from app.db import session_factory
+
+    principal = Principal(
+        school_id="school-a", membership_id="m1", scopes=["ai:read", "ai:admin"],
+        iss="t", aud="pico-api", exp=0, raw={},
+    )
+    stamp = datetime(2026, 11, 27, 15, 30, tzinfo=UTC)
+    matching = [f"event-{index:03d}" for index in range(56)]
+    async with session_factory()() as session:
+        session.add_all([
+            UsageEventRow(
+                id=key, idempotency_key=key, school_id="school-a", membership_id="m1",
+                kind="image" if index < 28 else "llm", model="alpha" if index % 2 else "beta",
+                extra_json='{"bill_to":"school"}' if index % 3 else '{}', created_at=stamp,
+            )
+            for index, key in enumerate(matching)
+        ])
+        # Each newer row falls outside just one filter or one part of the tenant key.
+        session.add_all([
+            UsageEventRow(
+                id=key, idempotency_key=key, school_id=school, membership_id=member,
+                kind=kind, model=model, extra_json=extra, created_at=stamp + timedelta(days=1),
+            )
+            for key, school, member, kind, model, extra in [
+                ("other-kind", "school-a", "m1", "search", "alpha", "{}"),
+                ("other-model", "school-a", "m1", "llm", None, "{}"),
+                ("other-payer", "school-a", "m1", "llm", "alpha", '{"bill_to":"personal"}'),
+                ("other-member", "school-a", "m2", "llm", "hidden", "{}"),
+                ("other-school", "school-b", "m1", "llm", "hidden", "{}"),
+            ]
+        ])
+        await session.commit()
+
+        filters = {
+            "kind": ["image", "llm"], "bill_to": ["school", "member"], "model": ["alpha", "beta"],
+        }
+        options = {
+            "kind": ["image", "llm", "search"], "bill_to": ["member", "personal", "school"],
+            "model": ["", "alpha", "beta"],
+        }
+        for direction, ordered in [("asc", matching), ("desc", matching[::-1])]:
+            first = await usage_ledger.list_usage_page(
+                session, principal, filters=filters, sort="created_at", direction=direction,
+            )
+            second = await usage_ledger.list_usage_page(
+                session, principal, filters=filters, sort="created_at", direction=direction,
+                page=2,
+            )
+            assert first.total == second.total == 56
+            assert [row.id for row in first.rows] == ordered[:50]
+            assert [row.id for row in second.rows] == ordered[50:]
+            assert first.options == second.options == options
+
+        personal = await usage_ledger.list_usage_page(
+            session, principal, filters={"bill_to": ["personal"]},
+        )
+        assert [row.id for row in personal.rows] == ["other-payer"]
+        missing_model = await usage_ledger.list_usage_page(
+            session, principal, filters={"model": [""]},
+        )
+        assert [row.id for row in missing_model.rows] == ["other-model"]

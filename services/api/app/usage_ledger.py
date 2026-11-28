@@ -33,6 +33,7 @@ USAGE_KINDS = frozenset({"llm", "search", "sandbox", "image", "api", "other"})
 # extra.status on llm rows (edu-core#5295); a row without it succeeded.
 USAGE_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
 USAGE_EXPORT_SCHEMA = "pico.usage.v1"
+USAGE_PAGE_SIZE = 50
 BILLING_COLUMN_NAMES = frozenset(
     {
         "price",
@@ -940,6 +941,65 @@ async def list_usage_events(
     q = q.order_by(UsageEventRow.created_at.desc()).offset(off).limit(cap)
     result = await session.execute(q)
     return list(result.scalars().all())
+
+
+@dataclass(frozen=True)
+class UsagePage:
+    rows: list[UsageEventRow]
+    total: int
+    options: dict[str, list[str]]
+    order: tuple[str, str] | None
+    number: int
+    last_page: int
+
+
+async def list_usage_page(
+    session: AsyncSession,
+    principal: Principal,
+    *,
+    filters: dict[str, list[str]],
+    sort: str | None = None,
+    direction: str | None = None,
+    page: int = 1,
+) -> UsagePage:
+    """Page the current account's details and query its unfiltered facet values."""
+    school, member = _tenant_filter(principal, None)
+    tenant = (UsageEventRow.school_id == school, UsageEventRow.membership_id == member)
+    raw_payer = func.json_extract(UsageEventRow.extra_json, "$.bill_to")
+    columns = {
+        "kind": UsageEventRow.kind,
+        # Match the teacher view: missing payer tags on old rows belong to the member.
+        "bill_to": case((raw_payer.in_(("school", "personal")), raw_payer), else_="member"),
+        "model": func.coalesce(UsageEventRow.model, ""),
+    }
+    options = {
+        key: list(await session.scalars(select(column).where(*tenant).distinct().order_by(column)))
+        for key, column in columns.items()
+    }
+    predicates = [
+        column.in_(filters[key]) for key, column in columns.items() if filters.get(key)
+    ]
+    count = select(func.count()).select_from(UsageEventRow).where(*tenant, *predicates)
+    total = (await session.execute(count)).scalar_one()
+    sort_columns = {"created_at": UsageEventRow.created_at, "kind": UsageEventRow.kind}
+    if sort in sort_columns and direction in ("asc", "desc"):
+        order = (sort, direction)
+    else:
+        order = None
+    column = sort_columns[order[0]] if order else UsageEventRow.created_at
+    ascending = order is not None and order[1] == "asc"
+    tie = UsageEventRow.id
+    ordering = (column.asc(), tie.asc()) if ascending else (column.desc(), tie.desc())
+    last_page = max(1, (total + USAGE_PAGE_SIZE - 1) // USAGE_PAGE_SIZE)
+    number = min(page, last_page)
+    query = (
+        select(UsageEventRow)
+        .where(*tenant, *predicates)
+        .order_by(*ordering)
+        .offset((number - 1) * USAGE_PAGE_SIZE)
+        .limit(USAGE_PAGE_SIZE)
+    )
+    return UsagePage(list(await session.scalars(query)), total, options, order, number, last_page)
 
 
 async def list_usage_events_for_run(
