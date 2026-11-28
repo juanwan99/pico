@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import GatewayAdminPage from './GatewayAdminPage';
@@ -81,20 +81,26 @@ describe('GatewayAdminPage', () => {
     expect(screen.getByText('账号 · Sub2API 登录态')).toBeInTheDocument();
     expect(screen.getByText('用户消耗 · Pico usage_events')).toBeInTheDocument();
     expect(screen.getByText(/聊天脑已走 New API/)).toBeInTheDocument();
-    expect(screen.getByText(/还没有监控卡/)).toBeInTheDocument();
+    expect(screen.getByText(/还没有渠道监控记录/)).toBeInTheDocument();
+    expect(screen.getByText(/还没有订阅号/)).toBeInTheDocument();
     expect(screen.queryByTestId('open-sub2api-admin')).not.toBeInTheDocument();
     expect(screen.queryByText(/打开账号管理/)).not.toBeInTheDocument();
   });
 
-  it('hides probes from teacher accounts', () => {
+  it('hides both tables on role change and never fetches for a teacher', async () => {
     mockUser.role = 'USER';
-    render(
-      <MemoryRouter>
-        <GatewayAdminPage />
-      </MemoryRouter>,
-    );
+    const { rerender } = render(<GatewayAdminPage />);
     expect(screen.getByText(/只给所有者/)).toBeInTheDocument();
     expect(picoAuthedGet).not.toHaveBeenCalled();
+
+    mockUser.role = 'ADMIN';
+    rerender(<GatewayAdminPage />);
+    await screen.findByRole('link', { name: /打开账号台/ });
+    expect(screen.getAllByRole('table')).toHaveLength(2);
+    mockUser.role = 'USER';
+    rerender(<GatewayAdminPage />);
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(picoAuthedGet).toHaveBeenCalledTimes(1);
     expect(picoAuthedPost).not.toHaveBeenCalled();
   });
 
@@ -117,6 +123,7 @@ describe('GatewayAdminPage', () => {
               provider: 'google',
               bucket: '健康',
               availability_7d: 0.992,
+              primary_latency_ms: 120,
               timeline,
             },
             {
@@ -143,7 +150,10 @@ describe('GatewayAdminPage', () => {
     expect(screen.getByText('99.2%')).toBeInTheDocument();
     expect(screen.getByLabelText('近 168 小时')).toBeInTheDocument();
     expect(screen.getByText('Grok B')).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: /严重/ }));
+    expect(screen.getByText('120 ms')).toBeInTheDocument();
+    const section = within(screen.getByRole('region', { name: '服务状态 · 近 7 天' }));
+    await user.click(section.getByRole('button', { name: '筛选' }));
+    await user.click(screen.getByRole('checkbox', { name: '严重' }));
     expect(screen.getByText('Grok B')).toBeInTheDocument();
     expect(screen.queryByText('Gemini A')).not.toBeInTheDocument();
   });
@@ -192,4 +202,29 @@ describe('GatewayAdminPage', () => {
     });
     expect(screen.queryByText('已交给上游。')).not.toBeInTheDocument();
   });
+  it('retains subscription filters and sorting after refresh replaces all rows', async () => {
+    const accounts = [
+      { id: 9, name: 'Bravo', platform: 'google', status: 'error', schedulable: false },
+      { id: 10, name: 'Alpha', platform: 'google', status: 'ok', schedulable: true },
+      { id: 11, name: 'Other', platform: 'openai', status: 'ok', schedulable: true },
+    ];
+    const status = (rows: typeof accounts) =>
+      jsonOk({ ...baseStatus, sub2api: { ...baseStatus.sub2api, accounts: rows } });
+    jest.mocked(picoAuthedGet)
+      .mockResolvedValueOnce(status(accounts) as Response)
+      .mockResolvedValueOnce(status([{ ...accounts[0], name: 'Charlie' }, ...accounts.slice(1)]) as Response);
+    const user = userEvent.setup();
+    render(<GatewayAdminPage />);
+    await screen.findByText('Bravo');
+    const section = within(screen.getByRole('region', { name: '订阅号登录态' }));
+    await user.click(section.getByRole('button', { name: /^订阅号 column/ }));
+    await user.click(section.getByRole('button', { name: '筛选' }));
+    await user.click(screen.getByRole('checkbox', { name: 'google' }));
+    await user.keyboard('{Escape}');
+    await user.click(within(section.getByRole('row', { name: /Bravo/ })).getByRole('button', { name: '刷新' }));
+    await screen.findByText('Charlie');
+    expect(section.getAllByRole('rowheader').map((cell) => cell.textContent)).toEqual(['Alpha', 'Charlie']);
+    expect(section.getByRole('button', { name: '平台：google ×' })).toBeInTheDocument();
+  });
+
 });

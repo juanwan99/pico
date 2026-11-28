@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from urllib.parse import parse_qs
+
+import pytest
 from app.gateway_status import gateway_status
 
 
@@ -111,7 +114,7 @@ def test_login_reads_monitors_and_strips_secrets(monkeypatch) -> None:
             assert payload == {"email": "owner@example.com", "password": "super-secret-password"}
             return 200, {"code": 0, "data": {"access_token": "tok_abc", "expires_in": 3600}}
         assert headers == {"Authorization": "Bearer tok_abc"}
-        if url.endswith("/channel-monitors"):
+        if url.partition("?")[0].endswith("/channel-monitors"):
             return 200, {
                 "code": 0,
                 "data": {
@@ -128,7 +131,7 @@ def test_login_reads_monitors_and_strips_secrets(monkeypatch) -> None:
                     ]
                 },
             }
-        if url.endswith("/admin/accounts"):
+        if url.partition("?")[0].endswith("/admin/accounts"):
             return 200, {
                 "code": 0,
                 "data": {
@@ -186,9 +189,9 @@ def test_admin_api_key_uses_x_api_key_not_password_login(monkeypatch) -> None:
             login_calls["n"] += 1
             raise AssertionError("password login must not run when admin API key is set")
         assert headers == {"X-API-Key": "admin-deadbeef"}
-        if url.endswith("/channel-monitors"):
+        if url.partition("?")[0].endswith("/channel-monitors"):
             return 200, {"code": 0, "data": {"items": []}}
-        if url.endswith("/admin/accounts"):
+        if url.partition("?")[0].endswith("/admin/accounts"):
             return 200, {"code": 0, "data": {"items": []}}
         return 200, {}
 
@@ -237,9 +240,9 @@ def test_admin_accounts_423_is_compliance_not_fake_success(monkeypatch) -> None:
     def fake_probe_json(url, timeout=2.0, headers=None, method="GET", payload=None):
         if url.endswith("/auth/login"):
             return 200, {"code": 0, "data": {"access_token": "tok_abc", "expires_in": 3600}}
-        if url.endswith("/channel-monitors"):
+        if url.partition("?")[0].endswith("/channel-monitors"):
             return 200, {"code": 0, "data": {"items": []}}
-        if url.endswith("/admin/accounts"):
+        if url.partition("?")[0].endswith("/admin/accounts"):
             return 423, {"code": "ADMIN_COMPLIANCE_ACK_REQUIRED", "message": "ack"}
         if url.endswith("/admin/accounts/9/refresh"):
             return 423, {"code": "ADMIN_COMPLIANCE_ACK_REQUIRED"}
@@ -268,3 +271,37 @@ def test_soft_action_rejects_unknown_verb() -> None:
     assert result["ok"] is False
     assert result["http"] == 400
     assert "没有这个动作" in result["message"]
+
+
+@pytest.mark.parametrize(
+    ("pages", "failure", "expected", "http"),
+    [(1, 0, [1], 200), (0, 0, [], 200), (3, 0, [1, 2, 3], 200),
+     (3, 401, [], 401), (3, 423, [], 423), (21, 0, [], 502)],
+)
+def test_login_state_paginates_both_lists(monkeypatch, pages, failure, expected, http):
+    from app import gateway_status as gs
+
+    monkeypatch.setenv("SUB2API_ADMIN_API_KEY", "test-key")
+    calls = {gs.SUB2API_MONITORS: [], gs.SUB2API_ADMIN_ACCOUNTS: []}
+
+    def probe(url, *, headers):
+        base, _, query = url.partition("?")
+        page = int(parse_qs(query).get("page", ["1"])[0])
+        calls[base].append(page)
+        assert headers == {"X-API-Key": "test-key"}
+        if page == 2 and failure:
+            return failure, {"code": "ADMIN_COMPLIANCE_ACK_REQUIRED"} if failure == 423 else {}
+        return 200, {"code": 0, "data": {
+            "items": [{"id": page}] if pages else [], "page": page, "pages": max(1, pages),
+        }}
+
+    monkeypatch.setattr(gs, "_probe_json", probe)
+    state = gs._sub2api_login_state()
+    assert [row["id"] for row in state["monitors"]] == expected
+    assert [row["id"] for row in state["accounts"]] == expected
+    assert state["monitor_count"] == (len(expected) if http == 200 else None)
+    assert state["monitors_http"] == state["accounts_http"] == http
+    assert state["needs_auth"] is (http == 401)
+    assert state["compliance_required"] is (http == 423)
+    for requested in calls.values():
+        assert requested == list(range(1, 1 + (2 if failure else max(1, min(20, pages)))))
